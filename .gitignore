@@ -1,0 +1,13 @@
+*
+
+!.gitignore
+!engine_plan.md
+!progress.md
+!project/
+!project/asset/
+!project/asset/**
+!project/engine/
+!project/engine/**
+!project/license
+!project/license/**
+!package.json

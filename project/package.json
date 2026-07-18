@@ -1,16 +1,15 @@
 {
-    "name": "lonely_tower",
+    "name": "jukchang_engine",
     "version": "0.4",
-    "main": "game/index.html",
+    "main": "engine/index.html",
     "js-flags": "",
-    "chromium-args": "--auto-open-devtools-for-tabs",
     "window": {
-        "title": "Lonely Tower",
+        "title": "JukChang Engine Diagnostic",
         "toolbar": false,
         "fullscreen": false,
         "position": "center",
         "min_width": 1280,
         "min_height": 720,
-        "icon": "game/image/logo.png"
+        "icon": "asset/icon/logo.png"
     }
 }
