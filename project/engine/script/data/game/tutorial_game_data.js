@@ -20,17 +20,26 @@ function createTypographySpec(sizeUIWW, min, max, weight, family = DEFAULT_FONT_
     });
 }
 
-/** 우상단 2단 고지와 한 칸짜리 1단 계단을 포함한 맵 높이 데이터입니다. */
+/** 우상단 2단 고지와 한 칸짜리 1단 계단을 포함한 시각 전용 높이 데이터입니다. */
 const TUTORIAL_MAP_HEIGHTS = Object.freeze([
-    Object.freeze([0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2]),
-    Object.freeze([0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2]),
-    Object.freeze([0, 0, 0, 0, 0, 0, 0, 1, 2, 2, 2]),
-    Object.freeze([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    Object.freeze([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    Object.freeze([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    Object.freeze([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    Object.freeze([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    Object.freeze([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+    Object.freeze([0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2]),
+    Object.freeze([0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2]),
+    Object.freeze([0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 2, 2]),
+    Object.freeze([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    Object.freeze([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    Object.freeze([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    Object.freeze([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    Object.freeze([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    Object.freeze([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    Object.freeze([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+]);
+
+const LORA_INSTABILITY_STATES = Object.freeze([
+    Object.freeze({ id: 'stable', label: '안정', min: 0, max: 10 }),
+    Object.freeze({ id: 'anxious', label: '불안', min: 11, max: 40 }),
+    Object.freeze({ id: 'shaken', label: '동요', min: 41, max: 60 }),
+    Object.freeze({ id: 'unstable', label: '불안정', min: 61, max: 80 }),
+    Object.freeze({ id: 'collapse', label: '붕괴', min: 81, max: 100 })
 ]);
 
 /**
@@ -38,23 +47,34 @@ const TUTORIAL_MAP_HEIGHTS = Object.freeze([
  */
 export const TUTORIAL_GAME_DATA = Object.freeze({
     MAP: Object.freeze({
-        WIDTH: 11,
-        HEIGHT: 9,
+        WIDTH: 12,
+        HEIGHT: 10,
         MOVE_RANGE: 4,
-        MAX_HEIGHT_STEP: 1,
-        UPHILL_EXTRA_COST: 0,
         HEIGHTS: TUTORIAL_MAP_HEIGHTS,
         STAIRS: Object.freeze([
-            Object.freeze({ x: 7, y: 2 })
+            Object.freeze({ x: 8, y: 2 })
         ])
     }),
     ACTORS: Object.freeze({
         PLAYER: Object.freeze({
-            START: Object.freeze({ x: 5, y: 7 })
+            START: Object.freeze({ x: 5, y: 5 }),
+            MAX_HP: 100,
+            DEFEND_DAMAGE_REDUCTION: 0.3
         }),
         LORA: Object.freeze({
             START: Object.freeze({ x: 5, y: 1 }),
-            MAX_HP: 3
+            MAX_HP: 100,
+            START_INSTABILITY: 80,
+            MAX_INSTABILITY: 100,
+            MOVE_RANGE: 1,
+            GATE_ZONE_RADIUS: 1,
+            MELEE_DAMAGE: 20,
+            MELEE_RANGE: 1,
+            RANGED_DAMAGE: 15,
+            RANGED_RANGE: 3,
+            DEFEND_DAMAGE_REDUCTION: 0.5,
+            DEFEND_COOLDOWN: 3,
+            INSTABILITY_STATES: LORA_INSTABILITY_STATES
         })
     }),
     OBJECTS: Object.freeze({
@@ -68,8 +88,20 @@ export const TUTORIAL_GAME_DATA = Object.freeze({
         ])
     }),
     RULES: Object.freeze({
-        PLAYER_ATTACK_DAMAGE: 1,
+        MAX_ROUNDS: 8,
+        PLAYER_ATTACK_DAMAGE: 50,
+        PLAYER_ATTACK_RANGE: 1,
+        PLAYER_ATTACK_INSTABILITY: 10,
+        CONSECUTIVE_ATTACK_INSTABILITY: 4,
         EVENT_LOG_LIMIT: 5
+    }),
+    DIALOGUE: Object.freeze({
+        CHOICES: Object.freeze([
+            Object.freeze({ id: 'avoid', label: '회피' }),
+            Object.freeze({ id: 'attack', label: '공격' }),
+            Object.freeze({ id: 'understand', label: '이해' }),
+            Object.freeze({ id: 'lie', label: '거짓말' })
+        ])
     }),
     LAYOUT: Object.freeze({
         BOARD: Object.freeze({
@@ -137,27 +169,37 @@ export const TUTORIAL_GAME_DATA = Object.freeze({
     TEXT: Object.freeze({
         TITLE: '철문 앞의 로라',
         SUBTITLE: '2D 탑뷰 턴제 전술 프로토타입',
-        OBJECTIVE: '목표: 로라를 3회 공격하세요. 대화와 상자 파괴로 이동 + 행동 한 턴도 시험할 수 있습니다.',
+        OBJECTIVE: '목표: 로라의 불안정도를 관리하며 무력화한 뒤 열린 게이트로 탈출하세요.',
         CONTROLS: '클릭 · 방향키/WASD · Enter · R 재시작',
         ACTIONS: Object.freeze({
+            MOVE_CONFIRM: '이동 확정',
             ATTACK: '공격',
             TALK: '대화',
+            DEFEND: '방어',
             WAIT: '대기',
+            END_TURN: '턴 종료',
+            ESCAPE: '탈출',
             STAY: '제자리 확정',
             UNDO: '이동 취소',
             RESTART: '다시 시작'
         }),
+        DIALOGUE_CHOICES: Object.freeze({
+            avoid: '회피',
+            attack: '공격',
+            understand: '이해',
+            lie: '거짓말'
+        }),
         LORA_LINES: Object.freeze([
-            '문 앞은 내가 보고 있을게. 천천히 와.',
-            '높은 곳은 한 칸씩 올라와야 해.',
-            '상자는 부숴도 괜찮아. 아마도.',
-            '내 턴은 짧아. 지금은 이 말로 끝!'
+            '여기서 더 가까이 오지 마.',
+            '문은 내가 지킬 거야.',
+            '네가 무슨 말을 해도 아직은 못 믿겠어.',
+            '이번에는 내가 막아야 해.'
         ]),
         PLAYER_TALK_LINES: Object.freeze([
-            '로라, 문 너머에 뭐가 있어?',
-            '이동하고 바로 이야기해도 되는 거지?',
-            '상자보다 대화가 먼저였나?',
-            '좋아, 다음 턴도 준비됐어.'
+            '로라, 내 이야기를 잠깐만 들어 줘.',
+            '널 다치게 하려는 게 아니야.',
+            '문을 열고 같이 나가자.',
+            '이 상황을 끝낼 방법을 찾을게.'
         ])
     })
 });

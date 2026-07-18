@@ -32,16 +32,19 @@ const TUTORIAL_COMMANDS = Object.freeze({
     MOVE: 'tutorial/move',
     SELECT_ACTION: 'tutorial/select-action',
     INTERACT: 'tutorial/interact',
-    WAIT: 'tutorial/wait',
+    END_TURN: 'tutorial/end-turn',
+    DEFEND: 'tutorial/defend',
+    ESCAPE: 'tutorial/escape',
+    DIALOGUE: 'tutorial/dialogue',
     UNDO: 'tutorial/undo',
     COMPLETE_LORA_TURN: 'tutorial/complete-lora-turn',
     RESTART: 'tutorial/restart'
 });
 
 const ACTION_ATTACK = 'attack';
-const ACTION_TALK = 'talk';
 const PLAYER_ID = 'player';
 const LORA_ID = 'lora';
+const DIALOGUE_CHOICES = TUTORIAL_GAME_DATA.DIALOGUE.CHOICES;
 const WATCHED_KEY_CODES = Object.freeze([
     'ArrowUp',
     'ArrowRight',
@@ -56,6 +59,8 @@ const WATCHED_KEY_CODES = Object.freeze([
     'Digit1',
     'Digit2',
     'Digit3',
+    'Digit4',
+    'KeyE',
     'KeyZ',
     'Escape',
     'KeyR'
@@ -158,6 +163,7 @@ export class TutorialScene extends BaseScene {
         this.cursorTile = { ...this.model.player };
         this.plannedPath = [{ ...this.model.player }];
         this.plannedPathCost = 0;
+        this.plannedDestinationSelected = false;
         this.hoveredTile = null;
         this.reachability = new Map();
         this.actionTargets = [];
@@ -176,6 +182,7 @@ export class TutorialScene extends BaseScene {
         }
         this.eventLog = [];
         this.movementAnimation = null;
+        this.loraMovementAnimation = null;
         this.actionAnimation = null;
         this.particles = [];
         this.floatingTexts = [];
@@ -227,7 +234,8 @@ export class TutorialScene extends BaseScene {
         this.#drawWorldEffects();
         this.#drawHud();
         this.#drawSpeechBubble();
-        this.#drawVictoryOverlay();
+        this.#drawDialogueOverlay();
+        this.#drawResultOverlay();
     }
 
     /**
@@ -257,8 +265,17 @@ export class TutorialScene extends BaseScene {
                 case TUTORIAL_COMMANDS.INTERACT:
                     this.#applyInteractionCommand(command.payload);
                     break;
-                case TUTORIAL_COMMANDS.WAIT:
-                    this.#applyWaitCommand();
+                case TUTORIAL_COMMANDS.END_TURN:
+                    this.#applyEndTurnCommand();
+                    break;
+                case TUTORIAL_COMMANDS.DEFEND:
+                    this.#applyDefendCommand();
+                    break;
+                case TUTORIAL_COMMANDS.ESCAPE:
+                    this.#applyEscapeCommand();
+                    break;
+                case TUTORIAL_COMMANDS.DIALOGUE:
+                    this.#applyDialogueCommand(command.payload);
                     break;
                 case TUTORIAL_COMMANDS.UNDO:
                     this.#applyUndoCommand();
@@ -376,22 +393,23 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * HUD 행동 버튼과 승리 재시작 버튼을 UI 풀에서 구성합니다.
+     * HUD 행동 버튼, 대화 선택지와 결과 재시작 버튼을 UI 풀에서 구성합니다.
      * @private
      */
     #buildButtons() {
         this.#releaseButtons();
         const actions = this.data.LAYOUT.ACTIONS;
-        const buttonHeight = this.#uwh(actions.BUTTON_HEIGHT_WH);
-        const buttonGap = this.#uwh(actions.GAP_WH);
+        const buttonHeight = Math.min(this.#uwh(actions.BUTTON_HEIGHT_WH), this.#uwh(4.1));
+        const buttonGap = Math.min(this.#uwh(actions.GAP_WH), this.#uwh(0.55));
         const buttonX = this.sidebar.x + this.sidebar.padding;
         const buttonWidth = this.sidebar.w - (this.sidebar.padding * 2);
         const firstButtonY = this.#uwh(actions.TOP_WH);
         const buttonDefinitions = [
             ['attack', this.data.TEXT.ACTIONS.ATTACK, () => this.#queueActionSelection(ACTION_ATTACK)],
-            ['talk', this.data.TEXT.ACTIONS.TALK, () => this.#queueActionSelection(ACTION_TALK)],
-            ['wait', this.data.TEXT.ACTIONS.WAIT, () => this.#queueWaitOrStay()],
-            ['undo', this.data.TEXT.ACTIONS.UNDO, () => this.#queueUiCommand(TUTORIAL_COMMANDS.UNDO)]
+            ['defend', '방어', () => this.#queueUiCommand(TUTORIAL_COMMANDS.DEFEND)],
+            ['endTurn', '턴 종료', () => this.#queueEndTurnOrMove()],
+            ['undo', '이동 취소', () => this.#queueUiCommand(TUTORIAL_COMMANDS.UNDO)],
+            ['escape', '게이트 탈출', () => this.#queueUiCommand(TUTORIAL_COMMANDS.ESCAPE)]
         ];
 
         buttonDefinitions.forEach(([key, label, onClick], index) => {
@@ -410,13 +428,31 @@ export class TutorialScene extends BaseScene {
         const modalH = this.#uwh(modal.HEIGHT_WH);
         const modalX = this.UIOffsetX + ((this.UIWW - modalW) * 0.5);
         const modalY = (this.WH - modalH) * 0.5;
-        this.buttons.victoryRestart = this.#createButton({
+        this.buttons.resultRestart = this.#createButton({
             x: modalX + (modalW * 0.25),
             y: modalY + (modalH * 0.72),
             w: modalW * 0.5,
             h: buttonHeight,
             label: `${this.data.TEXT.ACTIONS.RESTART}  [R]`,
             onClick: () => this.#queueUiCommand(TUTORIAL_COMMANDS.RESTART)
+        });
+
+        const dialogueW = Math.max(modalW, this.#uww(42));
+        const dialogueH = Math.max(modalH, this.#uwh(48));
+        const dialogueX = this.UIOffsetX + ((this.UIWW - dialogueW) * 0.5);
+        const dialogueY = (this.WH - dialogueH) * 0.5;
+        const choiceHeight = this.#uwh(5);
+        DIALOGUE_CHOICES.forEach((choice, index) => {
+            this.buttons[`dialogue-${choice.id}`] = this.#createButton({
+                x: dialogueX + (dialogueW * 0.12),
+                y: dialogueY + (dialogueH * 0.39) + (index * this.#uwh(6.2)),
+                w: dialogueW * 0.76,
+                h: choiceHeight,
+                label: `${index + 1}. ${choice.label}`,
+                onClick: () => this.#queueUiCommand(TUTORIAL_COMMANDS.DIALOGUE, {
+                    choice: choice.id
+                })
+            });
         });
     }
 
@@ -483,46 +519,64 @@ export class TutorialScene extends BaseScene {
         }
 
         const colors = ColorSchemes.Tactics;
-        const isVictory = this.model.phase === 'victory';
+        const isResult = this.#isResultPhase();
+        const isDialogue = this.#isDialoguePhase();
         const isPlayerPhase = this.model.turn === 'player';
         const locked = this.#isPresentationLocked();
         const isMovePhase = isPlayerPhase && this.model.phase === 'move';
         const isActionPhase = isPlayerPhase && this.model.phase === 'action';
         const attackTargets = isActionPhase ? this.model.getValidTargets(ACTION_ATTACK) : [];
-        const talkTargets = isActionPhase ? this.model.getValidTargets(ACTION_TALK) : [];
 
-        this.buttons.wait.text.text = isMovePhase
-            ? `${this.data.TEXT.ACTIONS.STAY}  [Space]`
-            : `${this.data.TEXT.ACTIONS.WAIT}  [3]`;
+        this.buttons.endTurn.text.text = isMovePhase && this.plannedDestinationSelected
+            ? '이동 확정  [Enter]'
+            : '턴 종료  [Space]';
         this.buttons.attack.text.text = `${this.data.TEXT.ACTIONS.ATTACK}  [1]`;
-        this.buttons.talk.text.text = `${this.data.TEXT.ACTIONS.TALK}  [2]`;
-        this.buttons.undo.text.text = `${this.data.TEXT.ACTIONS.UNDO}  [Z]`;
+        this.buttons.defend.text.text = '방어  [2]';
+        this.buttons.undo.text.text = '이동 취소  [Z]';
+        this.buttons.escape.text.text = '게이트 탈출  [E]';
 
         this.#configureButton(this.buttons.attack, {
-            visible: !isVictory,
-            enabled: isActionPhase && attackTargets.length > 0 && !locked,
+            visible: !isResult && !isDialogue,
+            enabled: isPlayerPhase
+                && !locked
+                && ((isMovePhase && !this.plannedDestinationSelected)
+                    || (isActionPhase && attackTargets.length > 0)),
             active: isActionPhase && this.model.selectedAction === ACTION_ATTACK
         });
-        this.#configureButton(this.buttons.talk, {
-            visible: !isVictory,
-            enabled: isActionPhase && talkTargets.length > 0 && !locked,
-            active: isActionPhase && this.model.selectedAction === ACTION_TALK
+        this.#configureButton(this.buttons.defend, {
+            visible: !isResult && !isDialogue,
+            enabled: ((isMovePhase && !this.plannedDestinationSelected) || isActionPhase) && !locked,
+            active: this.model.player?.defending === true
         });
-        this.#configureButton(this.buttons.wait, {
-            visible: !isVictory,
+        this.#configureButton(this.buttons.endTurn, {
+            visible: !isResult && !isDialogue,
             enabled: isPlayerPhase && !locked,
             active: false
         });
         this.#configureButton(this.buttons.undo, {
-            visible: !isVictory,
-            enabled: isActionPhase && !locked,
+            visible: !isResult && !isDialogue,
+            enabled: isPlayerPhase
+                && !locked
+                && (isActionPhase || (isMovePhase && this.plannedDestinationSelected)),
             active: false
         });
-        this.#configureButton(this.buttons.victoryRestart, {
-            visible: isVictory,
-            enabled: isVictory,
+        this.#configureButton(this.buttons.escape, {
+            visible: !isResult && !isDialogue && this.model.gateOpen === true,
+            enabled: isPlayerPhase && this.#canEscape() && !locked,
+            active: this.#canEscape()
+        });
+        this.#configureButton(this.buttons.resultRestart, {
+            visible: isResult,
+            enabled: isResult,
             active: true
         });
+        for (const choice of DIALOGUE_CHOICES) {
+            this.#configureButton(this.buttons[`dialogue-${choice.id}`], {
+                visible: isDialogue,
+                enabled: isDialogue && !locked,
+                active: false
+            });
+        }
 
         for (const button of Object.values(this.buttons)) {
             button.text.color = button.item.clickAble
@@ -575,8 +629,8 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * 공격 또는 대화 선택 명령을 큐에 넣습니다.
-     * @param {'attack'|'talk'} action - 선택할 행동입니다.
+     * 공격 선택 명령을 큐에 넣습니다.
+     * @param {'attack'} action - 선택할 행동입니다.
      * @private
      */
     #queueActionSelection(action) {
@@ -584,14 +638,14 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * 이동 단계에서는 제자리 이동 확정, 행동 단계에서는 대기를 요청합니다.
+     * 선택된 이동 경로를 확정하거나 현재 플레이어 턴을 종료합니다.
      * @private
      */
-    #queueWaitOrStay() {
+    #queueEndTurnOrMove() {
         if (this.model.turn !== 'player') {
             return;
         }
-        if (this.model.phase === 'move') {
+        if (this.model.phase === 'move' && this.plannedDestinationSelected) {
             this.#queueUiCommand(TUTORIAL_COMMANDS.MOVE, {
                 x: this.plannedPath[this.plannedPath.length - 1].x,
                 y: this.plannedPath[this.plannedPath.length - 1].y,
@@ -599,8 +653,8 @@ export class TutorialScene extends BaseScene {
             });
             return;
         }
-        if (this.model.phase === 'action') {
-            this.#queueUiCommand(TUTORIAL_COMMANDS.WAIT);
+        if (this.model.phase === 'move' || this.model.phase === 'action') {
+            this.#queueUiCommand(TUTORIAL_COMMANDS.END_TURN);
         }
     }
 
@@ -616,7 +670,19 @@ export class TutorialScene extends BaseScene {
             enqueueSimulationCommand({ type: TUTORIAL_COMMANDS.RESTART });
             return;
         }
-        if (this.model.phase === 'victory' || this.#isPresentationLocked()) {
+        if (this.#isResultPhase() || this.#isPresentationLocked()) {
+            return;
+        }
+
+        if (this.#isDialoguePhase()) {
+            const choiceIndex = ['Digit1', 'Digit2', 'Digit3', 'Digit4']
+                .findIndex((code) => this.#isKeyPressed(code));
+            if (choiceIndex >= 0) {
+                enqueueSimulationCommand({
+                    type: TUTORIAL_COMMANDS.DIALOGUE,
+                    payload: { choice: DIALOGUE_CHOICES[choiceIndex].id }
+                });
+            }
             return;
         }
 
@@ -642,7 +708,7 @@ export class TutorialScene extends BaseScene {
         if (this.model.phase === 'move') {
             if (this.#isKeyPressed('KeyZ') || this.#isKeyPressed('Escape')) {
                 this.#removePlannedPathStep();
-            } else if (this.#isKeyPressed('Space') || this.#isKeyPressed('Enter')) {
+            } else if (this.#isKeyPressed('Enter') && this.plannedDestinationSelected) {
                 enqueueSimulationCommand({
                     type: TUTORIAL_COMMANDS.MOVE,
                     payload: {
@@ -651,6 +717,17 @@ export class TutorialScene extends BaseScene {
                         path: this.plannedPath.map((point) => ({ ...point }))
                     }
                 });
+            } else if (this.#isKeyPressed('Space')) {
+                enqueueSimulationCommand({ type: TUTORIAL_COMMANDS.END_TURN });
+            } else if (this.#isKeyPressed('KeyE') && this.#canEscape()) {
+                enqueueSimulationCommand({ type: TUTORIAL_COMMANDS.ESCAPE });
+            } else if (this.#isKeyPressed('Digit1') && !this.plannedDestinationSelected) {
+                enqueueSimulationCommand({
+                    type: TUTORIAL_COMMANDS.SELECT_ACTION,
+                    payload: { action: ACTION_ATTACK }
+                });
+            } else if (this.#isKeyPressed('Digit2') && !this.plannedDestinationSelected) {
+                enqueueSimulationCommand({ type: TUTORIAL_COMMANDS.DEFEND });
             }
             return;
         }
@@ -664,12 +741,11 @@ export class TutorialScene extends BaseScene {
                 payload: { action: ACTION_ATTACK }
             });
         } else if (this.#isKeyPressed('Digit2')) {
-            enqueueSimulationCommand({
-                type: TUTORIAL_COMMANDS.SELECT_ACTION,
-                payload: { action: ACTION_TALK }
-            });
+            enqueueSimulationCommand({ type: TUTORIAL_COMMANDS.DEFEND });
         } else if (this.#isKeyPressed('Digit3') || this.#isKeyPressed('Space')) {
-            enqueueSimulationCommand({ type: TUTORIAL_COMMANDS.WAIT });
+            enqueueSimulationCommand({ type: TUTORIAL_COMMANDS.END_TURN });
+        } else if (this.#isKeyPressed('KeyE') && this.#canEscape()) {
+            enqueueSimulationCommand({ type: TUTORIAL_COMMANDS.ESCAPE });
         } else if (this.#isKeyPressed('KeyZ') || this.#isKeyPressed('Escape')) {
             enqueueSimulationCommand({ type: TUTORIAL_COMMANDS.UNDO });
         } else if (this.#isKeyPressed('Enter')) {
@@ -746,7 +822,7 @@ export class TutorialScene extends BaseScene {
 
     /**
      * 방향키 한 번을 실제 이동 경로 한 칸으로 추가합니다.
-     * 재방문은 허용하지만 점유, 높이차, 누적 이동력은 즉시 검증합니다.
+     * 점유, 누적 이동력과 같은 턴 내 타일 재방문 금지를 즉시 검증합니다.
      * @param {{x:number,y:number,facing:number}} direction - 추가할 방향입니다.
      * @private
      */
@@ -761,22 +837,20 @@ export class TutorialScene extends BaseScene {
         }
 
         const occupant = this.model.getOccupantAt(next.x, next.y);
-        if (occupant && occupant.type !== 'player') {
+        if (occupant && occupant.type !== 'player' && occupant.type !== 'door') {
             return;
         }
-        const previousHeight = this.model.getTileHeight(previous.x, previous.y);
-        const nextHeight = this.model.getTileHeight(next.x, next.y);
-        const heightDifference = nextHeight - previousHeight;
-        if (Math.abs(heightDifference) > this.data.MAP.MAX_HEIGHT_STEP) {
+        if (this.plannedPath.some((point) => point.x === next.x && point.y === next.y)) {
             return;
         }
 
-        const stepCost = 1 + (heightDifference > 0 ? this.data.MAP.UPHILL_EXTRA_COST : 0);
+        const stepCost = 1;
         if (this.plannedPathCost + stepCost > this.data.MAP.MOVE_RANGE) {
             return;
         }
         this.plannedPath.push(next);
         this.plannedPathCost += stepCost;
+        this.plannedDestinationSelected = true;
         this.cursorTile = { ...next };
         this.facing = direction.facing;
     }
@@ -787,17 +861,58 @@ export class TutorialScene extends BaseScene {
      */
     #removePlannedPathStep() {
         if (this.plannedPath.length <= 1) {
+            this.plannedDestinationSelected = false;
             return;
         }
-        const removed = this.plannedPath.pop();
+        this.plannedPath.pop();
         const current = this.plannedPath[this.plannedPath.length - 1];
-        const removedHeight = this.model.getTileHeight(removed.x, removed.y);
-        const currentHeight = this.model.getTileHeight(current.x, current.y);
-        const originalStepCost = 1 + (removedHeight > currentHeight
-            ? this.data.MAP.UPHILL_EXTRA_COST
-            : 0);
-        this.plannedPathCost = Math.max(0, this.plannedPathCost - originalStepCost);
+        this.plannedPathCost = Math.max(0, this.plannedPathCost - 1);
+        this.plannedDestinationSelected = this.plannedPath.length > 1;
         this.cursorTile = { ...current };
+    }
+
+    /**
+     * 선택 중인 이동 경로를 현재 플레이어 위치로 초기화합니다.
+     * @private
+     */
+    #clearPlannedPath() {
+        this.cursorTile = { x: this.model.player.x, y: this.model.player.y };
+        this.plannedPath = [{ ...this.cursorTile }];
+        this.plannedPathCost = 0;
+        this.plannedDestinationSelected = false;
+    }
+
+    /**
+     * 자동 경로가 인접 좌표로 이어지고 같은 타일을 두 번 방문하지 않는지 확인합니다.
+     * @param {Array<{x:number,y:number}>} path - 모델이 제안한 경로입니다.
+     * @returns {Array<{x:number,y:number}>|null} 표시 가능한 복제 경로입니다.
+     * @private
+     */
+    #normalizePreviewPath(path) {
+        if (!Array.isArray(path) || path.length === 0) {
+            return null;
+        }
+        const normalized = [];
+        const visited = new Set();
+        for (let index = 0; index < path.length; index++) {
+            const point = path[index];
+            if (!point || !this.model.isInside(point.x, point.y)) {
+                return null;
+            }
+            const key = toTileKey(point.x, point.y);
+            if (visited.has(key)) {
+                return null;
+            }
+            if (index > 0) {
+                const previous = normalized[index - 1];
+                if (Math.abs(previous.x - point.x) + Math.abs(previous.y - point.y) !== 1) {
+                    return null;
+                }
+            }
+            visited.add(key);
+            normalized.push({ x: point.x, y: point.y });
+        }
+        return normalized;
     }
 
     /**
@@ -819,7 +934,10 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #handlePointerInput() {
-        if (this.uiActionHandled || this.model.phase === 'victory' || this.#isPresentationLocked()) {
+        if (this.uiActionHandled
+            || this.#isResultPhase()
+            || this.#isDialoguePhase()
+            || this.#isPresentationLocked()) {
             return;
         }
         if (!getMouseFocus().includes('object')) {
@@ -831,7 +949,7 @@ export class TutorialScene extends BaseScene {
                 if (this.model.phase === 'action') {
                     enqueueSimulationCommand({ type: TUTORIAL_COMMANDS.UNDO });
                 } else if (this.model.phase === 'move') {
-                    this.#removePlannedPathStep();
+                    this.#clearPlannedPath();
                 }
             }
             return;
@@ -845,11 +963,33 @@ export class TutorialScene extends BaseScene {
 
         if (this.model.phase === 'move') {
             const key = toTileKey(this.hoveredTile.x, this.hoveredTile.y);
-            if (this.reachability.has(key)) {
-                enqueueSimulationCommand({
-                    type: TUTORIAL_COMMANDS.MOVE,
-                    payload: { ...this.hoveredTile }
-                });
+            const reachable = this.reachability.get(key);
+            if (reachable) {
+                const destination = this.plannedPath[this.plannedPath.length - 1];
+                if (this.plannedDestinationSelected
+                    && destination.x === this.hoveredTile.x
+                    && destination.y === this.hoveredTile.y) {
+                    enqueueSimulationCommand({
+                        type: TUTORIAL_COMMANDS.MOVE,
+                        payload: {
+                            x: destination.x,
+                            y: destination.y,
+                            path: this.plannedPath.map((point) => ({ ...point }))
+                        }
+                    });
+                    return;
+                }
+
+                const path = this.#normalizePreviewPath(reachable.path);
+                if (!path) {
+                    return;
+                }
+                this.plannedPath = path;
+                this.plannedPathCost = path.length - 1;
+                this.plannedDestinationSelected = true;
+                this.cursorTile = { ...this.hoveredTile };
+                this.#syncFacingFromPath(path);
+                this.#appendEvent('이동 경로 선택 · 같은 타일을 다시 누르면 확정됩니다.');
             }
             return;
         }
@@ -913,6 +1053,7 @@ export class TutorialScene extends BaseScene {
         this.cursorTile = { ...destination };
         this.plannedPath = [{ ...destination }];
         this.plannedPathCost = 0;
+        this.plannedDestinationSelected = false;
         this.#syncFacingFromPath(result.path);
         if (result.path.length > 1) {
             this.movementAnimation = {
@@ -945,7 +1086,7 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * 공격 또는 대화 모드를 모델에 적용하고 대상 캐시를 갱신합니다.
+     * 공격 모드를 모델에 적용하고 대상 캐시를 갱신합니다.
      * @param {object} payload - 행동 종류입니다.
      * @private
      */
@@ -954,12 +1095,12 @@ export class TutorialScene extends BaseScene {
         if (this.#isPresentationLocked() || !this.model.selectAction(action)) {
             return;
         }
-        this.#appendEvent(action === ACTION_ATTACK ? '공격 대상을 선택하세요.' : '대화할 로라를 선택하세요.');
+        this.#appendEvent('공격 대상을 선택하세요.');
         this.#refreshTacticalCache();
     }
 
     /**
-     * 상호작용 대상 ID를 재검증하고 공격 또는 대화 결과 연출을 구성합니다.
+     * 상호작용 대상 ID를 재검증하고 공격 결과 연출을 구성합니다.
      * @param {object} payload - 대상 ID입니다.
      * @private
      */
@@ -979,42 +1120,35 @@ export class TutorialScene extends BaseScene {
         }
         this.#faceTarget(targetPosition);
 
-        if (result.action === ACTION_TALK) {
-            const line = pickDifferentLine(this.data.TEXT.PLAYER_TALK_LINES, this.lastPlayerLine);
-            this.lastPlayerLine = line;
-            this.#setSpeech(PLAYER_ID, line);
-            this.#appendEvent(`플레이어 · ${line}`);
-            this.turnGateSeconds = Math.max(
-                this.data.ANIMATION.TURN_GATE_SECONDS,
-                this.data.ANIMATION.SPEECH_SECONDS * 0.45
-            );
-        } else {
-            this.actionAnimation = {
-                type: ACTION_ATTACK,
-                targetId: result.targetId,
-                targetType: result.targetType,
-                targetPosition,
-                elapsed: 0,
-                duration: this.data.ANIMATION.ATTACK_SECONDS,
-                ghostBox: result.destroyed === true
-            };
-            this.turnGateSeconds = this.data.ANIMATION.ATTACK_SECONDS
-                + this.data.ANIMATION.TURN_GATE_SECONDS;
-            this.screenShakeSeconds = this.data.ANIMATION.SHAKE_SECONDS;
-            this.#spawnImpact(targetPosition, result.targetType === 'box');
+        this.actionAnimation = {
+            type: ACTION_ATTACK,
+            targetId: result.targetId,
+            targetType: result.targetType,
+            targetPosition,
+            elapsed: 0,
+            duration: this.data.ANIMATION.ATTACK_SECONDS,
+            ghostBox: result.destroyed === true
+        };
+        this.turnGateSeconds = this.data.ANIMATION.ATTACK_SECONDS
+            + this.data.ANIMATION.TURN_GATE_SECONDS;
+        this.screenShakeSeconds = this.data.ANIMATION.SHAKE_SECONDS;
+        this.#spawnImpact(targetPosition, result.targetType === 'box');
 
-            if (result.targetType === 'box') {
-                this.#appendEvent('상자 파괴 · 길이 열렸습니다.');
-                this.#spawnFloatingText(targetPosition, '파괴!', ColorSchemes.Tactics.UI.Warning);
-            } else {
-                this.#appendEvent(`로라에게 ${result.damage} 피해 · HP ${this.model.lora.hp}/${this.model.lora.maxHp}`);
-                this.#spawnFloatingText(targetPosition, `-${result.damage}`, ColorSchemes.Tactics.UI.Danger);
+        if (result.targetType === 'box') {
+            this.#appendEvent('상자 파괴 · 길이 열렸습니다.');
+            this.#spawnFloatingText(targetPosition, '파괴!', ColorSchemes.Tactics.UI.Warning);
+        } else {
+            this.#appendEvent(`로라에게 ${result.damage} 피해 · HP ${this.model.lora.hp}/${this.model.lora.maxHp}`);
+            this.#spawnFloatingText(targetPosition, `-${result.damage}`, ColorSchemes.Tactics.UI.Danger);
+            if (Number.isFinite(result.instabilityChange) && result.instabilityChange !== 0) {
+                const sign = result.instabilityChange > 0 ? '+' : '';
+                this.#appendEvent(`불안정도 ${sign}${result.instabilityChange} · 현재 ${this.model.lora.instability}`);
             }
         }
 
-        if (result.victory) {
-            this.#appendEvent('임무 완료 · 로라의 HP가 0이 되었습니다.');
-            this.turnGateSeconds = 0;
+        if (result.gateOpened || result.defeated || this.model.lora.alive === false) {
+            this.#appendEvent('로라 무력화 · 게이트가 열렸습니다. 이제 탈출하세요.');
+            this.turnGateSeconds = this.data.ANIMATION.ATTACK_SECONDS;
         }
         this.#refreshTacticalCache();
     }
@@ -1034,15 +1168,79 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * 행동 포기 명령을 적용해 로라 턴으로 전환합니다.
+     * 현재 행동을 포기하고 로라 턴으로 전환합니다.
      * @private
      */
-    #applyWaitCommand() {
-        if (this.#isPresentationLocked() || !this.model.wait()) {
+    #applyEndTurnCommand() {
+        if (this.#isPresentationLocked()) {
             return;
         }
-        this.#appendEvent('대기 · 로라에게 턴을 넘겼습니다.');
+        const completed = typeof this.model.endTurn === 'function'
+            ? this.model.endTurn()
+            : this.model.wait?.();
+        if (!completed) {
+            return;
+        }
+        this.#appendEvent('턴 종료 · 로라에게 차례를 넘겼습니다.');
         this.turnGateSeconds = this.data.ANIMATION.TURN_GATE_SECONDS;
+        this.#refreshTacticalCache();
+    }
+
+    /**
+     * 방어 행동을 적용하고 다음 로라 공격의 피해 감소 상태를 표시합니다.
+     * @private
+     */
+    #applyDefendCommand() {
+        if (this.#isPresentationLocked() || typeof this.model.defend !== 'function') {
+            return;
+        }
+        const result = this.model.defend();
+        if (!result || result.ok === false) {
+            return;
+        }
+        this.#appendEvent('방어 · 이번 로라 턴에 받는 피해가 30% 감소합니다.');
+        this.#spawnFloatingText(this.model.player, 'DEFEND', ColorSchemes.Tactics.UI.Accent);
+        this.turnGateSeconds = this.data.ANIMATION.TURN_GATE_SECONDS;
+        this.#refreshTacticalCache();
+    }
+
+    /**
+     * 열린 게이트 타일에서 탈출을 시도합니다.
+     * @private
+     */
+    #applyEscapeCommand() {
+        if (this.#isPresentationLocked()
+            || typeof this.model.escape !== 'function'
+            || !this.#canEscape()) {
+            return;
+        }
+        const result = this.model.escape();
+        if (!result || result.ok === false) {
+            return;
+        }
+        this.#appendEvent('탈출 성공 · 게이트를 통과했습니다.');
+        this.#refreshTacticalCache();
+    }
+
+    /**
+     * 강제 대화 선택지를 적용하고 다음 전투 단계의 캐시를 준비합니다.
+     * @param {{choice:string}} payload - 선택한 대화 유형입니다.
+     * @private
+     */
+    #applyDialogueCommand(payload) {
+        const choice = DIALOGUE_CHOICES.find((candidate) => candidate.id === payload?.choice);
+        if (!choice
+            || !this.#isDialoguePhase()
+            || typeof this.model.chooseDialogue !== 'function') {
+            return;
+        }
+        const result = this.model.chooseDialogue(choice.id);
+        if (!result || result.ok === false) {
+            return;
+        }
+        this.#appendEvent(`대화 · ${choice.label} 선택`);
+        this.turnGateSeconds = this.data.ANIMATION.TURN_GATE_SECONDS;
+        this.#clearPlannedPath();
         this.#refreshTacticalCache();
     }
 
@@ -1051,19 +1249,31 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #applyUndoCommand() {
-        if (this.#isPresentationLocked() || !this.model.undoMove()) {
+        if (this.#isPresentationLocked() || this.model.turn !== 'player') {
+            return;
+        }
+        if (this.model.phase === 'move') {
+            if (!this.plannedDestinationSelected) {
+                return;
+            }
+            this.#clearPlannedPath();
+            this.#appendEvent('선택 경로를 취소했습니다.');
+            return;
+        }
+        if (!this.model.undoMove()) {
             return;
         }
         this.cursorTile = { ...this.model.player };
         this.plannedPath = [{ ...this.model.player }];
         this.plannedPathCost = 0;
+        this.plannedDestinationSelected = false;
         this.lastMoveCost = 0;
         this.#appendEvent('이동 취소 · 목적지를 다시 선택하세요.');
         this.#refreshTacticalCache();
     }
 
     /**
-     * 로라의 자동 대사 턴을 종료하고 다음 플레이어 라운드를 시작합니다.
+     * 로라의 자동 행동을 종료하고 다음 플레이어 또는 강제 대화 단계를 시작합니다.
      * @private
      */
     #applyLoraTurnCompletion() {
@@ -1071,11 +1281,16 @@ export class TutorialScene extends BaseScene {
             return;
         }
         this.loraTurnState = null;
-        this.cursorTile = { ...this.model.player };
-        this.plannedPath = [{ ...this.model.player }];
-        this.plannedPathCost = 0;
+        this.loraMovementAnimation = null;
+        this.#clearPlannedPath();
         this.lastMoveCost = 0;
-        this.#appendEvent(`라운드 ${this.model.round} · 플레이어 턴`);
+        if (this.#isDialoguePhase()) {
+            this.#appendEvent(`라운드 ${this.model.round} · 강제 대화`);
+        } else if (this.#isResultPhase()) {
+            this.#appendEvent('전투 종료 · 결과를 확인하세요.');
+        } else {
+            this.#appendEvent(`라운드 ${this.model.round}/${this.model.maxRounds ?? 8} · 플레이어 턴`);
+        }
         this.#refreshTacticalCache();
     }
 
@@ -1093,7 +1308,7 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * 로라 턴 진입 시 대사를 한 번 표시하고 지정 시간이 지나면 자동 완료 명령을 보냅니다.
+     * 로라 턴 진입 시 모델의 이동·행동을 한 번 실행하고 연출 후 완료 명령을 보냅니다.
      * @param {number} deltaSeconds - 가변 프레임 델타입니다.
      * @private
      */
@@ -1107,18 +1322,102 @@ export class TutorialScene extends BaseScene {
         }
 
         if (!this.loraTurnState) {
-            const line = pickDifferentLine(this.data.TEXT.LORA_LINES, this.lastLoraLine);
-            this.lastLoraLine = line;
-            this.loraTurnState = { elapsed: 0, completionQueued: false };
-            this.#setSpeech(LORA_ID, line);
-            this.#appendEvent(`로라 · ${line}`);
+            const before = { x: this.model.lora.x, y: this.model.lora.y };
+            const result = typeof this.model.performLoraTurn === 'function'
+                ? (this.model.performLoraTurn() || {})
+                : {};
+            this.loraTurnState = {
+                elapsed: 0,
+                completionQueued: false,
+                result
+            };
+            this.#presentLoraTurnResult(result, before);
+            this.#refreshTacticalCache();
         }
 
         this.loraTurnState.elapsed += deltaSeconds;
-        if (this.loraTurnState.elapsed >= this.data.ANIMATION.LORA_TURN_SECONDS
+        if (this.#isResultPhase()) {
+            return;
+        }
+        const minimumSeconds = Math.max(
+            this.data.ANIMATION.LORA_TURN_SECONDS,
+            this.loraMovementAnimation?.duration ?? 0,
+            this.data.ANIMATION.ATTACK_SECONDS + this.data.ANIMATION.TURN_GATE_SECONDS
+        );
+        if (this.loraTurnState.elapsed >= minimumSeconds
             && !this.loraTurnState.completionQueued) {
             this.loraTurnState.completionQueued = true;
             enqueueSimulationCommand({ type: TUTORIAL_COMMANDS.COMPLETE_LORA_TURN });
+        }
+    }
+
+    /**
+     * 로라 AI 결과를 이동 애니메이션, 피해 텍스트와 전술 로그로 변환합니다.
+     * @param {object} result - 모델의 로라 턴 결과입니다.
+     * @param {{x:number,y:number}} before - 행동 전 로라 좌표입니다.
+     * @private
+     */
+    #presentLoraTurnResult(result, before) {
+        const movement = result?.movement;
+        const rawPath = Array.isArray(movement?.path)
+            ? movement.path
+            : (movement?.to
+                ? [movement.from || before, movement.to]
+                : (result?.to
+                    ? [result.from || before, result.to]
+                    : (before.x !== this.model.lora.x || before.y !== this.model.lora.y
+                        ? [before, { x: this.model.lora.x, y: this.model.lora.y }]
+                        : [])));
+        const path = rawPath
+            .filter((point) => point && Number.isInteger(point.x) && Number.isInteger(point.y))
+            .map((point) => ({ x: point.x, y: point.y }));
+        if (path.length > 1) {
+            this.loraMovementAnimation = {
+                path,
+                elapsed: 0,
+                duration: (path.length - 1) * this.data.ANIMATION.MOVE_SECONDS_PER_TILE
+            };
+            this.#appendEvent(`로라 이동 · (${path[path.length - 1].x}, ${path[path.length - 1].y})`);
+        }
+
+        const action = typeof result?.action === 'string'
+            ? result.action
+            : result?.action?.type;
+        const damage = Math.max(0, Number(result?.damage ?? result?.action?.damage) || 0);
+        let line = typeof result?.line === 'string'
+            ? result.line
+            : (typeof result?.action?.line === 'string' ? result.action.line : '');
+        if (!line && this.model.lora.alive === true) {
+            line = pickDifferentLine(this.data.TEXT.LORA_LINES || [], this.lastLoraLine);
+        }
+        if (line) {
+            this.lastLoraLine = line;
+            this.#setSpeech(LORA_ID, line);
+        }
+
+        if (damage > 0 || action === 'melee' || action === 'ranged') {
+            const playerPosition = { x: this.model.player.x, y: this.model.player.y };
+            this.actionAnimation = {
+                type: 'lora-attack',
+                targetId: PLAYER_ID,
+                targetPosition: playerPosition,
+                elapsed: 0,
+                duration: this.data.ANIMATION.ATTACK_SECONDS
+            };
+            this.#spawnImpact(playerPosition, false);
+            this.#spawnFloatingText(playerPosition, `-${damage}`, ColorSchemes.Tactics.UI.Danger);
+            this.screenShakeSeconds = this.data.ANIMATION.SHAKE_SECONDS;
+            const attackLabel = action === 'ranged' ? '원거리 공격' : '근접 공격';
+            this.#appendEvent(`로라 ${attackLabel} · ${damage} 피해 · HP ${this.model.player.hp}/${this.model.player.maxHp}`);
+        } else if (action === 'defend') {
+            this.#spawnFloatingText(this.model.lora, 'DEFEND', ColorSchemes.Tactics.UI.Accent);
+            this.#appendEvent('로라 방어 · 다음 피해를 50% 줄입니다.');
+        } else if (action === 'talk') {
+            this.#appendEvent(`로라 · ${line || '말없이 플레이어를 바라봅니다.'}`);
+        } else if (action === 'skip' && this.model.lora.alive === false) {
+            this.#appendEvent('로라는 무력화되어 행동할 수 없습니다.');
+        } else {
+            this.#appendEvent(line ? `로라 · ${line}` : '로라가 행동하지 않았습니다.');
         }
     }
 
@@ -1132,6 +1431,12 @@ export class TutorialScene extends BaseScene {
             this.movementAnimation.elapsed += deltaSeconds;
             if (this.movementAnimation.elapsed >= this.movementAnimation.duration) {
                 this.movementAnimation = null;
+            }
+        }
+        if (this.loraMovementAnimation) {
+            this.loraMovementAnimation.elapsed += deltaSeconds;
+            if (this.loraMovementAnimation.elapsed >= this.loraMovementAnimation.duration) {
+                this.loraMovementAnimation = null;
             }
         }
         if (this.actionAnimation) {
@@ -1274,12 +1579,47 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
+     * 입력을 전부 차단하는 결과 단계인지 확인합니다.
+     * @returns {boolean} 결과 단계이면 true입니다.
+     * @private
+     */
+    #isResultPhase() {
+        return this.model.phase === 'result'
+            || this.model.turn === 'result'
+            || this.model.phase === 'victory';
+    }
+
+    /**
+     * 짝수 라운드 강제 대화 단계인지 확인합니다.
+     * @returns {boolean} 대화 단계이면 true입니다.
+     * @private
+     */
+    #isDialoguePhase() {
+        return this.model.phase === 'dialogue' || this.model.turn === 'dialogue';
+    }
+
+    /**
+     * 현재 위치에서 게이트 탈출 행동을 사용할 수 있는지 확인합니다.
+     * @returns {boolean} 탈출할 수 있으면 true입니다.
+     * @private
+     */
+    #canEscape() {
+        return typeof this.model.canEscape === 'function'
+            ? this.model.canEscape() === true
+            : false;
+    }
+
+    /**
      * 이동 또는 공격 연출이 진행 중인지 반환합니다.
      * @returns {boolean} 플레이어 입력을 잠가야 하면 true입니다.
      * @private
      */
     #isPresentationLocked() {
-        return Boolean(this.movementAnimation || this.actionAnimation);
+        return Boolean(
+            this.movementAnimation
+            || this.loraMovementAnimation
+            || this.actionAnimation
+        );
     }
 
     /**
@@ -1354,6 +1694,40 @@ export class TutorialScene extends BaseScene {
             point.y = lerpNumber(point.y, target.centerY, lunge);
         }
         return point;
+    }
+
+    /**
+     * 로라의 자동 이동 연출을 반영한 중심 화면 좌표를 반환합니다.
+     * @returns {{x:number,y:number}} 렌더링 중심입니다.
+     * @private
+     */
+    #getLoraRenderPoint() {
+        if (!this.loraMovementAnimation) {
+            const tile = this.#getTileVisual(this.model.lora.x, this.model.lora.y);
+            return { x: tile.centerX, y: tile.centerY };
+        }
+
+        const animation = this.loraMovementAnimation;
+        const segmentDuration = this.data.ANIMATION.MOVE_SECONDS_PER_TILE;
+        const segmentIndex = Math.min(
+            animation.path.length - 2,
+            Math.floor(animation.elapsed / segmentDuration)
+        );
+        const segmentProgress = easeOutCubic(
+            (animation.elapsed - (segmentIndex * segmentDuration)) / segmentDuration
+        );
+        const from = this.#getTileVisual(
+            animation.path[segmentIndex].x,
+            animation.path[segmentIndex].y
+        );
+        const to = this.#getTileVisual(
+            animation.path[segmentIndex + 1].x,
+            animation.path[segmentIndex + 1].y
+        );
+        return {
+            x: lerpNumber(from.centerX, to.centerX, segmentProgress),
+            y: lerpNumber(from.centerY, to.centerY, segmentProgress)
+        };
     }
 
     /**
@@ -1470,9 +1844,6 @@ export class TutorialScene extends BaseScene {
         }
 
         if (this.model.turn === 'player' && this.model.phase === 'action') {
-            const targetColor = this.model.selectedAction === ACTION_TALK
-                ? colors.Tile.Talk
-                : colors.Tile.Attack;
             for (const target of this.actionTargets) {
                 const tile = this.#getTileVisual(target.x, target.y);
                 renderGL('background', {
@@ -1481,7 +1852,7 @@ export class TutorialScene extends BaseScene {
                     y: tile.centerY,
                     w: size,
                     h: size,
-                    fill: targetColor
+                    fill: colors.Tile.Attack
                 });
             }
         }
@@ -1527,15 +1898,38 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * 맵 위쪽의 잠긴 철문과 경고 띠를 그립니다.
+     * 맵 위쪽의 철문을 잠김/개방 상태에 맞춰 그립니다.
      * @private
      */
     #drawDoor() {
         const colors = ColorSchemes.Tactics;
-        const door = this.data.OBJECTS.DOOR;
+        const door = this.model.door || this.data.OBJECTS.DOOR;
         const tile = this.#getTileVisual(door.x, door.y);
         const doorW = this.tileSize * 0.78;
         const doorH = this.tileSize * 0.76;
+        const isOpen = this.model.gateOpen === true;
+        if (isOpen) {
+            renderGL('object', {
+                shape: 'rect',
+                x: tile.centerX,
+                y: tile.centerY,
+                w: doorW * 0.9,
+                h: doorH * 0.9,
+                fill: colors.UI.Success,
+                alpha: 0.22
+            });
+            for (const direction of [-1, 1]) {
+                renderGL('object', {
+                    shape: 'rect',
+                    x: tile.centerX + (direction * doorW * 0.42),
+                    y: tile.centerY,
+                    w: doorW * 0.18,
+                    h: doorH,
+                    fill: colors.Entity.PlayerDark
+                });
+            }
+            return;
+        }
         renderGL('object', {
             shape: 'rect',
             x: tile.centerX,
@@ -1577,15 +1971,15 @@ export class TutorialScene extends BaseScene {
                 entities.push({ type: 'box', data: box, sortY: tile.centerY });
             }
         }
-        const loraTile = this.#getTileVisual(this.model.lora.x, this.model.lora.y);
-        entities.push({ type: 'lora', data: this.model.lora, sortY: loraTile.centerY });
+        const loraPoint = this.#getLoraRenderPoint();
+        entities.push({ type: 'lora', data: loraPoint, sortY: loraPoint.y });
         const playerPoint = this.#getPlayerRenderPoint();
         entities.push({ type: 'player', data: playerPoint, sortY: playerPoint.y });
         entities.sort((left, right) => left.sortY - right.sortY);
 
         for (const entity of entities) {
             if (entity.type === 'box') this.#drawBox(entity.data, 1);
-            else if (entity.type === 'lora') this.#drawLora();
+            else if (entity.type === 'lora') this.#drawLora(entity.data);
             else this.#drawPlayer(entity.data);
         }
 
@@ -1663,9 +2057,8 @@ export class TutorialScene extends BaseScene {
      * 로라의 머리, 몸체, 표식과 월드 HP 칸을 그립니다.
      * @private
      */
-    #drawLora() {
+    #drawLora(point = this.#getLoraRenderPoint()) {
         const colors = ColorSchemes.Tactics;
-        const tile = this.#getTileVisual(this.model.lora.x, this.model.lora.y);
         const size = this.tileSize * this.data.LAYOUT.BOARD.ENTITY_SCALE_RATIO;
         const attackFlash = this.actionAnimation?.targetId === LORA_ID
             && Math.floor(this.actionAnimation.elapsed * 30) % 2 === 0;
@@ -1674,11 +2067,11 @@ export class TutorialScene extends BaseScene {
             : colors.Entity.LoraDark;
         const alpha = this.model.lora.alive ? 1 : 0.62;
 
-        this.#drawEntityShadow(tile.centerX, tile.centerY, size * 0.94, alpha);
+        this.#drawEntityShadow(point.x, point.y, size * 0.94, alpha);
         renderGL('object', {
             shape: 'circle',
-            x: tile.centerX,
-            y: tile.centerY,
+            x: point.x,
+            y: point.y,
             w: size,
             h: size,
             fill: colors.Entity.LoraDark,
@@ -1686,8 +2079,8 @@ export class TutorialScene extends BaseScene {
         });
         renderGL('object', {
             shape: 'circle',
-            x: tile.centerX,
-            y: tile.centerY + (size * 0.03),
+            x: point.x,
+            y: point.y + (size * 0.03),
             w: size * 0.78,
             h: size * 0.78,
             fill: bodyColor,
@@ -1695,8 +2088,8 @@ export class TutorialScene extends BaseScene {
         });
         renderGL('object', {
             shape: 'circle',
-            x: tile.centerX,
-            y: tile.centerY - (size * 0.24),
+            x: point.x,
+            y: point.y - (size * 0.24),
             w: size * 0.52,
             h: size * 0.34,
             fill: colors.Entity.LoraHair,
@@ -1704,8 +2097,8 @@ export class TutorialScene extends BaseScene {
         });
         render('texteffect', {
             shape: 'text',
-            x: tile.centerX,
-            y: tile.centerY + (size * 0.12),
+            x: point.x,
+            y: point.y + (size * 0.12),
             text: 'L',
             font: this.fonts.MONO,
             fill: colors.Entity.LoraAccent,
@@ -1714,17 +2107,24 @@ export class TutorialScene extends BaseScene {
             alpha
         });
 
-        const pipGap = size * 0.06;
-        const pipWidth = (size - (pipGap * (this.model.lora.maxHp - 1))) / this.model.lora.maxHp;
-        const pipY = tile.centerY - (size * 0.72);
-        for (let index = 0; index < this.model.lora.maxHp; index++) {
+        const hpRatio = clampNumber(this.model.lora.hp / this.model.lora.maxHp, 0, 1);
+        const barY = point.y - (size * 0.72);
+        renderGL('object', {
+            shape: 'rect',
+            x: point.x,
+            y: barY,
+            w: size,
+            h: size * 0.11,
+            fill: colors.UI.HpEmpty
+        });
+        if (hpRatio > 0) {
             renderGL('object', {
                 shape: 'rect',
-                x: tile.centerX - (size * 0.5) + (pipWidth * 0.5) + ((pipWidth + pipGap) * index),
-                y: pipY,
-                w: pipWidth,
-                h: size * 0.09,
-                fill: index < this.model.lora.hp ? colors.UI.HpFull : colors.UI.HpEmpty
+                x: point.x - (size * 0.5) + (size * hpRatio * 0.5),
+                y: barY,
+                w: size * hpRatio,
+                h: size * 0.11,
+                fill: colors.UI.HpFull
             });
         }
     }
@@ -1781,7 +2181,12 @@ export class TutorialScene extends BaseScene {
         }
         const previewTile = this.hoveredTile || this.cursorTile;
         const reachability = this.reachability.get(toTileKey(previewTile.x, previewTile.y));
-        const path = this.plannedPath.length > 1
+        const selectedDestination = this.plannedPath[this.plannedPath.length - 1];
+        const hoverMatchesSelection = this.hoveredTile
+            && selectedDestination.x === this.hoveredTile.x
+            && selectedDestination.y === this.hoveredTile.y;
+        const path = this.plannedDestinationSelected
+            && (!this.hoveredTile || hoverMatchesSelection)
             ? this.plannedPath
             : reachability?.path;
         if (!path || path.length < 2) {
@@ -1921,7 +2326,7 @@ export class TutorialScene extends BaseScene {
             shape: 'text',
             x: right,
             y: this.sidebar.y + this.#uwh(4.2),
-            text: `ROUND ${this.model.round}`,
+            text: `ROUND ${this.model.round}/${this.model.maxRounds ?? 8}`,
             font: this.fonts.MONO,
             fill: colors.UI.Muted,
             align: 'right',
@@ -1929,45 +2334,49 @@ export class TutorialScene extends BaseScene {
         });
         this.#drawDivider(this.sidebar.y + this.#uwh(7.2));
 
+        this.#drawHudBar({
+            label: '플레이어 HP',
+            value: this.model.player.hp,
+            max: this.model.player.maxHp,
+            y: this.sidebar.y + this.#uwh(9.8),
+            color: colors.Entity.Player
+        });
+        this.#drawHudBar({
+            label: `로라 HP${this.model.lora.defending ? ' · 방어 중' : ''}`,
+            value: this.model.lora.hp,
+            max: this.model.lora.maxHp,
+            y: this.sidebar.y + this.#uwh(15.1),
+            color: colors.UI.HpFull
+        });
+        const instabilityState = typeof this.model.getInstabilityState === 'function'
+            ? this.model.getInstabilityState()
+            : null;
+        const instabilityLabel = typeof instabilityState === 'string'
+            ? instabilityState
+            : (instabilityState?.label || instabilityState?.name || '불안정');
+        this.#drawHudBar({
+            label: `불안정도 · ${instabilityLabel}`,
+            value: this.model.lora.instability,
+            max: this.model.lora.maxInstability ?? 100,
+            y: this.sidebar.y + this.#uwh(20.4),
+            color: (this.model.lora.instability ?? 0) > 60 ? colors.UI.Danger : colors.UI.Warning
+        });
+
         render('ui', {
             shape: 'text',
             x: left,
-            y: this.sidebar.y + this.#uwh(10.1),
-            text: '로라 HP',
+            y: this.sidebar.y + this.#uwh(27),
+            text: `게이트 · ${this.model.gateOpen ? '개방' : '잠김'}${this.model.player.defending ? '  /  플레이어 방어 중' : ''}`,
             font: this.fonts.BODY,
-            fill: colors.UI.Text,
+            fill: this.model.gateOpen ? colors.UI.Success : colors.UI.Muted,
             baseline: 'middle'
         });
-        const hpGap = this.#uww(0.35);
-        const hpWidth = (contentWidth - (hpGap * (this.model.lora.maxHp - 1))) / this.model.lora.maxHp;
-        const hpY = this.sidebar.y + this.#uwh(12.4);
-        for (let index = 0; index < this.model.lora.maxHp; index++) {
-            render('ui', {
-                shape: 'roundRect',
-                x: left + ((hpWidth + hpGap) * index),
-                y: hpY,
-                w: hpWidth,
-                h: this.#uwh(1.5),
-                radius: this.#uwh(0.4),
-                fill: index < this.model.lora.hp ? colors.UI.HpFull : colors.UI.HpEmpty
-            });
-        }
-
-        this.#drawWrappedText({
-            text: this.data.TEXT.OBJECTIVE,
-            x: left,
-            y: this.sidebar.y + this.#uwh(17.5),
-            maxWidth: contentWidth,
-            font: this.fonts.BODY,
-            color: colors.UI.Muted,
-            maxLines: 3
-        });
-        this.#drawDivider(this.sidebar.y + this.#uwh(26));
+        this.#drawDivider(this.sidebar.y + this.#uwh(30));
 
         render('ui', {
             shape: 'text',
             x: left,
-            y: this.sidebar.y + this.#uwh(29),
+            y: this.sidebar.y + this.#uwh(33),
             text: this.#getPhaseLabel(),
             font: this.fonts.HEADING,
             fill: colors.UI.Text,
@@ -1976,7 +2385,7 @@ export class TutorialScene extends BaseScene {
         this.#drawWrappedText({
             text: this.#getTacticalStatusText(),
             x: left,
-            y: this.sidebar.y + this.#uwh(32),
+            y: this.sidebar.y + this.#uwh(36),
             maxWidth: contentWidth,
             font: this.fonts.SMALL,
             color: colors.UI.Accent,
@@ -1986,13 +2395,13 @@ export class TutorialScene extends BaseScene {
         render('ui', {
             shape: 'text',
             x: left,
-            y: this.sidebar.y + this.#uwh(39),
+            y: this.sidebar.y + this.#uwh(43),
             text: '전술 로그',
             font: this.fonts.BODY,
             fill: colors.UI.Text,
             baseline: 'middle'
         });
-        let logY = this.sidebar.y + this.#uwh(42);
+        let logY = this.sidebar.y + this.#uwh(46);
         for (let index = 0; index < this.eventLog.length; index++) {
             const lines = this.#drawWrappedText({
                 text: `${index === 0 ? '›' : '·'} ${this.eventLog[index]}`,
@@ -2009,8 +2418,8 @@ export class TutorialScene extends BaseScene {
             }
         }
 
-        if (this.model.phase !== 'victory') {
-            for (const key of ['attack', 'talk', 'wait', 'undo']) {
+        if (!this.#isResultPhase() && !this.#isDialoguePhase()) {
+            for (const key of ['attack', 'defend', 'endTurn', 'undo', 'escape']) {
                 this.buttons[key]?.item.draw();
             }
         }
@@ -2032,7 +2441,8 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #getTurnLabel() {
-        if (this.model.turn === 'victory') return 'MISSION CLEAR';
+        if (this.#isResultPhase()) return '전투 결과';
+        if (this.#isDialoguePhase()) return '강제 대화';
         if (this.model.turn === 'lora') return '로라의 턴';
         return '플레이어 턴';
     }
@@ -2043,10 +2453,11 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #getPhaseLabel() {
-        if (this.model.phase === 'victory') return '임무 완료';
+        if (this.#isResultPhase()) return '전투 종료';
+        if (this.#isDialoguePhase()) return '대화 선택';
         if (this.model.phase === 'lora') return '로라가 생각 중...';
         if (this.model.phase === 'action') {
-            return this.model.selectedAction === ACTION_TALK ? '행동 · 대화' : '행동 · 공격';
+            return '행동 선택';
         }
         return '이동 경로 선택';
     }
@@ -2057,26 +2468,87 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #getTacticalStatusText() {
-        if (this.model.phase === 'victory') {
+        if (this.#isResultPhase()) {
             return 'R 또는 아래 버튼으로 다시 시작할 수 있습니다.';
         }
+        if (this.#isDialoguePhase()) {
+            return '회피·공격·이해·거짓말 중 지금의 답을 선택하세요.';
+        }
         if (this.model.phase === 'lora') {
-            return '로라가 한마디를 마치면 자동으로 턴을 넘깁니다.';
+            return '로라가 이동하고 상황에 따라 공격하거나 방어합니다.';
         }
         if (this.model.phase === 'action') {
             const targetCount = this.actionTargets.length;
-            return `이동력 ${this.lastMoveCost}/${this.data.MAP.MOVE_RANGE} 사용 · 유효 대상 ${targetCount}개`;
+            if (this.#canEscape()) {
+                return '게이트 위에 도착했습니다. 게이트 탈출을 선택하세요.';
+            }
+            return `이동력 ${this.lastMoveCost}/${this.data.MAP.MOVE_RANGE} 사용 · 공격 대상 ${targetCount}개`;
         }
 
         const preview = this.hoveredTile || this.cursorTile;
-        if (this.plannedPath.length > 1) {
-            return `입력 경로 비용 ${this.plannedPathCost}/${this.data.MAP.MOVE_RANGE} · Z로 한 칸 취소`;
+        if (this.plannedDestinationSelected) {
+            return `선택 경로 ${this.plannedPathCost}/${this.data.MAP.MOVE_RANGE} · 재클릭 또는 Enter로 확정`;
         }
         const reachable = this.reachability.get(toTileKey(preview.x, preview.y));
         if (reachable) {
-            return `선택 경로 비용 ${reachable.cost}/${this.data.MAP.MOVE_RANGE} · 꺾어서 이동 가능`;
+            return `예상 경로 ${reachable.cost}/${this.data.MAP.MOVE_RANGE} · 첫 클릭으로 선택`;
         }
         return `이동력 ${this.data.MAP.MOVE_RANGE} · 청록색 타일 안에서 선택`;
+    }
+
+    /**
+     * HUD에 라벨, 숫자와 연속형 상태 바를 그립니다.
+     * @param {{label:string,value:number,max:number,y:number,color:string}} options - 바 표시값입니다.
+     * @private
+     */
+    #drawHudBar(options) {
+        const colors = ColorSchemes.Tactics;
+        const left = this.sidebar.x + this.sidebar.padding;
+        const right = this.sidebar.x + this.sidebar.w - this.sidebar.padding;
+        const width = right - left;
+        const max = Math.max(1, Number(options.max) || 1);
+        const value = clampNumber(options.value, 0, max);
+        const ratio = value / max;
+        render('ui', {
+            shape: 'text',
+            x: left,
+            y: options.y,
+            text: options.label,
+            font: this.fonts.SMALL,
+            fill: colors.UI.Text,
+            baseline: 'middle'
+        });
+        render('ui', {
+            shape: 'text',
+            x: right,
+            y: options.y,
+            text: `${Math.round(value)}/${Math.round(max)}`,
+            font: this.fonts.MONO,
+            fill: colors.UI.Muted,
+            align: 'right',
+            baseline: 'middle'
+        });
+        const barY = options.y + this.#uwh(1.7);
+        render('ui', {
+            shape: 'roundRect',
+            x: left,
+            y: barY,
+            w: width,
+            h: this.#uwh(1.15),
+            radius: this.#uwh(0.35),
+            fill: colors.UI.HpEmpty
+        });
+        if (ratio > 0) {
+            render('ui', {
+                shape: 'roundRect',
+                x: left,
+                y: barY,
+                w: width * ratio,
+                h: this.#uwh(1.15),
+                radius: this.#uwh(0.35),
+                fill: options.color
+            });
+        }
     }
 
     /**
@@ -2144,9 +2616,10 @@ export class TutorialScene extends BaseScene {
         }
         const colors = ColorSchemes.Tactics;
         const speech = this.data.LAYOUT.SPEECH;
-        const actor = this.speechBubble.speaker === LORA_ID
-            ? this.#getTileVisual(this.model.lora.x, this.model.lora.y)
-            : { ...this.#getPlayerRenderPoint(), centerX: this.#getPlayerRenderPoint().x, centerY: this.#getPlayerRenderPoint().y };
+        const actorPoint = this.speechBubble.speaker === LORA_ID
+            ? this.#getLoraRenderPoint()
+            : this.#getPlayerRenderPoint();
+        const actor = { centerX: actorPoint.x, centerY: actorPoint.y };
         const actorX = actor.centerX;
         const actorY = actor.centerY;
         const width = this.#uww(speech.WIDTH_UIWW);
@@ -2194,11 +2667,71 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * 로라 HP가 0이 되었을 때 결과 패널과 재시작 버튼을 그립니다.
+     * 짝수 라운드에 전투 입력을 차단하는 4지선다 대화 패널을 그립니다.
      * @private
      */
-    #drawVictoryOverlay() {
-        if (this.model.phase !== 'victory') {
+    #drawDialogueOverlay() {
+        if (!this.#isDialoguePhase()) {
+            return;
+        }
+        const colors = ColorSchemes.Tactics;
+        const modal = this.data.LAYOUT.MODAL;
+        const width = Math.max(this.#uww(modal.WIDTH_UIWW), this.#uww(42));
+        const height = Math.max(this.#uwh(modal.HEIGHT_WH), this.#uwh(48));
+        const x = this.UIOffsetX + ((this.UIWW - width) * 0.5);
+        const y = (this.WH - height) * 0.5;
+        render('ui', {
+            shape: 'rect',
+            x: 0,
+            y: 0,
+            w: this.WW,
+            h: this.WH,
+            fill: colors.UI.OverlayDim
+        });
+        render('ui', {
+            shape: 'roundRect',
+            x,
+            y,
+            w: width,
+            h: height,
+            radius: this.#uwh(modal.RADIUS_WH),
+            fill: colors.UI.Panel,
+            stroke: colors.Entity.Lora,
+            lineWidth: Math.max(2, this.UIWW * 0.0018),
+            shadowBlur: this.#uww(1.2),
+            shadowColor: colors.Entity.Shadow
+        });
+        render('ui', {
+            shape: 'text',
+            x: x + (width * 0.5),
+            y: y + (height * 0.13),
+            text: `ROUND ${this.model.round} · 대화`,
+            font: this.fonts.TITLE,
+            fill: colors.Entity.LoraAccent,
+            align: 'center',
+            baseline: 'middle'
+        });
+        render('ui', {
+            shape: 'text',
+            x: x + (width * 0.5),
+            y: y + (height * 0.27),
+            text: '로라에게 어떻게 답할까?',
+            font: this.fonts.HEADING,
+            fill: colors.UI.Text,
+            align: 'center',
+            baseline: 'middle'
+        });
+        for (const choice of DIALOGUE_CHOICES) {
+            this.buttons[`dialogue-${choice.id}`]?.item.draw();
+        }
+    }
+
+    /**
+     * 탈출 성공, 플레이어 전투 불능, 8라운드 초과 결과를 공통 패널에 표시합니다.
+     * @private
+     */
+    #drawResultOverlay() {
+        if (!this.#isResultPhase()) {
             return;
         }
         const colors = ColorSchemes.Tactics;
@@ -2207,7 +2740,10 @@ export class TutorialScene extends BaseScene {
         const height = this.#uwh(modal.HEIGHT_WH);
         const x = this.UIOffsetX + ((this.UIWW - width) * 0.5);
         const y = (this.WH - height) * 0.5;
-        const destroyedBoxes = this.model.boxes.filter((box) => box.destroyed).length;
+        const presentation = this.#getResultPresentation();
+        const result = this.model.result || {};
+        const resultRound = result.round ?? this.model.round;
+        const resultInstability = result.instability ?? this.model.lora.instability ?? 0;
 
         render('ui', {
             shape: 'rect',
@@ -2225,7 +2761,7 @@ export class TutorialScene extends BaseScene {
             h: height,
             radius: this.#uwh(modal.RADIUS_WH),
             fill: colors.UI.Panel,
-            stroke: colors.UI.Success,
+            stroke: presentation.success ? colors.UI.Success : colors.UI.Danger,
             lineWidth: Math.max(2, this.UIWW * 0.0018),
             shadowBlur: this.#uww(1.2),
             shadowColor: colors.Entity.Shadow
@@ -2233,18 +2769,18 @@ export class TutorialScene extends BaseScene {
         render('ui', {
             shape: 'text',
             x: x + (width * 0.5),
-            y: y + (height * 0.22),
-            text: 'MISSION CLEAR',
+            y: y + (height * 0.2),
+            text: presentation.title,
             font: this.fonts.TITLE,
-            fill: colors.UI.Success,
+            fill: presentation.success ? colors.UI.Success : colors.UI.Danger,
             align: 'center',
             baseline: 'middle'
         });
         render('ui', {
             shape: 'text',
             x: x + (width * 0.5),
-            y: y + (height * 0.41),
-            text: '로라의 HP를 0으로 만들었습니다.',
+            y: y + (height * 0.4),
+            text: presentation.message,
             font: this.fonts.HEADING,
             fill: colors.UI.Text,
             align: 'center',
@@ -2254,12 +2790,50 @@ export class TutorialScene extends BaseScene {
             shape: 'text',
             x: x + (width * 0.5),
             y: y + (height * 0.56),
-            text: `완료 라운드 ${this.model.round}  ·  파괴한 상자 ${destroyedBoxes}`,
+            text: `라운드 ${resultRound}/${this.model.maxRounds ?? 8}  ·  최종 불안정도 ${Math.round(resultInstability)}`,
             font: this.fonts.MONO,
             fill: colors.UI.Muted,
             align: 'center',
             baseline: 'middle'
         });
-        this.buttons.victoryRestart?.item.draw();
+        this.buttons.resultRestart?.item.draw();
+    }
+
+    /**
+     * 모델 결과 사유를 결과 패널 제목과 설명으로 변환합니다.
+     * @returns {{success:boolean,title:string,message:string}} 결과 표시값입니다.
+     * @private
+     */
+    #getResultPresentation() {
+        const result = this.model.result;
+        const type = typeof result === 'string'
+            ? result
+            : (result?.outcome || result?.type || result?.reason || '');
+        const reason = typeof result === 'object' ? result?.reason : type;
+        const success = result?.success === true
+            || result?.outcome === 'success'
+            || reason === 'escaped'
+            || ['success', 'escaped', 'escape'].includes(type);
+        if (success) {
+            return {
+                success: true,
+                title: 'MISSION CLEAR',
+                message: '로라를 무력화하고 게이트로 탈출했습니다.'
+            };
+        }
+        if ((result?.playerHp ?? this.model.player.hp) <= 0
+            || reason === 'player-defeated'
+            || ['player-defeated', 'defeat', 'hp-zero'].includes(type)) {
+            return {
+                success: false,
+                title: 'MISSION FAILED',
+                message: '플레이어가 더 이상 싸울 수 없습니다.'
+            };
+        }
+        return {
+            success: false,
+            title: 'TIME OVER',
+            message: '8라운드 안에 게이트를 통과하지 못했습니다.'
+        };
     }
 }
