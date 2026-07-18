@@ -1,1 +1,1 @@
-import 'engine/diagnostic_main.js';
+import 'engine/tutorial_main.js';

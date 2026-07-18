@@ -12,12 +12,14 @@
 import { getData } from 'data/data_handler.js';
 
 const GLOBAL_CONSTANTS = getData('GLOBAL_CONSTANTS');
+const TUTORIAL_GAME_DATA = getData('TUTORIAL_GAME_DATA');
 ```
 
 ## Folder Guide
 
 - `global/`: 전역 공통 상수
-- `theme/`: 테마 컬러 스킴 (`light_theme.js`, `dark_theme.js`) 및 레지스트리(`theme_registry.js`)
+- `game/`: 튜토리얼 맵, 전투 규칙, 레이아웃, 연출과 문구 (`TUTORIAL_GAME_DATA`)
+- `theme/`: 공통 및 `Tactics` 컬러 스킴 (`light_theme.js`, `dark_theme.js`)과 레지스트리(`theme_registry.js`)
 - `overlay/`: 오버레이 공통 데이터(애니메이션 프리셋, 레이아웃 비율)
 - `sound/`: 사운드 경로 및 기본 볼륨/입력 이벤트 상수
 - `display/`: 렌더러(WebGL) 관련 고정 상수

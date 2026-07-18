@@ -65,6 +65,63 @@ const LIGHT_OVERLAY_THEME = Object.freeze({
 });
 
 /**
+ * 라이트 테마 전술 프로토타입 전용 색상 정의
+ */
+const LIGHT_TACTICS_THEME = Object.freeze({
+    Backdrop: '#dce6ec',
+    BoardFrame: '#8fa5b5',
+    Tile: Object.freeze({
+        Low: '#c8d5de',
+        High1: '#9ebccc',
+        High2: '#78a8ba',
+        Edge: '#617f91',
+        Side1: '#8ca5b5',
+        Side2: '#6f8798',
+        Hover: '#00a9d6',
+        Reachable: 'rgba(0, 170, 205, 0.28)',
+        Path: '#007fa6',
+        Attack: 'rgba(224, 72, 91, 0.38)',
+        Talk: 'rgba(222, 158, 25, 0.34)',
+        Stair: '#73a8ad'
+    }),
+    Entity: Object.freeze({
+        Player: '#00a9d6',
+        PlayerDark: '#16506b',
+        PlayerAccent: '#effcff',
+        Lora: '#ed667b',
+        LoraDark: '#8d3049',
+        LoraHair: '#d8a85c',
+        LoraAccent: '#fff3f5',
+        Shadow: 'rgba(49, 65, 76, 0.26)',
+        Box: '#aa7856',
+        BoxBand: '#744d35'
+    }),
+    UI: Object.freeze({
+        Panel: 'rgba(247, 251, 253, 0.94)',
+        PanelStrong: '#eaf1f5',
+        Border: 'rgba(61, 91, 111, 0.28)',
+        Text: '#1c3444',
+        Muted: '#657b89',
+        Accent: '#008eb8',
+        Danger: '#d9485f',
+        Success: '#168f62',
+        Warning: '#b87500',
+        ButtonIdle: '#d4e2ea',
+        ButtonHover: '#b8d9e5',
+        ButtonDisabled: '#dbe2e6',
+        HpFull: '#e85369',
+        HpEmpty: '#a8b6bf',
+        OverlayDim: 'rgba(53, 70, 82, 0.26)'
+    }),
+    Effects: Object.freeze({
+        Move: '#00a9d6',
+        Hit: '#ef5f54',
+        Debris: '#a97450',
+        Talk: '#d49513'
+    })
+});
+
+/**
  * 라이트 테마 비네팅 전용 속성 정의
  */
 const LIGHT_VIGNETTE_THEME = Object.freeze({
@@ -85,6 +142,7 @@ export const LightTheme = Object.freeze({
         White: '#ececec'
     }),
     Overlay: LIGHT_OVERLAY_THEME,
+    Tactics: LIGHT_TACTICS_THEME,
     Vignette: LIGHT_VIGNETTE_THEME,
     Debug: Object.freeze({
         Background: '#101010',

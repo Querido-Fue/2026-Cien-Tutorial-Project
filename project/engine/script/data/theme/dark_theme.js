@@ -64,6 +64,63 @@ const DARK_OVERLAY_THEME = Object.freeze({
 });
 
 /**
+ * 다크 테마 전술 프로토타입 전용 색상 정의
+ */
+const DARK_TACTICS_THEME = Object.freeze({
+    Backdrop: '#07111f',
+    BoardFrame: '#13283d',
+    Tile: Object.freeze({
+        Low: '#183047',
+        High1: '#24506a',
+        High2: '#2f6a7d',
+        Edge: '#4d8398',
+        Side1: '#10263a',
+        Side2: '#091a2b',
+        Hover: '#59ddff',
+        Reachable: 'rgba(56, 207, 232, 0.38)',
+        Path: '#a0f3ff',
+        Attack: 'rgba(255, 105, 118, 0.56)',
+        Talk: 'rgba(255, 199, 92, 0.52)',
+        Stair: '#3d8792'
+    }),
+    Entity: Object.freeze({
+        Player: '#53ddff',
+        PlayerDark: '#123d59',
+        PlayerAccent: '#dcfbff',
+        Lora: '#ff7789',
+        LoraDark: '#70273d',
+        LoraHair: '#f4c987',
+        LoraAccent: '#ffe8ec',
+        Shadow: 'rgba(0, 5, 14, 0.48)',
+        Box: '#9b6749',
+        BoxBand: '#e0a867'
+    }),
+    UI: Object.freeze({
+        Panel: 'rgba(9, 22, 38, 0.90)',
+        PanelStrong: '#0d2136',
+        Border: 'rgba(111, 213, 237, 0.28)',
+        Text: '#e9f7fb',
+        Muted: '#8da7b5',
+        Accent: '#52dbff',
+        Danger: '#ff6979',
+        Success: '#61e6ad',
+        Warning: '#ffc75c',
+        ButtonIdle: '#173650',
+        ButtonHover: '#225a76',
+        ButtonDisabled: '#263645',
+        HpFull: '#ff6678',
+        HpEmpty: '#3a4a58',
+        OverlayDim: 'rgba(1, 7, 16, 0.58)'
+    }),
+    Effects: Object.freeze({
+        Move: '#5ce5ff',
+        Hit: '#ff8b78',
+        Debris: '#d19a67',
+        Talk: '#ffd875'
+    })
+});
+
+/**
  * 다크 테마 비네팅 전용 속성 정의
  */
 const DARK_VIGNETTE_THEME = Object.freeze({
@@ -84,6 +141,7 @@ export const DarkTheme = Object.freeze({
         White: '#e0e0e0'
     }),
     Overlay: DARK_OVERLAY_THEME,
+    Tactics: DARK_TACTICS_THEME,
     Vignette: DARK_VIGNETTE_THEME,
     Debug: Object.freeze({
         Background: '#f0f0f0',

@@ -30,6 +30,7 @@ import { OVERLAY_RENDER_CONSTANTS } from 'data/display/overlay_render_constants.
 import { VIGNETTE_CONSTANTS } from 'data/display/vignette_constants.js';
 import { DISPLAY_SURFACE_DATA } from 'data/display/display_surface_data.js';
 import { MOUSE_BUTTON_INPUT_DATA } from 'data/input/mouse_button_input_data.js';
+import { TUTORIAL_GAME_DATA } from 'data/game/tutorial_game_data.js';
 
 const DATA_REGISTRY = Object.freeze({
     GLOBAL_CONSTANTS,
@@ -59,7 +60,8 @@ const DATA_REGISTRY = Object.freeze({
     OVERLAY_RENDER_CONSTANTS,
     VIGNETTE_CONSTANTS,
     DISPLAY_SURFACE_DATA,
-    MOUSE_BUTTON_INPUT_DATA
+    MOUSE_BUTTON_INPUT_DATA,
+    TUTORIAL_GAME_DATA
 });
 
 /**

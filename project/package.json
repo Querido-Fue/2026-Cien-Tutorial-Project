@@ -4,7 +4,7 @@
     "main": "engine/index.html",
     "js-flags": "",
     "window": {
-        "title": "JukChang Engine Diagnostic",
+        "title": "로라의 문 앞 - 전술 튜토리얼",
         "toolbar": false,
         "fullscreen": false,
         "position": "center",
