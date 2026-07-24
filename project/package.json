@@ -4,7 +4,7 @@
     "main": "engine/index.html",
     "js-flags": "",
     "window": {
-        "title": "로라의 문 앞 - 전술 튜토리얼",
+        "title": "N번째 플레이어 - 턴제 전술 프로토타입",
         "toolbar": false,
         "fullscreen": false,
         "position": "center",

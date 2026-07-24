@@ -17,6 +17,7 @@ import {
     getMouseInput
 } from 'input/input_system.js';
 import { getDelta } from 'engine/time_handler.js';
+import { animate, remove } from 'animation/animation_system.js';
 import { getData } from 'data/data_handler.js';
 import { createFontString, wrapTextByCharacters } from 'util/font_util.js';
 import { UIPool, releaseUIItem } from 'ui/_ui_pool.js';
@@ -25,26 +26,56 @@ import {
     enqueueSimulationCommand
 } from 'simulation/simulation_command_queue.js';
 import { TutorialBattleModel } from './_tutorial_battle_model.js';
+import { TutorialCutsceneController } from './_tutorial_cutscene_controller.js';
+import {
+    createDefaultTutorialMeta,
+    discoverTutorialTrap,
+    identifyTutorialItem,
+    loadTutorialMeta,
+    markTutorialOpeningWatched,
+    recordTutorialResult,
+    saveTutorialMeta,
+    unlockTutorialCutscene
+} from './_tutorial_meta_progress.js';
 
 const TUTORIAL_GAME_DATA = getData('TUTORIAL_GAME_DATA');
 
-const TUTORIAL_COMMANDS = Object.freeze({
-    MOVE: 'tutorial/move',
-    SELECT_ACTION: 'tutorial/select-action',
-    INTERACT: 'tutorial/interact',
-    END_TURN: 'tutorial/end-turn',
-    DEFEND: 'tutorial/defend',
-    ESCAPE: 'tutorial/escape',
-    DIALOGUE: 'tutorial/dialogue',
-    UNDO: 'tutorial/undo',
-    COMPLETE_LORA_TURN: 'tutorial/complete-lora-turn',
-    RESTART: 'tutorial/restart'
+const MODES = Object.freeze({
+    LOADING: 'loading',
+    MENU: 'menu',
+    STARTER: 'starter',
+    BATTLE: 'battle',
+    RESULT: 'result',
+    GALLERY: 'gallery'
 });
 
-const ACTION_ATTACK = 'attack';
-const PLAYER_ID = 'player';
-const LORA_ID = 'lora';
-const DIALOGUE_CHOICES = TUTORIAL_GAME_DATA.DIALOGUE.CHOICES;
+const COMMANDS = Object.freeze({
+    META_READY: 'tutorial/meta-ready',
+    START: 'tutorial/start',
+    OPEN_GALLERY: 'tutorial/open-gallery',
+    RETURN_MENU: 'tutorial/return-menu',
+    STARTER_SHIFT: 'tutorial/starter-shift',
+    CHOOSE_STARTER: 'tutorial/choose-starter',
+    RESTART: 'tutorial/restart',
+    UNDO: 'tutorial/undo',
+    GALLERY_SHIFT: 'tutorial/gallery-shift',
+    GALLERY_PLAY: 'tutorial/gallery-play',
+    CUTSCENE_NEXT: 'tutorial/cutscene-next',
+    CUTSCENE_CLOSE: 'tutorial/cutscene-close',
+    PLAN_STEP: 'tutorial/plan-step',
+    MOVE_TO: 'tutorial/move-to',
+    COMMIT_PATH: 'tutorial/commit-path',
+    SELECT_ATTACK: 'tutorial/select-attack',
+    ATTACK: 'tutorial/attack',
+    DEFEND: 'tutorial/defend',
+    IDLE: 'tutorial/idle',
+    USE_ITEM: 'tutorial/use-item',
+    END_TURN: 'tutorial/end-turn',
+    ESCAPE: 'tutorial/escape',
+    PERFORM_LORA: 'tutorial/perform-lora',
+    COMPLETE_LORA: 'tutorial/complete-lora'
+});
+
 const WATCHED_KEY_CODES = Object.freeze([
     'ArrowUp',
     'ArrowRight',
@@ -59,66 +90,67 @@ const WATCHED_KEY_CODES = Object.freeze([
     'Digit1',
     'Digit2',
     'Digit3',
-    'Digit4',
     'KeyE',
+    'KeyG',
+    'KeyR',
     'KeyZ',
-    'Escape',
-    'KeyR'
+    'ControlLeft',
+    'ControlRight',
+    'Tab',
+    'Escape'
 ]);
+
 const KEY_DIRECTIONS = Object.freeze([
-    Object.freeze({ codes: Object.freeze(['ArrowUp', 'KeyW']), x: 0, y: -1, facing: 0 }),
-    Object.freeze({ codes: Object.freeze(['ArrowRight', 'KeyD']), x: 1, y: 0, facing: 90 }),
-    Object.freeze({ codes: Object.freeze(['ArrowDown', 'KeyS']), x: 0, y: 1, facing: 180 }),
-    Object.freeze({ codes: Object.freeze(['ArrowLeft', 'KeyA']), x: -1, y: 0, facing: 270 })
+    Object.freeze({ codes: Object.freeze(['ArrowUp', 'KeyW']), x: 0, y: -1 }),
+    Object.freeze({ codes: Object.freeze(['ArrowRight', 'KeyD']), x: 1, y: 0 }),
+    Object.freeze({ codes: Object.freeze(['ArrowDown', 'KeyS']), x: 0, y: 1 }),
+    Object.freeze({ codes: Object.freeze(['ArrowLeft', 'KeyA']), x: -1, y: 0 })
 ]);
+
+const PLAYER_ID = 'player';
+const LORA_ID = 'lora';
+const KNOWN_STARTER_IDS = new Set(['bow', 'bandage']);
 
 /**
  * 숫자를 지정한 범위 안으로 제한합니다.
- * @param {number} value - 제한할 값입니다.
+ * @param {*} value - 제한할 값입니다.
  * @param {number} min - 최솟값입니다.
  * @param {number} max - 최댓값입니다.
- * @returns {number} 제한된 값입니다.
+ * @returns {number} 제한된 숫자입니다.
  */
 function clampNumber(value, min, max) {
     return Math.min(Math.max(Number(value) || 0, min), max);
 }
 
 /**
- * 두 숫자 사이를 선형 보간합니다.
- * @param {number} start - 시작 값입니다.
- * @param {number} end - 끝 값입니다.
- * @param {number} amount - 0~1 보간 계수입니다.
- * @returns {number} 보간된 값입니다.
- */
-function lerpNumber(start, end, amount) {
-    return start + ((end - start) * amount);
-}
-
-/**
- * 이동 연출에 사용할 부드러운 감속 곡선을 계산합니다.
- * @param {number} value - 0~1 진행률입니다.
- * @returns {number} 완화된 진행률입니다.
- */
-function easeOutCubic(value) {
-    const t = clampNumber(value, 0, 1);
-    return 1 - Math.pow(1 - t, 3);
-}
-
-/**
- * 타일 좌표를 Map 조회 키로 변환합니다.
+ * 타일 좌표를 조회 키로 변환합니다.
  * @param {number} x - 타일 X 좌표입니다.
  * @param {number} y - 타일 Y 좌표입니다.
- * @returns {string} `x,y` 키입니다.
+ * @returns {string} 좌표 키입니다.
  */
 function toTileKey(x, y) {
-    return `${x},${y}`;
+    return String(x) + ',' + String(y);
 }
 
 /**
- * UI 기준 폭에 맞춰 반응형 Canvas 폰트 문자열을 생성합니다.
- * @param {object} spec - `TUTORIAL_GAME_DATA.TYPOGRAPHY`의 폰트 규격입니다.
- * @param {number} uiWidth - 현재 UI 기준 너비입니다.
- * @returns {string} Canvas font 문자열입니다.
+ * 좌표처럼 보이는 값을 안전한 타일 좌표로 복제합니다.
+ * @param {*} value - 원본 값입니다.
+ * @returns {{x:number,y:number}|null} 좌표 복제본입니다.
+ */
+function cloneTile(value) {
+    const x = Number(value?.x);
+    const y = Number(value?.y);
+    if (!Number.isInteger(x) || !Number.isInteger(y)) {
+        return null;
+    }
+    return { x, y };
+}
+
+/**
+ * 반응형 폰트 문자열을 생성합니다.
+ * @param {object} spec - 글꼴 규격입니다.
+ * @param {number} uiWidth - UI 기준 너비입니다.
+ * @returns {string} Canvas 글꼴 문자열입니다.
  */
 function createResponsiveFont(spec, uiWidth) {
     return createFontString({
@@ -129,80 +161,190 @@ function createResponsiveFont(spec, uiWidth) {
 }
 
 /**
- * 목록에서 직전 값과 가급적 겹치지 않는 임의 항목을 선택합니다.
- * @param {readonly string[]} values - 선택 후보입니다.
- * @param {string} previous - 직전 선택값입니다.
- * @returns {string} 선택된 문자열입니다.
+ * 임의 값을 배열로 정규화합니다.
+ * @param {*} value - 원본 값입니다.
+ * @returns {Array} 배열입니다.
  */
-function pickDifferentLine(values, previous = '') {
-    if (!Array.isArray(values) || values.length === 0) {
-        return '';
+function toList(value) {
+    if (Array.isArray(value)) {
+        return value;
     }
-    if (values.length === 1) {
-        return values[0];
+    if (value instanceof Map) {
+        return Array.from(value.values());
     }
+    return [];
+}
 
-    const candidates = values.filter((value) => value !== previous);
-    return candidates[Math.floor(Math.random() * candidates.length)] || values[0];
+/**
+ * 체크포인트에 넣을 배열, Map, Set, 일반 객체를 참조 공유 없이 복제합니다.
+ * @param {*} value - 복제할 값입니다.
+ * @param {WeakMap<object, *>} [seen] - 순환 참조 방지 지도입니다.
+ * @returns {*} 독립 복제본입니다.
+ */
+function cloneCheckpointValue(value, seen = new WeakMap()) {
+    if (value === null || typeof value !== 'object') {
+        return value;
+    }
+    if (seen.has(value)) {
+        return seen.get(value);
+    }
+    if (Array.isArray(value)) {
+        const copy = [];
+        seen.set(value, copy);
+        value.forEach((entry) => copy.push(cloneCheckpointValue(entry, seen)));
+        return copy;
+    }
+    if (value instanceof Map) {
+        const copy = new Map();
+        seen.set(value, copy);
+        for (const [key, entry] of value.entries()) {
+            copy.set(
+                cloneCheckpointValue(key, seen),
+                cloneCheckpointValue(entry, seen)
+            );
+        }
+        return copy;
+    }
+    if (value instanceof Set) {
+        const copy = new Set();
+        seen.set(value, copy);
+        for (const entry of value.values()) {
+            copy.add(cloneCheckpointValue(entry, seen));
+        }
+        return copy;
+    }
+    const copy = {};
+    seen.set(value, copy);
+    for (const [key, entry] of Object.entries(value)) {
+        copy[key] = cloneCheckpointValue(entry, seen);
+    }
+    return copy;
+}
+
+/**
+ * 튜토리얼 메타 두 값이 같은지 비교합니다.
+ * @param {object} left - 왼쪽 값입니다.
+ * @param {object} right - 오른쪽 값입니다.
+ * @returns {boolean} 같으면 true입니다.
+ */
+function isSameMeta(left, right) {
+    return JSON.stringify(left) === JSON.stringify(right);
 }
 
 /**
  * @class TutorialScene
- * @description 이동과 상호작용을 한 턴으로 묶는 2D 탑뷰 전술 튜토리얼 씬입니다.
+ * @description 두 층 전술전, 고정 카드 컷씬, 반복 플레이 메타를 조율합니다.
  */
 export class TutorialScene extends BaseScene {
     /**
-     * @param {object} sceneSystem - 현재 씬을 소유한 SceneSystem입니다.
+     * @param {object} sceneSystem - 현재 장면을 소유한 SceneSystem입니다.
      */
     constructor(sceneSystem) {
         super(sceneSystem);
         this.data = TUTORIAL_GAME_DATA;
-        this.model = new TutorialBattleModel(this.data);
+        this.mode = MODES.LOADING;
+        this.model = null;
+        this.floorView = null;
+        this.meta = createDefaultTutorialMeta();
+        this.committedMeta = cloneCheckpointValue(this.meta);
+        this.metaStaging = false;
+        this.cutscenes = new TutorialCutsceneController(this.data.CUTSCENES);
+        this.cutsceneReturnMode = MODES.MENU;
+        this.pendingCutscenes = [];
+        this.runCutsceneIds = new Set();
+        this.galleryEntries = Object.values(this.data.CUTSCENES);
+        this.galleryIndex = 0;
+        this.starterIndex = Math.max(
+            0,
+            this.data.STARTER_CHOICES.findIndex((choice) => choice.id === 'bandage')
+        );
+        this.starterItemId = this.data.STARTER_CHOICES[this.starterIndex]?.id || 'bandage';
+        this.resultData = null;
+        this.resultRecorded = false;
+        this.destroyed = false;
+        this.saveSequence = Promise.resolve();
+        this.undoHistory = [];
+        this.timelineRevision = 0;
+        this.ownedAnimationIds = new Set();
+        this.animationSlots = new Map();
+        this.presentationLocked = false;
+        this.presentation = {
+            floorIndex: 0,
+            playerX: 0,
+            playerY: 0,
+            playerAlpha: 1,
+            playerScale: 1,
+            playerHp: 100,
+            loraHp: 100,
+            instability: 0,
+            hoverProgress: 1,
+            pathProgress: 1,
+            attackProgress: 1,
+            menuSelectionProgress: 1,
+            actionPulse: 0
+        };
+        this.hoveredTileKey = '';
+
         this.elapsedSeconds = 0;
-        this.facing = 0;
-        this.cursorTile = { ...this.model.player };
-        this.plannedPath = [{ ...this.model.player }];
-        this.plannedPathCost = 0;
-        this.plannedDestinationSelected = false;
         this.hoveredTile = null;
+        this.plannedPath = [];
         this.reachability = new Map();
         this.actionTargets = [];
+        this.attackSelected = false;
+        this.targetIndex = 0;
+        this.inventoryPage = 0;
+        this.loraTurnState = null;
+        this.eventLog = [];
+        this.floatingTexts = [];
+        this.particles = [];
+        this.screenShakeSeconds = 0;
+        this.stabilizeSeconds = 0;
+        this.flashSeconds = 0;
+        this.loraPortrait = typeof Image === 'function' ? new Image() : null;
+        if (this.loraPortrait) {
+            this.loraPortrait.decoding = 'async';
+            this.loraPortrait.src = this.data.ASSETS.LORA_PORTRAIT;
+        }
+
         this.buttons = {};
+        this.buttonSignature = '';
+        this.uiActionHandled = false;
         this.keyboardLatch = new Map();
         this.keyboardPressObserved = new Map();
         this.frameKeyEdges = new Set();
-        const initialKeyboardEventTimestamp = Number(getKeyboardSnapshot()?.lastEvent?.timeStamp);
-        this.lastKeyboardEventTimestamp = Number.isFinite(initialKeyboardEventTimestamp)
-            ? initialKeyboardEventTimestamp
+        const initialEventTime = Number(getKeyboardSnapshot()?.lastEvent?.timeStamp);
+        this.lastKeyboardEventTimestamp = Number.isFinite(initialEventTime)
+            ? initialEventTime
             : -1;
         for (const code of WATCHED_KEY_CODES) {
             const isDown = getKeyboardCodeInput(code) === true;
             this.keyboardLatch.set(code, isDown);
             this.keyboardPressObserved.set(code, isDown);
         }
-        this.eventLog = [];
-        this.movementAnimation = null;
-        this.loraMovementAnimation = null;
-        this.actionAnimation = null;
-        this.particles = [];
-        this.floatingTexts = [];
-        this.speechBubble = null;
-        this.loraTurnState = null;
-        this.turnGateSeconds = 0;
-        this.screenShakeSeconds = 0;
-        this.shakeX = 0;
-        this.shakeY = 0;
-        this.lastLoraLine = '';
-        this.lastPlayerLine = '';
-        this.lastMoveCost = 0;
-        this.uiActionHandled = false;
+
         this.#syncViewport();
-        this.#refreshTacticalCache();
-        this.#appendEvent('임무 시작 · 이동할 타일을 선택하세요.');
+        loadTutorialMeta()
+            .then((meta) => {
+                if (!this.destroyed) {
+                    enqueueSimulationCommand({
+                        type: COMMANDS.META_READY,
+                        payload: { meta }
+                    });
+                }
+            })
+            .catch((error) => {
+                console.warn('튜토리얼 진행도 로드 오류:', error);
+                if (!this.destroyed) {
+                    enqueueSimulationCommand({
+                        type: COMMANDS.META_READY,
+                        payload: { meta: createDefaultTutorialMeta() }
+                    });
+                }
+            });
     }
 
     /**
-     * 입력, 전술 상태 명령, 턴 연출을 가변 프레임에서 갱신합니다.
+     * 입력과 표현 상태를 갱신하고 로라 턴 명령만 예약합니다.
      * @override
      */
     update() {
@@ -210,37 +352,48 @@ export class TutorialScene extends BaseScene {
         this.elapsedSeconds += deltaSeconds;
         this.uiActionHandled = false;
 
-        this.#updatePresentation(deltaSeconds);
-        this.#syncButtonStates();
+        this.#ensureButtons();
         this.#updateButtons();
         this.#prepareKeyboardEdges();
         this.#handleKeyboardInput();
         this.#updatePointerState();
         this.#handlePointerInput();
         this.#updateLoraTurn(deltaSeconds);
+        this.#updatePresentation(deltaSeconds);
         this.#captureKeyboardLatch();
     }
 
     /**
-     * 맵, 전술 오브젝트, 경로, HUD와 결과 화면을 레이어 순서에 맞춰 그립니다.
+     * 현재 모드에 맞는 화면과 컷씬 카드를 그립니다.
      * @override
      */
     draw() {
+        this.#ensureButtons();
         this.#drawBackdrop();
-        this.#drawBoard();
-        this.#drawDoor();
-        this.#drawEntities();
-        this.#drawPathPreview();
-        this.#drawWorldEffects();
-        this.#drawHud();
-        this.#drawSpeechBubble();
-        this.#drawDialogueOverlay();
-        this.#drawResultOverlay();
+
+        if (this.mode === MODES.LOADING) {
+            this.#drawLoading();
+        } else if (this.mode === MODES.MENU) {
+            this.#drawMenu();
+        } else if (this.mode === MODES.STARTER) {
+            this.#drawStarterSelect();
+        } else if (this.mode === MODES.GALLERY) {
+            this.#drawGallery();
+        } else if (this.mode === MODES.BATTLE) {
+            this.#drawBattle();
+        } else if (this.mode === MODES.RESULT) {
+            this.#drawResult();
+        }
+
+        if (this.cutscenes.isOpen()) {
+            this.#drawCutscene();
+        }
+        this.#drawButtons();
     }
 
     /**
-     * 프레임 경계에서 전달된 검증 대상 명령을 전투 모델에 적용합니다.
-     * @param {object[]} commands - 시뮬레이션 명령 목록입니다.
+     * 프레임 경계에서 모든 상태 변경 명령을 적용합니다.
+     * @param {object[]} commands - 검증할 명령 목록입니다.
      * @override
      */
     applySimulationCommands(commands = []) {
@@ -249,58 +402,98 @@ export class TutorialScene extends BaseScene {
                 continue;
             }
 
-            if (command.type === TUTORIAL_COMMANDS.RESTART) {
-                clearSimulationCommands();
-                this.sceneSystem.startPlayScene();
-                return;
-            }
-
             switch (command.type) {
-                case TUTORIAL_COMMANDS.MOVE:
-                    this.#applyMoveCommand(command.payload);
+                case COMMANDS.META_READY:
+                    this.#applyMetaReady(command.payload);
                     break;
-                case TUTORIAL_COMMANDS.SELECT_ACTION:
-                    this.#applyActionSelectionCommand(command.payload);
+                case COMMANDS.START:
+                    this.#applyStart();
                     break;
-                case TUTORIAL_COMMANDS.INTERACT:
-                    this.#applyInteractionCommand(command.payload);
+                case COMMANDS.OPEN_GALLERY:
+                    this.#applyOpenGallery();
                     break;
-                case TUTORIAL_COMMANDS.END_TURN:
-                    this.#applyEndTurnCommand();
+                case COMMANDS.RETURN_MENU:
+                    this.#applyReturnMenu();
                     break;
-                case TUTORIAL_COMMANDS.DEFEND:
-                    this.#applyDefendCommand();
+                case COMMANDS.STARTER_SHIFT:
+                    this.#applyStarterShift(command.payload);
                     break;
-                case TUTORIAL_COMMANDS.ESCAPE:
-                    this.#applyEscapeCommand();
+                case COMMANDS.CHOOSE_STARTER:
+                    this.#applyChooseStarter(command.payload);
                     break;
-                case TUTORIAL_COMMANDS.DIALOGUE:
-                    this.#applyDialogueCommand(command.payload);
+                case COMMANDS.RESTART:
+                    this.#applyRestart();
                     break;
-                case TUTORIAL_COMMANDS.UNDO:
-                    this.#applyUndoCommand();
+                case COMMANDS.UNDO:
+                    this.#applyUndo();
                     break;
-                case TUTORIAL_COMMANDS.COMPLETE_LORA_TURN:
-                    this.#applyLoraTurnCompletion();
+                case COMMANDS.GALLERY_SHIFT:
+                    this.#applyGalleryShift(command.payload);
+                    break;
+                case COMMANDS.GALLERY_PLAY:
+                    this.#applyGalleryPlay();
+                    break;
+                case COMMANDS.CUTSCENE_NEXT:
+                    this.#applyCutsceneNext();
+                    break;
+                case COMMANDS.CUTSCENE_CLOSE:
+                    this.#applyCutsceneClose();
+                    break;
+                case COMMANDS.PLAN_STEP:
+                    this.#applyPlanStep(command.payload);
+                    break;
+                case COMMANDS.MOVE_TO:
+                    this.#applyMoveTo(command.payload);
+                    break;
+                case COMMANDS.COMMIT_PATH:
+                    this.#applyCommitPath();
+                    break;
+                case COMMANDS.SELECT_ATTACK:
+                    this.#applySelectAttack();
+                    break;
+                case COMMANDS.ATTACK:
+                    this.#applyAttack(command.payload);
+                    break;
+                case COMMANDS.DEFEND:
+                    this.#applyDefend();
+                    break;
+                case COMMANDS.IDLE:
+                    this.#applyIdle();
+                    break;
+                case COMMANDS.USE_ITEM:
+                    this.#applyUseItem(command.payload);
+                    break;
+                case COMMANDS.END_TURN:
+                    this.#applyEndTurn();
+                    break;
+                case COMMANDS.ESCAPE:
+                    this.#applyEscape();
+                    break;
+                case COMMANDS.PERFORM_LORA:
+                    this.#applyLoraAction(command.payload);
+                    break;
+                case COMMANDS.COMPLETE_LORA:
+                    this.#applyLoraCompletion(command.payload);
                     break;
                 default:
                     break;
             }
         }
+        this.buttonSignature = '';
     }
 
     /**
-     * 창 크기에 맞춰 보드와 HUD 배치를 다시 계산합니다.
+     * 창 크기에 맞춰 투영 좌표와 UI를 다시 구성합니다.
      * @override
      */
     resize() {
-        this.particles = [];
         this.floatingTexts = [];
+        this.particles = [];
         this.#syncViewport();
     }
 
     /**
-     * 테마나 표시 설정 변경 후 현재 반응형 레이아웃을 다시 구성합니다.
+     * 표시 설정 변경을 현재 레이아웃에 반영합니다.
      * @param {object} changedSettings - 변경된 런타임 설정입니다.
      * @override
      */
@@ -313,313 +506,1364 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * 씬이 소유한 UI 풀 요소와 대기 명령을 정리합니다.
+     * 장면이 소유한 풀 요소와 대기 명령을 정리합니다.
      * @override
      */
     destroy() {
+        this.#commitStagedMeta();
+        this.destroyed = true;
+        this.timelineRevision += 1;
+        this.#clearOwnedAnimations();
         clearSimulationCommands();
         this.#releaseButtons();
-        this.particles = [];
+        this.cutscenes.close();
+        this.pendingCutscenes = [];
+        this.runCutsceneIds.clear();
         this.floatingTexts = [];
+        this.particles = [];
+        this.loraTurnState = null;
+        this.undoHistory = [];
     }
 
     /**
-     * 현재 표시 영역에서 보드, 사이드바, 폰트와 버튼 배치를 계산합니다.
+     * 메타 로드 완료를 메뉴 전환에 반영합니다.
+     * @param {object} payload - 로드 결과입니다.
      * @private
      */
-    #syncViewport() {
-        this.WW = getWW();
-        this.WH = getWH();
-        this.UIWW = getUIWW();
-        this.UIOffsetX = getUIOffsetX();
-        this.fonts = Object.fromEntries(
-            Object.entries(this.data.TYPOGRAPHY).map(([key, spec]) => (
-                [key, createResponsiveFont(spec, this.UIWW)]
-            ))
+    #applyMetaReady(payload) {
+        if (this.mode !== MODES.LOADING) {
+            return;
+        }
+        this.meta = payload?.meta || createDefaultTutorialMeta();
+        this.committedMeta = cloneCheckpointValue(this.meta);
+        this.metaStaging = false;
+        this.mode = MODES.MENU;
+        this.#appendEvent('진행도를 불러왔습니다.');
+    }
+
+    /**
+     * 메뉴에서 새 플레이 흐름을 시작합니다.
+     * @private
+     */
+    #applyStart() {
+        if (this.mode !== MODES.MENU) {
+            return;
+        }
+        if (this.meta.openingWatched !== true) {
+            this.#openCutscene('opening', MODES.STARTER, true);
+            return;
+        }
+        this.mode = MODES.STARTER;
+    }
+
+    /**
+     * 메뉴에서 컷씬 갤러리를 엽니다.
+     * @private
+     */
+    #applyOpenGallery() {
+        if (this.mode !== MODES.MENU) {
+            return;
+        }
+        this.galleryIndex = clampNumber(this.galleryIndex, 0, this.galleryEntries.length - 1);
+        this.mode = MODES.GALLERY;
+    }
+
+    /**
+     * 현재 화면에서 메뉴로 돌아갑니다.
+     * @private
+     */
+    #applyReturnMenu() {
+        if (this.mode === MODES.LOADING) {
+            return;
+        }
+        this.#commitStagedMeta();
+        this.timelineRevision += 1;
+        this.#clearOwnedAnimations();
+        this.undoHistory = [];
+        this.cutscenes.close();
+        this.pendingCutscenes = [];
+        this.cutsceneReturnMode = MODES.MENU;
+        this.model = null;
+        this.floorView = null;
+        this.mode = MODES.MENU;
+        this.resultData = null;
+        this.loraTurnState = null;
+        this.attackSelected = false;
+        this.hoveredTile = null;
+        this.reachability.clear();
+        this.actionTargets = [];
+        this.plannedPath = [];
+    }
+
+    /**
+     * 스타터 선택 커서를 이동합니다.
+     * @param {object} payload - 이동량입니다.
+     * @private
+     */
+    #applyStarterShift(payload) {
+        if (this.mode !== MODES.STARTER || this.cutscenes.isOpen()) {
+            return;
+        }
+        const count = this.data.STARTER_CHOICES.length;
+        if (count <= 0) {
+            return;
+        }
+        const delta = Number(payload?.delta) || 0;
+        this.starterIndex = (this.starterIndex + delta + count) % count;
+        this.#startSelectionAnimation('menu-selection');
+    }
+
+    /**
+     * 선택한 스타터로 새 전투를 시작합니다.
+     * @param {object} payload - 선택 아이템 ID입니다.
+     * @private
+     */
+    #applyChooseStarter(payload) {
+        if (this.mode !== MODES.STARTER || this.cutscenes.isOpen()) {
+            return;
+        }
+        const requestedId = payload?.itemId
+            || this.data.STARTER_CHOICES[this.starterIndex]?.id;
+        const choiceIndex = this.data.STARTER_CHOICES.findIndex(
+            (choice) => choice.id === requestedId
         );
-
-        const boardLayout = this.data.LAYOUT.BOARD;
-        const maxBoardWidth = this.#uww(boardLayout.MAX_WIDTH_UIWW);
-        const maxBoardHeight = this.#uwh(boardLayout.MAX_HEIGHT_WH);
-        this.tileSize = Math.max(1, Math.min(
-            maxBoardWidth / this.data.MAP.WIDTH,
-            maxBoardHeight / this.data.MAP.HEIGHT
-        ));
-        this.boardWidth = this.tileSize * this.data.MAP.WIDTH;
-        this.boardHeight = this.tileSize * this.data.MAP.HEIGHT;
-        this.boardX = this.UIOffsetX + this.#uww(boardLayout.X_UIWW);
-        this.boardY = this.#uwh(boardLayout.Y_WH);
-        this.tileGap = this.tileSize * boardLayout.TILE_GAP_RATIO;
-        this.elevationLift = this.tileSize * boardLayout.ELEVATION_LIFT_RATIO;
-        this.maxTerrainHeight = Math.max(...this.data.MAP.HEIGHTS.flat());
-        const framePadding = this.tileSize * boardLayout.FRAME_PADDING_RATIO;
-        this.boardFrame = {
-            x: this.boardX - framePadding,
-            y: this.boardY - (this.maxTerrainHeight * this.elevationLift) - framePadding,
-            w: this.boardWidth + (framePadding * 2),
-            h: this.boardHeight + (this.maxTerrainHeight * this.elevationLift) + (framePadding * 2)
-        };
-
-        const sidebarLayout = this.data.LAYOUT.SIDEBAR;
-        this.sidebar = {
-            x: this.UIOffsetX + this.#uww(sidebarLayout.X_UIWW),
-            y: this.#uwh(sidebarLayout.Y_WH),
-            w: this.#uww(sidebarLayout.WIDTH_UIWW),
-            h: this.#uwh(sidebarLayout.HEIGHT_WH),
-            padding: this.#uww(sidebarLayout.PADDING_UIWW),
-            radius: this.#uwh(sidebarLayout.RADIUS_WH)
-        };
-        this.#buildButtons();
-    }
-
-    /**
-     * UI 기준 너비 백분율을 현재 픽셀 값으로 변환합니다.
-     * @param {number} value - UIWW 백분율입니다.
-     * @returns {number} 변환된 픽셀 값입니다.
-     * @private
-     */
-    #uww(value) {
-        return this.UIWW * (value / 100);
-    }
-
-    /**
-     * 화면 높이 백분율을 현재 픽셀 값으로 변환합니다.
-     * @param {number} value - WH 백분율입니다.
-     * @returns {number} 변환된 픽셀 값입니다.
-     * @private
-     */
-    #uwh(value) {
-        return this.WH * (value / 100);
-    }
-
-    /**
-     * HUD 행동 버튼, 대화 선택지와 결과 재시작 버튼을 UI 풀에서 구성합니다.
-     * @private
-     */
-    #buildButtons() {
-        this.#releaseButtons();
-        const actions = this.data.LAYOUT.ACTIONS;
-        const buttonHeight = Math.min(this.#uwh(actions.BUTTON_HEIGHT_WH), this.#uwh(4.1));
-        const buttonGap = Math.min(this.#uwh(actions.GAP_WH), this.#uwh(0.55));
-        const buttonX = this.sidebar.x + this.sidebar.padding;
-        const buttonWidth = this.sidebar.w - (this.sidebar.padding * 2);
-        const firstButtonY = this.#uwh(actions.TOP_WH);
-        const buttonDefinitions = [
-            ['attack', this.data.TEXT.ACTIONS.ATTACK, () => this.#queueActionSelection(ACTION_ATTACK)],
-            ['defend', '방어', () => this.#queueUiCommand(TUTORIAL_COMMANDS.DEFEND)],
-            ['endTurn', '턴 종료', () => this.#queueEndTurnOrMove()],
-            ['undo', '이동 취소', () => this.#queueUiCommand(TUTORIAL_COMMANDS.UNDO)],
-            ['escape', '게이트 탈출', () => this.#queueUiCommand(TUTORIAL_COMMANDS.ESCAPE)]
-        ];
-
-        buttonDefinitions.forEach(([key, label, onClick], index) => {
-            this.buttons[key] = this.#createButton({
-                x: buttonX,
-                y: firstButtonY + ((buttonHeight + buttonGap) * index),
-                w: buttonWidth,
-                h: buttonHeight,
-                label,
-                onClick
-            });
-        });
-
-        const modal = this.data.LAYOUT.MODAL;
-        const modalW = this.#uww(modal.WIDTH_UIWW);
-        const modalH = this.#uwh(modal.HEIGHT_WH);
-        const modalX = this.UIOffsetX + ((this.UIWW - modalW) * 0.5);
-        const modalY = (this.WH - modalH) * 0.5;
-        this.buttons.resultRestart = this.#createButton({
-            x: modalX + (modalW * 0.25),
-            y: modalY + (modalH * 0.72),
-            w: modalW * 0.5,
-            h: buttonHeight,
-            label: `${this.data.TEXT.ACTIONS.RESTART}  [R]`,
-            onClick: () => this.#queueUiCommand(TUTORIAL_COMMANDS.RESTART)
-        });
-
-        const dialogueW = Math.max(modalW, this.#uww(42));
-        const dialogueH = Math.max(modalH, this.#uwh(48));
-        const dialogueX = this.UIOffsetX + ((this.UIWW - dialogueW) * 0.5);
-        const dialogueY = (this.WH - dialogueH) * 0.5;
-        const choiceHeight = this.#uwh(5);
-        DIALOGUE_CHOICES.forEach((choice, index) => {
-            this.buttons[`dialogue-${choice.id}`] = this.#createButton({
-                x: dialogueX + (dialogueW * 0.12),
-                y: dialogueY + (dialogueH * 0.39) + (index * this.#uwh(6.2)),
-                w: dialogueW * 0.76,
-                h: choiceHeight,
-                label: `${index + 1}. ${choice.label}`,
-                onClick: () => this.#queueUiCommand(TUTORIAL_COMMANDS.DIALOGUE, {
-                    choice: choice.id
-                })
-            });
-        });
-    }
-
-    /**
-     * 텍스트 하나를 중앙에 배치한 풀 기반 버튼을 생성합니다.
-     * @param {{x:number,y:number,w:number,h:number,label:string,onClick:Function}} options - 버튼 구성값입니다.
-     * @returns {{item:object,text:object}} 생성된 버튼 묶음입니다.
-     * @private
-     */
-    #createButton(options) {
-        const colors = ColorSchemes.Tactics;
-        const textElement = UIPool.text_element.get();
-        textElement.init({
-            parent: this,
-            layer: 'ui',
-            text: options.label,
-            font: this.data.TYPOGRAPHY.BUTTON.FAMILY,
-            fontWeight: this.data.TYPOGRAPHY.BUTTON.WEIGHT,
-            size: clampNumber(
-                this.UIWW * (this.data.TYPOGRAPHY.BUTTON.SIZE_UIWW / 100),
-                this.data.TYPOGRAPHY.BUTTON.MIN,
-                this.data.TYPOGRAPHY.BUTTON.MAX
-            ),
-            color: colors.UI.Text,
-            align: 'center'
-        });
-
-        const button = UIPool.button.get();
-        button.init({
-            parent: this,
-            layer: 'ui',
-            x: options.x,
-            y: options.y,
-            width: options.w,
-            height: options.h,
-            center: [textElement],
-            radius: this.#uwh(this.data.LAYOUT.ACTIONS.BUTTON_RADIUS_WH),
-            idleColor: colors.UI.ButtonIdle,
-            hoverColor: colors.UI.ButtonHover,
-            color: colors.UI.Text,
-            onClick: options.onClick
-        });
-        return { item: button, text: textElement };
-    }
-
-    /**
-     * 씬이 보유한 모든 버튼과 자식 텍스트를 UI 풀에 반납합니다.
-     * @private
-     */
-    #releaseButtons() {
-        for (const button of Object.values(this.buttons)) {
-            releaseUIItem(button?.item);
+        if (choiceIndex < 0) {
+            return;
         }
-        this.buttons = {};
+        this.starterIndex = choiceIndex;
+        this.#beginRun(this.data.STARTER_CHOICES[choiceIndex].id);
     }
 
     /**
-     * 현재 전투 단계에 맞춰 버튼 표시, 라벨, 활성 상태와 색을 갱신합니다.
+     * 같은 스타터로 현재 플레이를 초기화합니다.
      * @private
      */
-    #syncButtonStates() {
-        if (!this.buttons.attack) {
+    #applyRestart() {
+        if (this.mode !== MODES.BATTLE && this.mode !== MODES.RESULT) {
+            return;
+        }
+        this.#commitStagedMeta();
+        this.cutscenes.close();
+        this.pendingCutscenes = [];
+        this.#beginRun(this.starterItemId);
+    }
+
+    /**
+     * 새 모델과 뷰 상태로 전투를 시작합니다.
+     * @param {string} starterItemId - 스타터 아이템 ID입니다.
+     * @private
+     */
+    #beginRun(starterItemId) {
+        this.timelineRevision += 1;
+        this.#clearOwnedAnimations();
+        this.undoHistory = [];
+        this.metaStaging = true;
+        this.starterItemId = starterItemId;
+        const knowledge = {
+            discoveredItemIds: [...this.meta.identifiedItemIds],
+            identifiedItemIds: [...this.meta.identifiedItemIds],
+            revealedTrapIds: [...this.meta.discoveredTrapIds],
+            unlockedCutsceneIds: [...this.meta.unlockedCutsceneIds]
+        };
+        this.model = new TutorialBattleModel(this.data, { knowledge });
+        this.model.reset({ starterItemId });
+        this.mode = MODES.BATTLE;
+        this.resultData = null;
+        this.resultRecorded = false;
+        this.pendingCutscenes = [];
+        this.runCutsceneIds = new Set(this.#getSnapshot()?.unlockedCutscenes || []);
+        this.attackSelected = false;
+        this.targetIndex = 0;
+        this.inventoryPage = 0;
+        this.loraTurnState = null;
+        this.eventLog = [];
+        this.floatingTexts = [];
+        this.particles = [];
+        this.screenShakeSeconds = 0;
+        this.stabilizeSeconds = 0;
+        this.flashSeconds = 0;
+        this.presentation = {
+            ...this.presentation,
+            floorIndex: Number(this.model.floorIndex) || 0,
+            playerX: Number(this.model.player?.x) || 0,
+            playerY: Number(this.model.player?.y) || 0,
+            playerAlpha: 1,
+            playerScale: 1,
+            playerHp: Number(this.model.player?.hp) || 0,
+            loraHp: Number(this.model.lora?.hp) || 0,
+            instability: Number(this.model.lora?.instability) || 0,
+            hoverProgress: 1,
+            pathProgress: 1,
+            attackProgress: 1,
+            menuSelectionProgress: 1,
+            actionPulse: 0
+        };
+        this.hoveredTileKey = '';
+        this.#resetPlannedPath();
+        this.#refreshBattleCache();
+        this.#appendEvent('전투 시작 · 이동과 행동은 어느 쪽이든 먼저 할 수 있습니다.');
+    }
+
+    /**
+     * 갤러리 선택 항목을 이동합니다.
+     * @param {object} payload - 이동량입니다.
+     * @private
+     */
+    #applyGalleryShift(payload) {
+        if (this.mode !== MODES.GALLERY || this.cutscenes.isOpen()) {
+            return;
+        }
+        const count = this.galleryEntries.length;
+        if (count <= 0) {
+            return;
+        }
+        const delta = Number(payload?.delta) || 0;
+        this.galleryIndex = (this.galleryIndex + delta + count) % count;
+        this.#startSelectionAnimation('menu-selection');
+    }
+
+    /**
+     * 해금된 갤러리 컷씬을 재생합니다.
+     * @private
+     */
+    #applyGalleryPlay() {
+        if (this.mode !== MODES.GALLERY || this.cutscenes.isOpen()) {
+            return;
+        }
+        const entry = this.galleryEntries[this.galleryIndex];
+        if (!entry || !this.#isCutsceneUnlocked(entry.id)) {
+            return;
+        }
+        this.#openCutscene(entry.id, MODES.GALLERY, true);
+    }
+
+    /**
+     * 컷씬을 다음 카드로 진행하고 완료 시 메타를 갱신합니다.
+     * @private
+     */
+    #applyCutsceneNext() {
+        if (!this.cutscenes.isOpen()) {
+            return;
+        }
+        const transition = this.cutscenes.next();
+        if (!transition.ok || !transition.closed) {
+            return;
+        }
+        const completedId = transition.completedCutsceneId;
+        if (completedId) {
+            let nextMeta = unlockTutorialCutscene(this.meta, completedId);
+            if (completedId === 'opening') {
+                nextMeta = markTutorialOpeningWatched(nextMeta);
+            }
+            this.#replaceMeta(nextMeta);
+        }
+        this.#resumeAfterCutscene();
+    }
+
+    /**
+     * 현재 컷씬을 완료 처리 없이 닫습니다.
+     * @private
+     */
+    #applyCutsceneClose() {
+        if (!this.cutscenes.isOpen()) {
+            return;
+        }
+        this.cutscenes.close();
+        this.#resumeAfterCutscene();
+    }
+
+    /**
+     * 대기 중인 컷씬을 열거나 원래 모드로 복귀합니다.
+     * @private
+     */
+    #resumeAfterCutscene() {
+        const next = this.pendingCutscenes.shift();
+        if (next) {
+            this.cutsceneReturnMode = next.returnMode;
+            this.cutscenes.open(next.id);
+            return;
+        }
+        this.mode = this.cutsceneReturnMode;
+        this.cutsceneReturnMode = this.mode;
+        if (this.mode === MODES.BATTLE) {
+            this.#refreshBattleCache();
+        }
+    }
+
+    /**
+     * 방향 입력으로 이동 경로 또는 공격 대상을 선택합니다.
+     * @param {object} payload - 방향 벡터입니다.
+     * @private
+     */
+    #applyPlanStep(payload) {
+        if (!this.#canAcceptBattleInput()) {
+            return;
+        }
+        const dx = Number(payload?.x) || 0;
+        const dy = Number(payload?.y) || 0;
+        if (this.attackSelected) {
+            this.#shiftAttackTarget(dx || dy);
+            this.#startSelectionAnimation('attack');
+            return;
+        }
+        if (this.model.movementUsed) {
+            return;
+        }
+        const current = this.plannedPath[this.plannedPath.length - 1]
+            || cloneTile(this.model.player);
+        if (!current) {
+            return;
+        }
+        const x = current.x + dx;
+        const y = current.y + dy;
+        const path = this.#normalizePath(this.model.getPathTo(x, y));
+        if (path.length === 0) {
+            return;
+        }
+        this.plannedPath = path;
+        this.#startSelectionAnimation('path');
+    }
+
+    /**
+     * 클릭한 도달 가능 타일까지 즉시 이동합니다.
+     * @param {object} payload - 목적지 좌표입니다.
+     * @private
+     */
+    #applyMoveTo(payload) {
+        if (!this.#canAcceptBattleInput() || this.model.movementUsed) {
+            return;
+        }
+        const tile = cloneTile(payload);
+        if (!tile || !this.reachability.has(toTileKey(tile.x, tile.y))) {
+            return;
+        }
+        const path = this.#normalizePath(this.model.getPathTo(tile.x, tile.y));
+        this.#commitModelPath(path);
+    }
+
+    /**
+     * 키보드로 계획한 경로를 확정합니다.
+     * @private
+     */
+    #applyCommitPath() {
+        if (!this.#canAcceptBattleInput() || this.model.movementUsed) {
+            return;
+        }
+        this.#commitModelPath(this.plannedPath);
+    }
+
+    /**
+     * 검증한 경로를 모델에 전달합니다.
+     * @param {Array<{x:number,y:number}>} path - 이동 경로입니다.
+     * @private
+     */
+    #commitModelPath(path) {
+        const normalizedPath = this.#normalizePath(path);
+        if (normalizedPath.length === 0) {
+            return;
+        }
+        const { result, entry } = this.#performUndoableModelCommand(
+            'move',
+            () => this.model.commitPath(normalizedPath)
+        );
+        if (result?.ok) {
+            entry.resultPath = this.#normalizePath(result.path);
+            entry.teleportSegments = toList(result.events)
+                .filter((event) => event?.type === 'teleported')
+                .map((event) => ({
+                    from: cloneTile(event.from),
+                    to: cloneTile(event.to)
+                }))
+                .filter((segment) => segment.from && segment.to);
+            this.#spawnPathParticles(entry.resultPath);
+            this.#resetPlannedPath();
+        }
+        this.#afterModelChange(result);
+        if (result?.ok) {
+            this.#startPlayerPathPresentation(
+                entry.resultPath,
+                entry.teleportSegments
+            );
+        }
+    }
+
+    /**
+     * 공격 선택 상태를 전환합니다.
+     * @private
+     */
+    #applySelectAttack() {
+        if (!this.#canAcceptBattleInput() || this.model.actionUsed) {
+            return;
+        }
+        this.attackSelected = !this.attackSelected;
+        this.targetIndex = 0;
+        this.#refreshBattleCache();
+        this.#startSelectionAnimation('attack');
+    }
+
+    /**
+     * 선택 대상을 공격합니다.
+     * @param {object} payload - 대상 ID입니다.
+     * @private
+     */
+    #applyAttack(payload) {
+        if (!this.#canAcceptBattleInput() || this.model.actionUsed) {
+            return;
+        }
+        const targetId = payload?.targetId
+            || this.actionTargets[this.targetIndex]?.id
+            || LORA_ID;
+        if (!this.actionTargets.some((target) => target.id === targetId)) {
+            return;
+        }
+        const { result } = this.#performUndoableModelCommand(
+            'attack',
+            () => this.model.attack(targetId)
+        );
+        this.attackSelected = false;
+        this.#afterModelChange(result);
+        this.#startActionPresentation(result);
+    }
+
+    /**
+     * 플레이어 방어 행동을 적용합니다.
+     * @private
+     */
+    #applyDefend() {
+        if (!this.#canAcceptBattleInput() || this.model.actionUsed) {
+            return;
+        }
+        const { result } = this.#performUndoableModelCommand(
+            'defend',
+            () => this.model.defend()
+        );
+        this.attackSelected = false;
+        this.#afterModelChange(result);
+        this.#startActionPresentation(result);
+    }
+
+    /**
+     * 플레이어가 행동을 아끼는 선택을 적용합니다.
+     * @private
+     */
+    #applyIdle() {
+        if (!this.#canAcceptBattleInput() || this.model.actionUsed) {
+            return;
+        }
+        const { result } = this.#performUndoableModelCommand(
+            'wait',
+            () => this.model.wait()
+        );
+        this.attackSelected = false;
+        this.#afterModelChange(result);
+        this.#startActionPresentation(result);
+    }
+
+    /**
+     * 인벤토리 아이템을 사용합니다.
+     * @param {object} payload - 아이템 ID입니다.
+     * @private
+     */
+    #applyUseItem(payload) {
+        if (!this.#canAcceptBattleInput() || this.model.actionUsed) {
+            return;
+        }
+        const itemId = payload?.itemId;
+        if (typeof itemId !== 'string') {
+            return;
+        }
+        const { result } = this.#performUndoableModelCommand(
+            'use-item',
+            () => this.model.useItem(itemId)
+        );
+        this.attackSelected = false;
+        this.#afterModelChange(result);
+        this.#startActionPresentation(result);
+    }
+
+    /**
+     * 플레이어 턴을 끝내고 로라 행동 예약 상태로 전환합니다.
+     * @private
+     */
+    #applyEndTurn() {
+        if (!this.#canAcceptBattleInput()) {
+            return;
+        }
+        const endMethod = typeof this.model.endPlayerTurn === 'function'
+            ? this.model.endPlayerTurn
+            : this.model.endTurn;
+        if (typeof endMethod !== 'function') {
+            return;
+        }
+        const { result } = this.#performUndoableModelCommand(
+            'end-turn',
+            () => endMethod.call(this.model)
+        );
+        this.attackSelected = false;
+        this.#afterModelChange(result);
+        this.#startActionPresentation(result, this.data.ANIMATION.TURN_GATE_SECONDS);
+        if (this.mode === MODES.BATTLE && this.model?.turn === 'lora') {
+            this.loraTurnState = {
+                stage: 'before',
+                seconds: 0,
+                queued: false
+            };
+        }
+    }
+
+    /**
+     * 열린 게이트에서 탈출을 시도합니다.
+     * @private
+     */
+    #applyEscape() {
+        if (!this.#canAcceptBattleInput() || !this.#canEscape()) {
+            return;
+        }
+        const { result } = this.#performUndoableModelCommand(
+            'escape',
+            () => this.model.escape()
+        );
+        this.#afterModelChange(result);
+        this.#startActionPresentation(result);
+    }
+
+    /**
+     * 성공할 때만 남는 플레이어 모델 명령 체크포인트를 생성하고 실행합니다.
+     * @param {string} action - 기록할 행동 ID입니다.
+     * @param {Function} execute - 모델 명령 실행 함수입니다.
+     * @returns {{result:object,entry:object|null}} 모델 결과와 기록 항목입니다.
+     * @private
+     */
+    #performUndoableModelCommand(action, execute) {
+        const entry = {
+            action,
+            checkpoint: this.#createSceneCheckpoint(),
+            resultPath: [],
+            teleportSegments: []
+        };
+        this.undoHistory.push(entry);
+        let result;
+        try {
+            result = execute();
+        } catch (error) {
+            this.undoHistory.pop();
+            throw error;
+        }
+        if (result?.ok !== true) {
+            this.undoHistory.pop();
+            this.buttonSignature = '';
+            return { result, entry: null };
+        }
+        this.buttonSignature = '';
+        return { result, entry };
+    }
+
+    /**
+     * 모델과 씬 런 상태를 하나의 방어 복제 체크포인트로 묶습니다.
+     * @returns {object} Undo용 체크포인트입니다.
+     * @private
+     */
+    #createSceneCheckpoint() {
+        if (!this.model || typeof this.model.createCheckpoint !== 'function') {
+            throw new Error('TutorialScene: 모델 체크포인트 API를 사용할 수 없습니다.');
+        }
+        return {
+            model: this.model.createCheckpoint(),
+            mode: this.mode,
+            resultData: cloneCheckpointValue(this.resultData),
+            resultRecorded: this.resultRecorded,
+            meta: cloneCheckpointValue(this.meta),
+            metaStaging: this.metaStaging,
+            cutscene: cloneCheckpointValue(this.cutscenes.getState()),
+            cutsceneReturnMode: this.cutsceneReturnMode,
+            pendingCutscenes: cloneCheckpointValue(this.pendingCutscenes),
+            runCutsceneIds: [...this.runCutsceneIds],
+            eventLog: [...this.eventLog],
+            loraTurnState: cloneCheckpointValue(this.loraTurnState),
+            attackSelected: this.attackSelected,
+            targetIndex: this.targetIndex,
+            inventoryPage: this.inventoryPage,
+            hoveredTile: cloneTile(this.hoveredTile),
+            hoveredTileKey: this.hoveredTileKey,
+            plannedPath: cloneCheckpointValue(this.plannedPath),
+            reachability: cloneCheckpointValue(this.reachability),
+            actionTargets: cloneCheckpointValue(this.actionTargets),
+            floatingTexts: cloneCheckpointValue(this.floatingTexts),
+            particles: cloneCheckpointValue(this.particles),
+            screenShakeSeconds: this.screenShakeSeconds,
+            stabilizeSeconds: this.stabilizeSeconds,
+            flashSeconds: this.flashSeconds,
+            presentation: cloneCheckpointValue(this.presentation)
+        };
+    }
+
+    /**
+     * 가장 최근 플레이어 행동과 그 행동이 유발한 자동 진행을 함께 복원합니다.
+     * @private
+     */
+    #applyUndo() {
+        if (!this.#canUndo()) {
+            return;
+        }
+        const entry = this.undoHistory.pop();
+        const previousPresentation = cloneCheckpointValue(this.presentation);
+        const previousFloorIndex = Number(this.model?.floorIndex) || 0;
+        this.timelineRevision += 1;
+        this.#clearOwnedAnimations();
+        try {
+            const targetPresentation = this.#restoreSceneCheckpoint(entry.checkpoint);
+            this.presentation = {
+                ...targetPresentation,
+                ...previousPresentation,
+                floorIndex: previousFloorIndex
+            };
+            this.presentationLocked = false;
+            this.#appendEvent(this.data.TEXT.ACTIONS.UNDO_EVENT);
+            this.#startUndoPresentation(entry, targetPresentation, previousFloorIndex);
+        } catch (error) {
+            this.undoHistory.push(entry);
+            console.warn('행동 되돌리기 오류:', error);
+        }
+        this.buttonSignature = '';
+    }
+
+    /**
+     * 씬 체크포인트를 복원하고 애니메이션 목표 표현 상태를 반환합니다.
+     * @param {object} checkpoint - 복원할 씬 체크포인트입니다.
+     * @returns {object} 복원 목표 표현 상태입니다.
+     * @private
+     */
+    #restoreSceneCheckpoint(checkpoint) {
+        if (!checkpoint || typeof this.model?.restoreCheckpoint !== 'function') {
+            throw new TypeError('TutorialScene: 복원할 체크포인트가 올바르지 않습니다.');
+        }
+        this.model.restoreCheckpoint(checkpoint.model);
+        this.mode = checkpoint.mode;
+        this.resultData = cloneCheckpointValue(checkpoint.resultData);
+        this.resultRecorded = checkpoint.resultRecorded === true;
+        this.meta = cloneCheckpointValue(checkpoint.meta);
+        this.metaStaging = checkpoint.metaStaging === true;
+        this.cutsceneReturnMode = checkpoint.cutsceneReturnMode;
+        this.pendingCutscenes = cloneCheckpointValue(checkpoint.pendingCutscenes);
+        this.runCutsceneIds = new Set(checkpoint.runCutsceneIds || []);
+        this.eventLog = [...(checkpoint.eventLog || [])];
+        this.loraTurnState = cloneCheckpointValue(checkpoint.loraTurnState);
+        this.attackSelected = checkpoint.attackSelected === true;
+        this.targetIndex = Number(checkpoint.targetIndex) || 0;
+        this.inventoryPage = Number(checkpoint.inventoryPage) || 0;
+        this.hoveredTile = cloneTile(checkpoint.hoveredTile);
+        this.hoveredTileKey = String(checkpoint.hoveredTileKey || '');
+        this.plannedPath = cloneCheckpointValue(checkpoint.plannedPath) || [];
+        this.reachability = cloneCheckpointValue(checkpoint.reachability) || new Map();
+        this.actionTargets = cloneCheckpointValue(checkpoint.actionTargets) || [];
+        this.floatingTexts = cloneCheckpointValue(checkpoint.floatingTexts) || [];
+        this.particles = cloneCheckpointValue(checkpoint.particles) || [];
+        this.screenShakeSeconds = Number(checkpoint.screenShakeSeconds) || 0;
+        this.stabilizeSeconds = Number(checkpoint.stabilizeSeconds) || 0;
+        this.flashSeconds = Number(checkpoint.flashSeconds) || 0;
+        this.#restoreCutsceneState(checkpoint.cutscene);
+        this.floorView = this.model.getCurrentFloorState();
+        return cloneCheckpointValue(checkpoint.presentation);
+    }
+
+    /**
+     * 공개 컨트롤러 API만으로 컷씬 ID와 카드 위치를 복원합니다.
+     * @param {object} state - 저장된 컷씬 상태입니다.
+     * @private
+     */
+    #restoreCutsceneState(state) {
+        this.cutscenes = new TutorialCutsceneController(this.data.CUTSCENES);
+        if (!state?.open || typeof state.cutsceneId !== 'string') {
+            return;
+        }
+        const opened = this.cutscenes.open(state.cutsceneId);
+        if (!opened.ok) {
+            return;
+        }
+        const targetIndex = Math.max(0, Number(state.cardIndex) || 0);
+        for (let index = 0; index < targetIndex; index++) {
+            const transition = this.cutscenes.next();
+            if (!transition.ok || transition.closed) {
+                break;
+            }
+        }
+    }
+
+    /**
+     * 현재 모드나 표현 잠금과 무관하게 되돌릴 기록이 있는지 확인합니다.
+     * @returns {boolean} Undo 가능 여부입니다.
+     * @private
+     */
+    #canUndo() {
+        return Boolean(this.model
+            && this.undoHistory.length > 0
+            && (this.mode === MODES.BATTLE
+                || this.mode === MODES.RESULT
+                || this.cutscenes.isOpen()));
+    }
+
+    /**
+     * 예약된 로라 행동을 모델에 적용합니다.
+     * @param {object} payload - 예약 당시 타임라인 버전입니다.
+     * @private
+     */
+    #applyLoraAction(payload) {
+        if (Number(payload?.timelineRevision) !== this.timelineRevision
+            || this.mode !== MODES.BATTLE
+            || this.cutscenes.isOpen()
+            || this.model?.turn !== 'lora'
+            || this.loraTurnState?.stage !== 'before') {
+            return;
+        }
+        const result = this.model.performLoraTurn();
+        this.loraTurnState = {
+            stage: 'show',
+            seconds: 0,
+            queued: false
+        };
+        this.#afterModelChange(result);
+    }
+
+    /**
+     * 로라 행동 연출 뒤 다음 플레이어 턴을 엽니다.
+     * @param {object} payload - 예약 당시 타임라인 버전입니다.
+     * @private
+     */
+    #applyLoraCompletion(payload) {
+        if (Number(payload?.timelineRevision) !== this.timelineRevision
+            || this.mode !== MODES.BATTLE
+            || this.cutscenes.isOpen()
+            || this.model?.turn !== 'lora'
+            || this.loraTurnState?.stage !== 'show') {
+            return;
+        }
+        const result = this.model.completeLoraTurn();
+        this.loraTurnState = null;
+        this.attackSelected = false;
+        this.#resetPlannedPath();
+        this.#afterModelChange(result);
+    }
+
+    /**
+     * 모델 결과의 이벤트, 지식, 컷씬, 종료 상태를 동기화합니다.
+     * @param {object} result - 모델 메서드 반환값입니다.
+     * @private
+     */
+    #afterModelChange(result) {
+        if (result?.ok === false) {
+            this.#appendEvent(this.#formatReason(result.reason));
+        }
+        this.#consumeEvents(result?.events);
+        this.#syncMetaFromModel();
+        this.#refreshBattleCache();
+        this.#enterResultIfNeeded();
+        this.#collectRunCutscenes();
+        this.#animateHudToModel();
+        if (this.presentation.floorIndex !== (Number(this.model?.floorIndex) || 0)) {
+            this.#startFloorTransitionPresentation();
+        }
+        if (this.mode === MODES.BATTLE
+            && this.model?.turn === 'lora'
+            && !this.loraTurnState) {
+            this.loraTurnState = {
+                stage: 'before',
+                seconds: 0,
+                queued: false
+            };
+        }
+    }
+
+    /**
+     * 사용 아이템과 발동 함정을 반복 플레이 메타에 반영합니다.
+     * @private
+     */
+    #syncMetaFromModel() {
+        if (!this.model) {
+            return;
+        }
+        let nextMeta = this.meta;
+        const snapshot = this.#getSnapshot();
+        for (const itemId of toList(snapshot?.usedItems)) {
+            const normalizedId = typeof itemId === 'string' ? itemId : itemId?.itemId;
+            if (normalizedId) {
+                nextMeta = identifyTutorialItem(nextMeta, normalizedId);
+            }
+        }
+        for (const itemId of toList(snapshot?.knowledge?.identifiedItemIds)) {
+            if (typeof itemId === 'string') {
+                nextMeta = identifyTutorialItem(nextMeta, itemId);
+            }
+        }
+        for (const trapId of toList(snapshot?.knowledge?.revealedTrapIds)) {
+            if (typeof trapId === 'string') {
+                nextMeta = discoverTutorialTrap(nextMeta, trapId);
+            }
+        }
+        for (const floor of toList(this.model.floorStates)) {
+            for (const trap of toList(floor?.traps)) {
+                if (trap?.triggered || trap?.revealed) {
+                    nextMeta = discoverTutorialTrap(nextMeta, trap.id);
+                }
+            }
+        }
+        this.#replaceMeta(nextMeta);
+    }
+
+    /**
+     * 모델이 공개한 컷씬을 런타임 표시 목록에 넣습니다.
+     * @private
+     */
+    #collectRunCutscenes() {
+        const snapshot = this.#getSnapshot();
+        for (const rawId of toList(snapshot?.unlockedCutscenes)) {
+            const id = typeof rawId === 'string' ? rawId : rawId?.id;
+            if (id) {
+                this.#openCutscene(id, this.mode, false);
+            }
+        }
+    }
+
+    /**
+     * 모델 결과가 생기면 결과 모드와 메타 기록을 구성합니다.
+     * @private
+     */
+    #enterResultIfNeeded() {
+        if (!this.model || this.resultRecorded) {
+            return;
+        }
+        const snapshot = this.#getSnapshot();
+        const rawResult = this.model.result || snapshot?.result;
+        if (!rawResult) {
+            return;
+        }
+        const endingSource = rawResult.endingId
+            || rawResult.ending?.id
+            || rawResult.ending
+            || rawResult.id;
+        const endingId = typeof endingSource === 'string'
+            ? endingSource
+            : this.galleryEntries[this.galleryEntries.length - 1]?.id;
+        const rawScore = Number(rawResult.score);
+        const score = Math.max(
+            0,
+            Math.round(Number.isFinite(rawScore) ? rawScore : this.#calculateScore())
+        );
+        const entry = this.galleryEntries.find((candidate) => candidate.id === endingId);
+        const instability = clampNumber(
+            rawResult.instability ?? this.model.lora?.instability,
+            0,
+            100
+        );
+        this.resultData = {
+            ...rawResult,
+            endingId,
+            score,
+            instability,
+            label: rawResult.label || entry?.title || '작전 종료'
+        };
+        this.mode = MODES.RESULT;
+        this.resultRecorded = true;
+        this.#replaceMeta(recordTutorialResult(this.meta, {
+            score,
+            endingId
+        }));
+        if (endingId) {
+            this.#openCutscene(endingId, MODES.RESULT, true);
+        }
+    }
+
+    /**
+     * 현재 전투 상태로 안정적인 점수 기본값을 계산합니다.
+     * @returns {number} 점수입니다.
+     * @private
+     */
+    #calculateScore() {
+        const hp = clampNumber(this.model?.player?.hp, 0, 100);
+        const instability = clampNumber(this.model?.lora?.instability, 0, 100);
+        const turnBonus = Math.max(
+            0,
+            (Number(this.model?.maxTurns) || this.data.RULES.MAX_TURNS)
+                - (Number(this.model?.turnNumber) || 0)
+        ) * 50;
+        return Math.round((hp * 10) + ((100 - instability) * 12) + turnBonus);
+    }
+
+    /**
+     * 새 메타가 달라졌을 때만 교체하고 저장합니다.
+     * @param {object} nextMeta - 새 메타입니다.
+     * @private
+     */
+    #replaceMeta(nextMeta) {
+        if (!nextMeta || isSameMeta(this.meta, nextMeta)) {
+            return;
+        }
+        this.meta = nextMeta;
+        if (!this.metaStaging) {
+            this.committedMeta = cloneCheckpointValue(this.meta);
+            this.#saveMeta(this.committedMeta);
+        }
+    }
+
+    /**
+     * Undo 경계 안에서 쌓인 메타 변경을 확정 경계에서 한 번만 저장합니다.
+     * @private
+     */
+    #commitStagedMeta() {
+        if (!this.metaStaging) {
+            return;
+        }
+        this.metaStaging = false;
+        if (isSameMeta(this.committedMeta, this.meta)) {
+            return;
+        }
+        this.committedMeta = cloneCheckpointValue(this.meta);
+        this.#saveMeta(this.committedMeta);
+    }
+
+    /**
+     * 최신 메타 복제본을 순서대로 비동기 저장합니다.
+     * @param {object} [meta=this.meta] - 확정해 저장할 메타입니다.
+     * @private
+     */
+    #saveMeta(meta = this.meta) {
+        const snapshot = cloneCheckpointValue(meta);
+        this.saveSequence = this.saveSequence
+            .then(() => saveTutorialMeta(snapshot))
+            .catch((error) => {
+                console.warn('튜토리얼 진행도 저장 오류:', error);
+            });
+    }
+
+    /**
+     * 컷씬 ID를 검증해 즉시 열거나 대기열에 넣습니다.
+     * @param {string} id - 컷씬 ID입니다.
+     * @param {string} returnMode - 닫힌 뒤 복귀할 모드입니다.
+     * @param {boolean} repeat - 같은 플레이 중 재생을 허용할지 여부입니다.
+     * @private
+     */
+    #openCutscene(id, returnMode, repeat) {
+        if (typeof id !== 'string') {
+            return;
+        }
+        const exists = this.galleryEntries.some((entry) => entry.id === id);
+        if (!exists || (!repeat && this.runCutsceneIds.has(id))) {
+            return;
+        }
+        this.runCutsceneIds.add(id);
+        if (this.cutscenes.isOpen()) {
+            if (this.cutscenes.getState().cutsceneId === id) {
+                return;
+            }
+            if (!this.pendingCutscenes.some((entry) => entry.id === id)) {
+                this.pendingCutscenes.push({ id, returnMode });
+            }
+            return;
+        }
+        const transition = this.cutscenes.open(id);
+        if (transition.ok) {
+            this.cutsceneReturnMode = returnMode;
+        }
+    }
+
+    /**
+     * 컷씬 해금 여부를 확인합니다.
+     * @param {string} id - 컷씬 ID입니다.
+     * @returns {boolean} 해금 상태입니다.
+     * @private
+     */
+    #isCutsceneUnlocked(id) {
+        return this.meta.unlockedCutsceneIds.includes(id);
+    }
+
+    /**
+     * 현재 모델 스냅샷을 안전하게 얻습니다.
+     * @returns {object|null} 스냅샷입니다.
+     * @private
+     */
+    #getSnapshot() {
+        if (!this.model || typeof this.model.getSnapshot !== 'function') {
+            return null;
+        }
+        return this.model.getSnapshot();
+    }
+
+    /**
+     * 전투 캐시를 모델의 현재 상태에 맞춥니다.
+     * @private
+     */
+    #refreshBattleCache() {
+        this.reachability = new Map();
+        this.actionTargets = [];
+        if (!this.model || this.mode !== MODES.BATTLE) {
+            this.floorView = null;
+            return;
+        }
+        this.floorView = this.model.getCurrentFloorState();
+        if (this.model.turn === 'player' && !this.model.movementUsed) {
+            this.reachability = this.#normalizeReachability(this.model.getReachability());
+        }
+        if (this.model.turn === 'player' && !this.model.actionUsed && this.attackSelected) {
+            this.actionTargets = toList(this.model.getValidTargets()).map((target) => ({
+                ...target,
+                x: Number(target.x),
+                y: Number(target.y)
+            }));
+            this.targetIndex = clampNumber(
+                this.targetIndex,
+                0,
+                Math.max(0, this.actionTargets.length - 1)
+            );
+        }
+        const player = cloneTile(this.model.player);
+        if (!player) {
+            this.plannedPath = [];
+            return;
+        }
+        if (this.plannedPath.length === 0
+            || this.plannedPath[0].x !== player.x
+            || this.plannedPath[0].y !== player.y) {
+            this.plannedPath = [player];
+        }
+    }
+
+    /**
+     * 도달 가능 결과를 좌표 키 Map으로 정규화합니다.
+     * @param {*} source - 모델 반환값입니다.
+     * @returns {Map<string,object>} 정규화된 결과입니다.
+     * @private
+     */
+    #normalizeReachability(source) {
+        const normalized = new Map();
+        if (source instanceof Map) {
+            for (const [key, value] of source.entries()) {
+                if (value && Number.isInteger(Number(value.x)) && Number.isInteger(Number(value.y))) {
+                    normalized.set(toTileKey(Number(value.x), Number(value.y)), value);
+                    continue;
+                }
+                const parts = String(key).split(',').map(Number);
+                if (parts.length === 2 && parts.every(Number.isInteger)) {
+                    normalized.set(toTileKey(parts[0], parts[1]), {
+                        x: parts[0],
+                        y: parts[1],
+                        cost: Number(value) || 0
+                    });
+                }
+            }
+            return normalized;
+        }
+        for (const value of toList(source?.tiles || source)) {
+            const tile = cloneTile(value);
+            if (tile) {
+                normalized.set(toTileKey(tile.x, tile.y), value);
+            }
+        }
+        return normalized;
+    }
+
+    /**
+     * 경로 반환값을 유효 좌표 배열로 정규화합니다.
+     * @param {*} source - 모델 반환값입니다.
+     * @returns {Array<{x:number,y:number}>} 좌표 배열입니다.
+     * @private
+     */
+    #normalizePath(source) {
+        const rawPath = Array.isArray(source) ? source : source?.path;
+        if (!Array.isArray(rawPath)) {
+            return [];
+        }
+        return rawPath.map(cloneTile).filter(Boolean);
+    }
+
+    /**
+     * 현재 플레이어 위치를 경로 시작점으로 설정합니다.
+     * @private
+     */
+    #resetPlannedPath() {
+        const player = cloneTile(this.model?.player);
+        this.plannedPath = player ? [player] : [];
+    }
+
+    /**
+     * 공격 대상 선택 커서를 순환합니다.
+     * @param {number} delta - 이동량입니다.
+     * @private
+     */
+    #shiftAttackTarget(delta) {
+        const count = this.actionTargets.length;
+        if (count <= 0 || delta === 0) {
+            return;
+        }
+        this.targetIndex = (this.targetIndex + Math.sign(delta) + count) % count;
+    }
+
+    /**
+     * 플레이어 전투 입력을 받을 수 있는지 확인합니다.
+     * @returns {boolean} 입력 가능 여부입니다.
+     * @private
+     */
+    #canAcceptBattleInput() {
+        return this.mode === MODES.BATTLE
+            && !this.cutscenes.isOpen()
+            && !this.presentationLocked
+            && this.model?.turn === 'player'
+            && !this.model?.result;
+    }
+
+    /**
+     * 현재 위치에서 게이트 탈출이 가능한지 확인합니다.
+     * @returns {boolean} 가능 여부입니다.
+     * @private
+     */
+    #canEscape() {
+        return Boolean(this.model
+            && typeof this.model.canEscape === 'function'
+            && this.model.canEscape());
+    }
+
+    /**
+     * 로라 턴의 두 단계 명령을 시간에 맞춰 큐에 넣습니다.
+     * @param {number} deltaSeconds - 경과 초입니다.
+     * @private
+     */
+    #updateLoraTurn(deltaSeconds) {
+        if (!this.loraTurnState
+            || this.mode !== MODES.BATTLE
+            || this.cutscenes.isOpen()
+            || this.presentationLocked
+            || this.loraTurnState.queued) {
+            return;
+        }
+        this.loraTurnState.seconds += deltaSeconds;
+        const beforeSeconds = Number(this.data.ANIMATION.TURN_GATE_SECONDS) || 0.22;
+        const showSeconds = Number(this.data.ANIMATION.LORA_TURN_SECONDS) || 1.15;
+        if (this.loraTurnState.stage === 'before'
+            && this.loraTurnState.seconds >= beforeSeconds) {
+            this.loraTurnState.queued = true;
+            enqueueSimulationCommand({
+                type: COMMANDS.PERFORM_LORA,
+                payload: { timelineRevision: this.timelineRevision }
+            });
+        } else if (this.loraTurnState.stage === 'show'
+            && this.loraTurnState.seconds >= showSeconds) {
+            this.loraTurnState.queued = true;
+            enqueueSimulationCommand({
+                type: COMMANDS.COMPLETE_LORA,
+                payload: { timelineRevision: this.timelineRevision }
+            });
+        }
+    }
+
+    /**
+     * 키보드 상승 에지를 모드별 명령으로 변환합니다.
+     * @private
+     */
+    #handleKeyboardInput() {
+        if (this.mode === MODES.LOADING) {
+            return;
+        }
+        if (this.#isUndoShortcutPressed() && this.#canUndo()) {
+            enqueueSimulationCommand({ type: COMMANDS.UNDO });
+            return;
+        }
+        if (this.presentationLocked) {
+            return;
+        }
+        if (this.cutscenes.isOpen()) {
+            if (this.#wasKeyPressed('Enter') || this.#wasKeyPressed('Space')) {
+                enqueueSimulationCommand({ type: COMMANDS.CUTSCENE_NEXT });
+            } else if (this.#wasKeyPressed('Escape')) {
+                enqueueSimulationCommand({ type: COMMANDS.CUTSCENE_CLOSE });
+            }
             return;
         }
 
-        const colors = ColorSchemes.Tactics;
-        const isResult = this.#isResultPhase();
-        const isDialogue = this.#isDialoguePhase();
-        const isPlayerPhase = this.model.turn === 'player';
-        const locked = this.#isPresentationLocked();
-        const isMovePhase = isPlayerPhase && this.model.phase === 'move';
-        const isActionPhase = isPlayerPhase && this.model.phase === 'action';
-        const attackTargets = isActionPhase ? this.model.getValidTargets(ACTION_ATTACK) : [];
-
-        this.buttons.endTurn.text.text = isMovePhase && this.plannedDestinationSelected
-            ? '이동 확정  [Enter]'
-            : '턴 종료  [Space]';
-        this.buttons.attack.text.text = `${this.data.TEXT.ACTIONS.ATTACK}  [1]`;
-        this.buttons.defend.text.text = '방어  [2]';
-        this.buttons.undo.text.text = '이동 취소  [Z]';
-        this.buttons.escape.text.text = '게이트 탈출  [E]';
-
-        this.#configureButton(this.buttons.attack, {
-            visible: !isResult && !isDialogue,
-            enabled: isPlayerPhase
-                && !locked
-                && ((isMovePhase && !this.plannedDestinationSelected)
-                    || (isActionPhase && attackTargets.length > 0)),
-            active: isActionPhase && this.model.selectedAction === ACTION_ATTACK
-        });
-        this.#configureButton(this.buttons.defend, {
-            visible: !isResult && !isDialogue,
-            enabled: ((isMovePhase && !this.plannedDestinationSelected) || isActionPhase) && !locked,
-            active: this.model.player?.defending === true
-        });
-        this.#configureButton(this.buttons.endTurn, {
-            visible: !isResult && !isDialogue,
-            enabled: isPlayerPhase && !locked,
-            active: false
-        });
-        this.#configureButton(this.buttons.undo, {
-            visible: !isResult && !isDialogue,
-            enabled: isPlayerPhase
-                && !locked
-                && (isActionPhase || (isMovePhase && this.plannedDestinationSelected)),
-            active: false
-        });
-        this.#configureButton(this.buttons.escape, {
-            visible: !isResult && !isDialogue && this.model.gateOpen === true,
-            enabled: isPlayerPhase && this.#canEscape() && !locked,
-            active: this.#canEscape()
-        });
-        this.#configureButton(this.buttons.resultRestart, {
-            visible: isResult,
-            enabled: isResult,
-            active: true
-        });
-        for (const choice of DIALOGUE_CHOICES) {
-            this.#configureButton(this.buttons[`dialogue-${choice.id}`], {
-                visible: isDialogue,
-                enabled: isDialogue && !locked,
-                active: false
-            });
-        }
-
-        for (const button of Object.values(this.buttons)) {
-            button.text.color = button.item.clickAble
-                ? colors.UI.Text
-                : colors.UI.Muted;
-        }
-    }
-
-    /**
-     * 버튼 한 개의 상호작용 가능 여부와 강조 색을 적용합니다.
-     * @param {{item:object,text:object}} button - 갱신할 버튼입니다.
-     * @param {{visible:boolean,enabled:boolean,active:boolean}} state - 표시 상태입니다.
-     * @private
-     */
-    #configureButton(button, state) {
-        if (!button) {
+        if (this.mode === MODES.MENU) {
+            if (this.#wasKeyPressed('Enter')) {
+                enqueueSimulationCommand({ type: COMMANDS.START });
+            } else if (this.#wasKeyPressed('KeyG')) {
+                enqueueSimulationCommand({ type: COMMANDS.OPEN_GALLERY });
+            }
             return;
         }
-        const colors = ColorSchemes.Tactics;
-        button.item.visible = state.visible;
-        button.item.clickAble = state.enabled;
-        button.item.idleColor = state.enabled
-            ? (state.active ? colors.UI.Accent : colors.UI.ButtonIdle)
-            : colors.UI.ButtonDisabled;
-        button.item.hoverColor = state.enabled
-            ? colors.UI.ButtonHover
-            : colors.UI.ButtonDisabled;
-    }
 
-    /**
-     * 현재 표시 중인 UI 버튼들의 상호작용 애니메이션과 클릭을 갱신합니다.
-     * @private
-     */
-    #updateButtons() {
-        for (const button of Object.values(this.buttons)) {
-            button.item.update();
+        if (this.mode === MODES.STARTER) {
+            if (this.#wasAnyKeyPressed(['ArrowLeft', 'ArrowUp', 'KeyA', 'KeyW'])) {
+                enqueueSimulationCommand({
+                    type: COMMANDS.STARTER_SHIFT,
+                    payload: { delta: -1 }
+                });
+            } else if (this.#wasAnyKeyPressed(['ArrowRight', 'ArrowDown', 'KeyD', 'KeyS'])) {
+                enqueueSimulationCommand({
+                    type: COMMANDS.STARTER_SHIFT,
+                    payload: { delta: 1 }
+                });
+            } else if (this.#wasKeyPressed('Enter')) {
+                enqueueSimulationCommand({ type: COMMANDS.CHOOSE_STARTER });
+            } else if (this.#wasKeyPressed('Escape')) {
+                enqueueSimulationCommand({ type: COMMANDS.RETURN_MENU });
+            }
+            return;
+        }
+
+        if (this.mode === MODES.GALLERY) {
+            if (this.#wasAnyKeyPressed(['ArrowLeft', 'ArrowUp', 'KeyA', 'KeyW'])) {
+                enqueueSimulationCommand({
+                    type: COMMANDS.GALLERY_SHIFT,
+                    payload: { delta: -1 }
+                });
+            } else if (this.#wasAnyKeyPressed(['ArrowRight', 'ArrowDown', 'KeyD', 'KeyS'])) {
+                enqueueSimulationCommand({
+                    type: COMMANDS.GALLERY_SHIFT,
+                    payload: { delta: 1 }
+                });
+            } else if (this.#wasKeyPressed('Enter')) {
+                enqueueSimulationCommand({ type: COMMANDS.GALLERY_PLAY });
+            } else if (this.#wasKeyPressed('Escape')) {
+                enqueueSimulationCommand({ type: COMMANDS.RETURN_MENU });
+            }
+            return;
+        }
+
+        if (this.mode === MODES.RESULT) {
+            if (this.#wasKeyPressed('KeyR')) {
+                enqueueSimulationCommand({ type: COMMANDS.RESTART });
+            } else if (this.#wasKeyPressed('Escape')) {
+                enqueueSimulationCommand({ type: COMMANDS.RETURN_MENU });
+            }
+            return;
+        }
+
+        if (this.mode !== MODES.BATTLE) {
+            return;
+        }
+        if (this.#wasKeyPressed('KeyR')) {
+            enqueueSimulationCommand({ type: COMMANDS.RESTART });
+            return;
+        }
+        if (this.#wasKeyPressed('Escape')) {
+            enqueueSimulationCommand({ type: COMMANDS.RETURN_MENU });
+            return;
+        }
+        if (!this.#canAcceptBattleInput()) {
+            return;
+        }
+
+        const direction = KEY_DIRECTIONS.find((entry) => this.#wasAnyKeyPressed(entry.codes));
+        if (direction) {
+            enqueueSimulationCommand({
+                type: COMMANDS.PLAN_STEP,
+                payload: { x: direction.x, y: direction.y }
+            });
+            return;
+        }
+        if (this.#wasKeyPressed('Tab') && this.attackSelected) {
+            enqueueSimulationCommand({
+                type: COMMANDS.PLAN_STEP,
+                payload: { x: 1, y: 0 }
+            });
+        } else if (this.#wasKeyPressed('Enter')) {
+            if (this.attackSelected) {
+                enqueueSimulationCommand({
+                    type: COMMANDS.ATTACK,
+                    payload: { targetId: this.actionTargets[this.targetIndex]?.id }
+                });
+            } else {
+                enqueueSimulationCommand({ type: COMMANDS.COMMIT_PATH });
+            }
+        } else if (this.#wasKeyPressed('Digit1')) {
+            enqueueSimulationCommand({ type: COMMANDS.SELECT_ATTACK });
+        } else if (this.#wasKeyPressed('Digit2')) {
+            enqueueSimulationCommand({ type: COMMANDS.DEFEND });
+        } else if (this.#wasKeyPressed('Digit3')) {
+            enqueueSimulationCommand({ type: COMMANDS.IDLE });
+        } else if (this.#wasKeyPressed('Space')) {
+            enqueueSimulationCommand({ type: COMMANDS.END_TURN });
+        } else if (this.#wasKeyPressed('KeyE')) {
+            enqueueSimulationCommand({ type: COMMANDS.ESCAPE });
         }
     }
 
     /**
-     * HUD 클릭에서 발생한 명령을 큐에 넣고 같은 클릭의 보드 전파를 차단합니다.
+     * 포인터가 가리키는 전술 타일을 갱신합니다.
+     * @private
+     */
+    #updatePointerState() {
+        let nextTile = null;
+        if (this.mode !== MODES.BATTLE || this.cutscenes.isOpen()) {
+            this.hoveredTile = null;
+            this.hoveredTileKey = '';
+            return;
+        }
+        if (!getMouseFocus().includes('object')) {
+            this.hoveredTile = null;
+            this.hoveredTileKey = '';
+            return;
+        }
+        const mouse = getMouseInput('pos') || {
+            x: getMouseInput('x'),
+            y: getMouseInput('y')
+        };
+        nextTile = this.#hitTestTile(mouse.x, mouse.y);
+        const nextKey = nextTile ? toTileKey(nextTile.x, nextTile.y) : '';
+        if (nextKey && nextKey !== this.hoveredTileKey) {
+            this.#startSelectionAnimation('hover');
+        }
+        if (nextTile && this.attackSelected) {
+            const hoveredTargetIndex = this.actionTargets.findIndex((target) => (
+                target.x === nextTile.x && target.y === nextTile.y
+            ));
+            if (hoveredTargetIndex >= 0 && hoveredTargetIndex !== this.targetIndex) {
+                this.targetIndex = hoveredTargetIndex;
+                this.#startSelectionAnimation('attack');
+            }
+        }
+        this.hoveredTile = nextTile;
+        this.hoveredTileKey = nextKey;
+    }
+
+    /**
+     * 보드 클릭을 이동 또는 공격 명령으로 변환합니다.
+     * @private
+     */
+    #handlePointerInput() {
+        if (this.uiActionHandled
+            || this.mode !== MODES.BATTLE
+            || this.cutscenes.isOpen()
+            || !this.hoveredTile
+            || !getMouseFocus().includes('object')) {
+            return;
+        }
+        if (!consumeMouseState('left', 'clicked')) {
+            return;
+        }
+        if (!this.#canAcceptBattleInput()) {
+            return;
+        }
+        if (this.attackSelected) {
+            const target = this.actionTargets.find((entry) => (
+                entry.x === this.hoveredTile.x && entry.y === this.hoveredTile.y
+            ));
+            if (target) {
+                enqueueSimulationCommand({
+                    type: COMMANDS.ATTACK,
+                    payload: { targetId: target.id }
+                });
+            }
+            return;
+        }
+        if (!this.model.movementUsed
+            && this.reachability.has(toTileKey(this.hoveredTile.x, this.hoveredTile.y))) {
+            enqueueSimulationCommand({
+                type: COMMANDS.MOVE_TO,
+                payload: this.hoveredTile
+            });
+        }
+    }
+
+    /**
+     * 명령 버튼 클릭을 큐에 넣고 보드 전파를 막습니다.
      * @param {string} type - 명령 타입입니다.
-     * @param {object} [payload] - 검증할 명령 데이터입니다.
+     * @param {object} [payload] - 명령 데이터입니다.
      * @private
      */
     #queueUiCommand(type, payload) {
@@ -629,150 +1873,42 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * 공격 선택 명령을 큐에 넣습니다.
-     * @param {'attack'} action - 선택할 행동입니다.
-     * @private
-     */
-    #queueActionSelection(action) {
-        this.#queueUiCommand(TUTORIAL_COMMANDS.SELECT_ACTION, { action });
-    }
-
-    /**
-     * 선택된 이동 경로를 확정하거나 현재 플레이어 턴을 종료합니다.
-     * @private
-     */
-    #queueEndTurnOrMove() {
-        if (this.model.turn !== 'player') {
-            return;
-        }
-        if (this.model.phase === 'move' && this.plannedDestinationSelected) {
-            this.#queueUiCommand(TUTORIAL_COMMANDS.MOVE, {
-                x: this.plannedPath[this.plannedPath.length - 1].x,
-                y: this.plannedPath[this.plannedPath.length - 1].y,
-                path: this.plannedPath.map((point) => ({ ...point }))
-            });
-            return;
-        }
-        if (this.model.phase === 'move' || this.model.phase === 'action') {
-            this.#queueUiCommand(TUTORIAL_COMMANDS.END_TURN);
-        }
-    }
-
-    /**
-     * 키보드 단발 입력을 전술 커서와 행동 명령으로 변환합니다.
-     * @private
-     */
-    #handleKeyboardInput() {
-        if (this.sceneSystem.systemHandler.overlayManager?.hasAnyOverlay?.()) {
-            return;
-        }
-        if (this.#isKeyPressed('KeyR')) {
-            enqueueSimulationCommand({ type: TUTORIAL_COMMANDS.RESTART });
-            return;
-        }
-        if (this.#isResultPhase() || this.#isPresentationLocked()) {
-            return;
-        }
-
-        if (this.#isDialoguePhase()) {
-            const choiceIndex = ['Digit1', 'Digit2', 'Digit3', 'Digit4']
-                .findIndex((code) => this.#isKeyPressed(code));
-            if (choiceIndex >= 0) {
-                enqueueSimulationCommand({
-                    type: TUTORIAL_COMMANDS.DIALOGUE,
-                    payload: { choice: DIALOGUE_CHOICES[choiceIndex].id }
-                });
-            }
-            return;
-        }
-
-        const direction = KEY_DIRECTIONS.find((candidate) => (
-            candidate.codes.some((code) => this.#isKeyPressed(code))
-        ));
-        if (direction && this.model.turn === 'player') {
-            if (this.model.phase === 'move') {
-                this.#extendPlannedPath(direction);
-            } else {
-                const nextX = this.cursorTile.x + direction.x;
-                const nextY = this.cursorTile.y + direction.y;
-                if (this.model.isInside(nextX, nextY)) {
-                    this.cursorTile = { x: nextX, y: nextY };
-                    this.facing = direction.facing;
-                }
-            }
-        }
-
-        if (this.model.turn !== 'player') {
-            return;
-        }
-        if (this.model.phase === 'move') {
-            if (this.#isKeyPressed('KeyZ') || this.#isKeyPressed('Escape')) {
-                this.#removePlannedPathStep();
-            } else if (this.#isKeyPressed('Enter') && this.plannedDestinationSelected) {
-                enqueueSimulationCommand({
-                    type: TUTORIAL_COMMANDS.MOVE,
-                    payload: {
-                        x: this.plannedPath[this.plannedPath.length - 1].x,
-                        y: this.plannedPath[this.plannedPath.length - 1].y,
-                        path: this.plannedPath.map((point) => ({ ...point }))
-                    }
-                });
-            } else if (this.#isKeyPressed('Space')) {
-                enqueueSimulationCommand({ type: TUTORIAL_COMMANDS.END_TURN });
-            } else if (this.#isKeyPressed('KeyE') && this.#canEscape()) {
-                enqueueSimulationCommand({ type: TUTORIAL_COMMANDS.ESCAPE });
-            } else if (this.#isKeyPressed('Digit1') && !this.plannedDestinationSelected) {
-                enqueueSimulationCommand({
-                    type: TUTORIAL_COMMANDS.SELECT_ACTION,
-                    payload: { action: ACTION_ATTACK }
-                });
-            } else if (this.#isKeyPressed('Digit2') && !this.plannedDestinationSelected) {
-                enqueueSimulationCommand({ type: TUTORIAL_COMMANDS.DEFEND });
-            }
-            return;
-        }
-
-        if (this.model.phase !== 'action') {
-            return;
-        }
-        if (this.#isKeyPressed('Digit1')) {
-            enqueueSimulationCommand({
-                type: TUTORIAL_COMMANDS.SELECT_ACTION,
-                payload: { action: ACTION_ATTACK }
-            });
-        } else if (this.#isKeyPressed('Digit2')) {
-            enqueueSimulationCommand({ type: TUTORIAL_COMMANDS.DEFEND });
-        } else if (this.#isKeyPressed('Digit3') || this.#isKeyPressed('Space')) {
-            enqueueSimulationCommand({ type: TUTORIAL_COMMANDS.END_TURN });
-        } else if (this.#isKeyPressed('KeyE') && this.#canEscape()) {
-            enqueueSimulationCommand({ type: TUTORIAL_COMMANDS.ESCAPE });
-        } else if (this.#isKeyPressed('KeyZ') || this.#isKeyPressed('Escape')) {
-            enqueueSimulationCommand({ type: TUTORIAL_COMMANDS.UNDO });
-        } else if (this.#isKeyPressed('Enter')) {
-            const target = this.actionTargets.find((candidate) => (
-                candidate.x === this.cursorTile.x && candidate.y === this.cursorTile.y
-            ));
-            if (target) {
-                enqueueSimulationCommand({
-                    type: TUTORIAL_COMMANDS.INTERACT,
-                    payload: { targetId: target.id }
-                });
-            }
-        }
-    }
-
-    /**
-     * 지정한 키가 이번 프레임에 새로 눌렸는지 확인합니다.
+     * 키 하나가 이번 프레임에 눌렸는지 확인합니다.
      * @param {string} code - KeyboardEvent.code 값입니다.
-     * @returns {boolean} 상승 에지 입력이면 true입니다.
+     * @returns {boolean} 눌림 여부입니다.
      * @private
      */
-    #isKeyPressed(code) {
+    #wasKeyPressed(code) {
         return this.frameKeyEdges.has(code);
     }
 
     /**
-     * 현재 눌림 상승 에지와 프레임 사이에 끝난 빠른 탭 이벤트를 하나의 키 집합으로 합칩니다.
+     * 후보 키 중 하나가 이번 프레임에 눌렸는지 확인합니다.
+     * @param {readonly string[]} codes - 키 후보입니다.
+     * @returns {boolean} 눌림 여부입니다.
+     * @private
+     */
+    #wasAnyKeyPressed(codes) {
+        return codes.some((code) => this.#wasKeyPressed(code));
+    }
+
+    /**
+     * Ctrl+Z 상승 에지를 좌우 Control 키 상태와 함께 확인합니다.
+     * @returns {boolean} Undo 단축키 입력 여부입니다.
+     * @private
+     */
+    #isUndoShortcutPressed() {
+        if (!this.#wasKeyPressed('KeyZ')) {
+            return false;
+        }
+        return getKeyboardCodeInput('ControlLeft') === true
+            || getKeyboardCodeInput('ControlRight') === true
+            || this.keyboardLatch.get('ControlLeft') === true
+            || this.keyboardLatch.get('ControlRight') === true;
+    }
+
+    /**
+     * 현재 눌림과 빠른 탭을 상승 에지 집합으로 합칩니다.
      * @private
      */
     #prepareKeyboardEdges() {
@@ -793,7 +1929,6 @@ export class TutorialScene extends BaseScene {
             || !WATCHED_KEY_CODES.includes(code)) {
             return;
         }
-
         this.lastKeyboardEventTimestamp = eventTimestamp;
         if (lastEvent.pressed === true) {
             if (this.keyboardLatch.get(code) !== true
@@ -803,7 +1938,6 @@ export class TutorialScene extends BaseScene {
             this.keyboardPressObserved.set(code, true);
             return;
         }
-
         if (this.keyboardPressObserved.get(code) !== true) {
             this.frameKeyEdges.add(code);
         }
@@ -811,7 +1945,7 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * 다음 프레임의 상승 에지 판정을 위해 현재 키 상태를 저장합니다.
+     * 다음 프레임을 위해 현재 키 상태를 저장합니다.
      * @private
      */
     #captureKeyboardLatch() {
@@ -821,1253 +1955,1855 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * 방향키 한 번을 실제 이동 경로 한 칸으로 추가합니다.
-     * 점유, 누적 이동력과 같은 턴 내 타일 재방문 금지를 즉시 검증합니다.
-     * @param {{x:number,y:number,facing:number}} direction - 추가할 방향입니다.
+     * 현재 모드와 전투 상태가 달라졌을 때 버튼을 다시 만듭니다.
      * @private
      */
-    #extendPlannedPath(direction) {
-        const previous = this.plannedPath[this.plannedPath.length - 1];
-        const next = {
-            x: previous.x + direction.x,
-            y: previous.y + direction.y
-        };
-        if (!this.model.isInside(next.x, next.y)) {
+    #ensureButtons() {
+        const signature = this.#getButtonSignature();
+        if (signature === this.buttonSignature) {
             return;
         }
-
-        const occupant = this.model.getOccupantAt(next.x, next.y);
-        if (occupant && occupant.type !== 'player' && occupant.type !== 'door') {
-            return;
-        }
-        if (this.plannedPath.some((point) => point.x === next.x && point.y === next.y)) {
-            return;
-        }
-
-        const stepCost = 1;
-        if (this.plannedPathCost + stepCost > this.data.MAP.MOVE_RANGE) {
-            return;
-        }
-        this.plannedPath.push(next);
-        this.plannedPathCost += stepCost;
-        this.plannedDestinationSelected = true;
-        this.cursorTile = { ...next };
-        this.facing = direction.facing;
+        this.buttonSignature = signature;
+        this.#buildButtons();
     }
 
     /**
-     * 키보드로 계획한 마지막 이동 한 칸을 취소합니다.
+     * 버튼 구성에 영향을 주는 상태를 문자열로 직렬화합니다.
+     * @returns {string} 구성 서명입니다.
      * @private
      */
-    #removePlannedPathStep() {
-        if (this.plannedPath.length <= 1) {
-            this.plannedDestinationSelected = false;
-            return;
-        }
-        this.plannedPath.pop();
-        const current = this.plannedPath[this.plannedPath.length - 1];
-        this.plannedPathCost = Math.max(0, this.plannedPathCost - 1);
-        this.plannedDestinationSelected = this.plannedPath.length > 1;
-        this.cursorTile = { ...current };
+    #getButtonSignature() {
+        const cutsceneState = this.cutscenes.getState();
+        const inventory = this.#getInventoryEntries()
+            .map((entry) => entry.itemId + ':' + String(entry.count))
+            .join('|');
+        return [
+            this.mode,
+            cutsceneState.open ? cutsceneState.cutsceneId : '-',
+            String(cutsceneState.cardIndex),
+            String(this.starterIndex),
+            String(this.galleryIndex),
+            String(this.model?.turn),
+            String(this.model?.movementUsed),
+            String(this.model?.actionUsed),
+            String(this.attackSelected),
+            String(this.inventoryPage),
+            String(this.#canEscape()),
+            String(this.#canUndo()),
+            String(this.presentationLocked),
+            inventory
+        ].join('/');
     }
 
     /**
-     * 선택 중인 이동 경로를 현재 플레이어 위치로 초기화합니다.
+     * 현재 화면에 필요한 풀 기반 버튼을 구성합니다.
      * @private
      */
-    #clearPlannedPath() {
-        this.cursorTile = { x: this.model.player.x, y: this.model.player.y };
-        this.plannedPath = [{ ...this.cursorTile }];
-        this.plannedPathCost = 0;
-        this.plannedDestinationSelected = false;
-    }
-
-    /**
-     * 자동 경로가 인접 좌표로 이어지고 같은 타일을 두 번 방문하지 않는지 확인합니다.
-     * @param {Array<{x:number,y:number}>} path - 모델이 제안한 경로입니다.
-     * @returns {Array<{x:number,y:number}>|null} 표시 가능한 복제 경로입니다.
-     * @private
-     */
-    #normalizePreviewPath(path) {
-        if (!Array.isArray(path) || path.length === 0) {
-            return null;
-        }
-        const normalized = [];
-        const visited = new Set();
-        for (let index = 0; index < path.length; index++) {
-            const point = path[index];
-            if (!point || !this.model.isInside(point.x, point.y)) {
-                return null;
-            }
-            const key = toTileKey(point.x, point.y);
-            if (visited.has(key)) {
-                return null;
-            }
-            if (index > 0) {
-                const previous = normalized[index - 1];
-                if (Math.abs(previous.x - point.x) + Math.abs(previous.y - point.y) !== 1) {
-                    return null;
-                }
-            }
-            visited.add(key);
-            normalized.push({ x: point.x, y: point.y });
-        }
-        return normalized;
-    }
-
-    /**
-     * 보드 포커스와 현재 마우스 좌표로 호버 타일을 갱신합니다.
-     * @private
-     */
-    #updatePointerState() {
-        if (!getMouseFocus().includes('object')) {
-            this.hoveredTile = null;
+    #buildButtons() {
+        this.#releaseButtons();
+        if (this.mode === MODES.LOADING) {
             return;
         }
-
-        const mouse = getMouseInput('pos') || { x: 0, y: 0 };
-        this.hoveredTile = this.#getTileAtPoint(mouse.x, mouse.y);
-    }
-
-    /**
-     * 소비되지 않은 마우스 클릭을 이동 또는 상호작용 의도로 변환합니다.
-     * @private
-     */
-    #handlePointerInput() {
-        if (this.uiActionHandled
-            || this.#isResultPhase()
-            || this.#isDialoguePhase()
-            || this.#isPresentationLocked()) {
+        if (this.cutscenes.isOpen()) {
+            this.#buildCutsceneButtons();
             return;
         }
-        if (!getMouseFocus().includes('object')) {
-            return;
-        }
-
-        if (consumeMouseState('right', 'clicked')) {
-            if (this.model.turn === 'player') {
-                if (this.model.phase === 'action') {
-                    enqueueSimulationCommand({ type: TUTORIAL_COMMANDS.UNDO });
-                } else if (this.model.phase === 'move') {
-                    this.#clearPlannedPath();
-                }
-            }
-            return;
-        }
-        if (!consumeMouseState('left', 'clicked') || !this.hoveredTile) {
-            return;
-        }
-        if (this.model.turn !== 'player') {
-            return;
-        }
-
-        if (this.model.phase === 'move') {
-            const key = toTileKey(this.hoveredTile.x, this.hoveredTile.y);
-            const reachable = this.reachability.get(key);
-            if (reachable) {
-                const destination = this.plannedPath[this.plannedPath.length - 1];
-                if (this.plannedDestinationSelected
-                    && destination.x === this.hoveredTile.x
-                    && destination.y === this.hoveredTile.y) {
-                    enqueueSimulationCommand({
-                        type: TUTORIAL_COMMANDS.MOVE,
-                        payload: {
-                            x: destination.x,
-                            y: destination.y,
-                            path: this.plannedPath.map((point) => ({ ...point }))
-                        }
-                    });
-                    return;
-                }
-
-                const path = this.#normalizePreviewPath(reachable.path);
-                if (!path) {
-                    return;
-                }
-                this.plannedPath = path;
-                this.plannedPathCost = path.length - 1;
-                this.plannedDestinationSelected = true;
-                this.cursorTile = { ...this.hoveredTile };
-                this.#syncFacingFromPath(path);
-                this.#appendEvent('이동 경로 선택 · 같은 타일을 다시 누르면 확정됩니다.');
-            }
-            return;
-        }
-
-        if (this.model.phase === 'action') {
-            const target = this.actionTargets.find((candidate) => (
-                candidate.x === this.hoveredTile.x && candidate.y === this.hoveredTile.y
-            ));
-            if (target) {
-                enqueueSimulationCommand({
-                    type: TUTORIAL_COMMANDS.INTERACT,
-                    payload: { targetId: target.id }
-                });
-            }
+        if (this.mode === MODES.MENU) {
+            this.#buildMenuButtons();
+        } else if (this.mode === MODES.STARTER) {
+            this.#buildStarterButtons();
+        } else if (this.mode === MODES.GALLERY) {
+            this.#buildGalleryButtons();
+        } else if (this.mode === MODES.BATTLE) {
+            this.#buildBattleButtons();
+        } else if (this.mode === MODES.RESULT) {
+            this.#buildResultButtons();
         }
     }
 
     /**
-     * 화면 좌표가 포함된 가장 앞쪽 타일을 반환합니다.
-     * @param {number} pointX - 화면 X 좌표입니다.
-     * @param {number} pointY - 화면 Y 좌표입니다.
-     * @returns {{x:number,y:number}|null} 호버 타일입니다.
+     * 메뉴 버튼을 구성합니다.
      * @private
      */
-    #getTileAtPoint(pointX, pointY) {
-        for (let y = this.data.MAP.HEIGHT - 1; y >= 0; y--) {
-            for (let x = this.data.MAP.WIDTH - 1; x >= 0; x--) {
-                const tile = this.#getTileVisual(x, y, false);
-                if (pointX >= tile.left
-                    && pointX <= tile.left + this.tileSize
-                    && pointY >= tile.top
-                    && pointY <= tile.top + this.tileSize) {
-                    return { x, y };
-                }
-            }
-        }
-        return null;
+    #buildMenuButtons() {
+        const w = this.#uww(24);
+        const h = this.#uwh(6);
+        const x = this.UIOffsetX + ((this.UIWW - w) * 0.5);
+        this.#createButton('menu-start', {
+            x,
+            y: this.#uwh(58),
+            w,
+            h,
+            label: '게임 시작  [Enter]',
+            onClick: () => this.#queueUiCommand(COMMANDS.START)
+        });
+        this.#createButton('menu-gallery', {
+            x,
+            y: this.#uwh(66),
+            w,
+            h,
+            label: '컷씬 갤러리  [G]',
+            onClick: () => this.#queueUiCommand(COMMANDS.OPEN_GALLERY)
+        });
     }
 
     /**
-     * 이동 명령의 좌표를 검증해 모델에 적용하고 경로 연출을 시작합니다.
-     * @param {object} payload - 목적지 좌표입니다.
+     * 스타터 선택 버튼을 구성합니다.
      * @private
      */
-    #applyMoveCommand(payload) {
-        const x = Number(payload?.x);
-        const y = Number(payload?.y);
-        if (!Number.isInteger(x) || !Number.isInteger(y) || this.#isPresentationLocked()) {
-            return;
-        }
-
-        const result = Array.isArray(payload?.path)
-            ? this.model.commitPath(payload.path)
-            : this.model.commitMove(x, y);
-        if (!result.ok) {
-            return;
-        }
-
-        const destination = result.path[result.path.length - 1];
-        this.lastMoveCost = result.cost;
-        this.cursorTile = { ...destination };
-        this.plannedPath = [{ ...destination }];
-        this.plannedPathCost = 0;
-        this.plannedDestinationSelected = false;
-        this.#syncFacingFromPath(result.path);
-        if (result.path.length > 1) {
-            this.movementAnimation = {
-                path: result.path.map((point) => ({ ...point })),
-                elapsed: 0,
-                duration: (result.path.length - 1) * this.data.ANIMATION.MOVE_SECONDS_PER_TILE
-            };
-        }
-        this.#appendEvent(`이동 확정 · 이동력 ${result.cost}/${this.data.MAP.MOVE_RANGE}`);
-        this.#refreshTacticalCache();
+    #buildStarterButtons() {
+        const w = this.#uww(27);
+        const h = this.#uwh(11);
+        const gap = this.#uww(3);
+        const startX = this.UIOffsetX + ((this.UIWW - ((w * 2) + gap)) * 0.5);
+        this.data.STARTER_CHOICES.forEach((choice, index) => {
+            this.#createButton('starter-' + choice.id, {
+                x: startX + (index * (w + gap)),
+                y: this.#uwh(55),
+                w,
+                h,
+                label: (index === this.starterIndex ? '◆ ' : '') + choice.label,
+                active: index === this.starterIndex,
+                onClick: () => this.#queueUiCommand(COMMANDS.CHOOSE_STARTER, {
+                    itemId: choice.id
+                })
+            });
+        });
+        this.#createButton('starter-back', {
+            x: this.UIOffsetX + this.#uww(4),
+            y: this.#uwh(88),
+            w: this.#uww(14),
+            h: this.#uwh(5),
+            label: '메뉴  [Esc]',
+            onClick: () => this.#queueUiCommand(COMMANDS.RETURN_MENU)
+        });
     }
 
     /**
-     * 선택된 경로의 마지막 방향을 플레이어 표시 방향으로 반영합니다.
-     * @param {Array<{x:number,y:number}>} path - 이동 경로입니다.
+     * 갤러리 조작 버튼을 구성합니다.
      * @private
      */
-    #syncFacingFromPath(path) {
-        if (!Array.isArray(path) || path.length < 2) {
-            return;
-        }
-        const previous = path[path.length - 2];
-        const current = path[path.length - 1];
-        const dx = current.x - previous.x;
-        const dy = current.y - previous.y;
-        if (dx > 0) this.facing = 90;
-        else if (dx < 0) this.facing = 270;
-        else if (dy > 0) this.facing = 180;
-        else if (dy < 0) this.facing = 0;
+    #buildGalleryButtons() {
+        const centerX = this.UIOffsetX + (this.UIWW * 0.5);
+        const entry = this.galleryEntries[this.galleryIndex];
+        const unlocked = entry && this.#isCutsceneUnlocked(entry.id);
+        this.#createButton('gallery-prev', {
+            x: centerX - this.#uww(31),
+            y: this.#uwh(78),
+            w: this.#uww(14),
+            h: this.#uwh(5),
+            label: '◀ 이전',
+            onClick: () => this.#queueUiCommand(COMMANDS.GALLERY_SHIFT, { delta: -1 })
+        });
+        this.#createButton('gallery-play', {
+            x: centerX - this.#uww(8),
+            y: this.#uwh(78),
+            w: this.#uww(16),
+            h: this.#uwh(5),
+            label: unlocked ? '재생  [Enter]' : '잠김',
+            enabled: Boolean(unlocked),
+            onClick: () => this.#queueUiCommand(COMMANDS.GALLERY_PLAY)
+        });
+        this.#createButton('gallery-next', {
+            x: centerX + this.#uww(17),
+            y: this.#uwh(78),
+            w: this.#uww(14),
+            h: this.#uwh(5),
+            label: '다음 ▶',
+            onClick: () => this.#queueUiCommand(COMMANDS.GALLERY_SHIFT, { delta: 1 })
+        });
+        this.#createButton('gallery-back', {
+            x: this.UIOffsetX + this.#uww(4),
+            y: this.#uwh(88),
+            w: this.#uww(14),
+            h: this.#uwh(5),
+            label: '메뉴  [Esc]',
+            onClick: () => this.#queueUiCommand(COMMANDS.RETURN_MENU)
+        });
     }
 
     /**
-     * 공격 모드를 모델에 적용하고 대상 캐시를 갱신합니다.
-     * @param {object} payload - 행동 종류입니다.
+     * 전투 행동과 인벤토리 버튼을 구성합니다.
      * @private
      */
-    #applyActionSelectionCommand(payload) {
-        const action = payload?.action;
-        if (this.#isPresentationLocked() || !this.model.selectAction(action)) {
+    #buildBattleButtons() {
+        if (!this.model) {
             return;
         }
-        this.#appendEvent('공격 대상을 선택하세요.');
-        this.#refreshTacticalCache();
-    }
-
-    /**
-     * 상호작용 대상 ID를 재검증하고 공격 결과 연출을 구성합니다.
-     * @param {object} payload - 대상 ID입니다.
-     * @private
-     */
-    #applyInteractionCommand(payload) {
-        if (this.#isPresentationLocked() || typeof payload?.targetId !== 'string') {
-            return;
-        }
-        const target = this.model.getValidTargets().find((candidate) => candidate.id === payload.targetId);
-        if (!target) {
-            return;
-        }
-
-        const targetPosition = { x: target.x, y: target.y };
-        const result = this.model.performInteraction(payload.targetId);
-        if (!result.ok) {
-            return;
-        }
-        this.#faceTarget(targetPosition);
-
-        this.actionAnimation = {
-            type: ACTION_ATTACK,
-            targetId: result.targetId,
-            targetType: result.targetType,
-            targetPosition,
-            elapsed: 0,
-            duration: this.data.ANIMATION.ATTACK_SECONDS,
-            ghostBox: result.destroyed === true
-        };
-        this.turnGateSeconds = this.data.ANIMATION.ATTACK_SECONDS
-            + this.data.ANIMATION.TURN_GATE_SECONDS;
-        this.screenShakeSeconds = this.data.ANIMATION.SHAKE_SECONDS;
-        this.#spawnImpact(targetPosition, result.targetType === 'box');
-
-        if (result.targetType === 'box') {
-            this.#appendEvent('상자 파괴 · 길이 열렸습니다.');
-            this.#spawnFloatingText(targetPosition, '파괴!', ColorSchemes.Tactics.UI.Warning);
-        } else {
-            this.#appendEvent(`로라에게 ${result.damage} 피해 · HP ${this.model.lora.hp}/${this.model.lora.maxHp}`);
-            this.#spawnFloatingText(targetPosition, `-${result.damage}`, ColorSchemes.Tactics.UI.Danger);
-            if (Number.isFinite(result.instabilityChange) && result.instabilityChange !== 0) {
-                const sign = result.instabilityChange > 0 ? '+' : '';
-                this.#appendEvent(`불안정도 ${sign}${result.instabilityChange} · 현재 ${this.model.lora.instability}`);
-            }
-        }
-
-        if (result.gateOpened || result.defeated || this.model.lora.alive === false) {
-            this.#appendEvent('로라 무력화 · 게이트가 열렸습니다. 이제 탈출하세요.');
-            this.turnGateSeconds = this.data.ANIMATION.ATTACK_SECONDS;
-        }
-        this.#refreshTacticalCache();
-    }
-
-    /**
-     * 플레이어가 바라보는 방향을 대상 타일 쪽으로 맞춥니다.
-     * @param {{x:number,y:number}} target - 대상 타일입니다.
-     * @private
-     */
-    #faceTarget(target) {
-        const dx = target.x - this.model.player.x;
-        const dy = target.y - this.model.player.y;
-        if (dx > 0) this.facing = 90;
-        else if (dx < 0) this.facing = 270;
-        else if (dy > 0) this.facing = 180;
-        else if (dy < 0) this.facing = 0;
-    }
-
-    /**
-     * 현재 행동을 포기하고 로라 턴으로 전환합니다.
-     * @private
-     */
-    #applyEndTurnCommand() {
-        if (this.#isPresentationLocked()) {
-            return;
-        }
-        const completed = typeof this.model.endTurn === 'function'
-            ? this.model.endTurn()
-            : this.model.wait?.();
-        if (!completed) {
-            return;
-        }
-        this.#appendEvent('턴 종료 · 로라에게 차례를 넘겼습니다.');
-        this.turnGateSeconds = this.data.ANIMATION.TURN_GATE_SECONDS;
-        this.#refreshTacticalCache();
-    }
-
-    /**
-     * 방어 행동을 적용하고 다음 로라 공격의 피해 감소 상태를 표시합니다.
-     * @private
-     */
-    #applyDefendCommand() {
-        if (this.#isPresentationLocked() || typeof this.model.defend !== 'function') {
-            return;
-        }
-        const result = this.model.defend();
-        if (!result || result.ok === false) {
-            return;
-        }
-        this.#appendEvent('방어 · 이번 로라 턴에 받는 피해가 30% 감소합니다.');
-        this.#spawnFloatingText(this.model.player, 'DEFEND', ColorSchemes.Tactics.UI.Accent);
-        this.turnGateSeconds = this.data.ANIMATION.TURN_GATE_SECONDS;
-        this.#refreshTacticalCache();
-    }
-
-    /**
-     * 열린 게이트 타일에서 탈출을 시도합니다.
-     * @private
-     */
-    #applyEscapeCommand() {
-        if (this.#isPresentationLocked()
-            || typeof this.model.escape !== 'function'
-            || !this.#canEscape()) {
-            return;
-        }
-        const result = this.model.escape();
-        if (!result || result.ok === false) {
-            return;
-        }
-        this.#appendEvent('탈출 성공 · 게이트를 통과했습니다.');
-        this.#refreshTacticalCache();
-    }
-
-    /**
-     * 강제 대화 선택지를 적용하고 다음 전투 단계의 캐시를 준비합니다.
-     * @param {{choice:string}} payload - 선택한 대화 유형입니다.
-     * @private
-     */
-    #applyDialogueCommand(payload) {
-        const choice = DIALOGUE_CHOICES.find((candidate) => candidate.id === payload?.choice);
-        if (!choice
-            || !this.#isDialoguePhase()
-            || typeof this.model.chooseDialogue !== 'function') {
-            return;
-        }
-        const result = this.model.chooseDialogue(choice.id);
-        if (!result || result.ok === false) {
-            return;
-        }
-        this.#appendEvent(`대화 · ${choice.label} 선택`);
-        this.turnGateSeconds = this.data.ANIMATION.TURN_GATE_SECONDS;
-        this.#clearPlannedPath();
-        this.#refreshTacticalCache();
-    }
-
-    /**
-     * 확정한 이동을 이번 턴 시작 위치로 되돌립니다.
-     * @private
-     */
-    #applyUndoCommand() {
-        if (this.#isPresentationLocked() || this.model.turn !== 'player') {
-            return;
-        }
-        if (this.model.phase === 'move') {
-            if (!this.plannedDestinationSelected) {
-                return;
-            }
-            this.#clearPlannedPath();
-            this.#appendEvent('선택 경로를 취소했습니다.');
-            return;
-        }
-        if (!this.model.undoMove()) {
-            return;
-        }
-        this.cursorTile = { ...this.model.player };
-        this.plannedPath = [{ ...this.model.player }];
-        this.plannedPathCost = 0;
-        this.plannedDestinationSelected = false;
-        this.lastMoveCost = 0;
-        this.#appendEvent('이동 취소 · 목적지를 다시 선택하세요.');
-        this.#refreshTacticalCache();
-    }
-
-    /**
-     * 로라의 자동 행동을 종료하고 다음 플레이어 또는 강제 대화 단계를 시작합니다.
-     * @private
-     */
-    #applyLoraTurnCompletion() {
-        if (!this.model.completeLoraTurn()) {
-            return;
-        }
-        this.loraTurnState = null;
-        this.loraMovementAnimation = null;
-        this.#clearPlannedPath();
-        this.lastMoveCost = 0;
-        if (this.#isDialoguePhase()) {
-            this.#appendEvent(`라운드 ${this.model.round} · 강제 대화`);
-        } else if (this.#isResultPhase()) {
-            this.#appendEvent('전투 종료 · 결과를 확인하세요.');
-        } else {
-            this.#appendEvent(`라운드 ${this.model.round}/${this.model.maxRounds ?? 8} · 플레이어 턴`);
-        }
-        this.#refreshTacticalCache();
-    }
-
-    /**
-     * 현재 단계에서 필요한 이동 범위와 상호작용 대상 목록을 다시 계산합니다.
-     * @private
-     */
-    #refreshTacticalCache() {
-        this.reachability = this.model.turn === 'player' && this.model.phase === 'move'
-            ? this.model.getReachability()
-            : new Map();
-        this.actionTargets = this.model.turn === 'player' && this.model.phase === 'action'
-            ? this.model.getValidTargets()
-            : [];
-    }
-
-    /**
-     * 로라 턴 진입 시 모델의 이동·행동을 한 번 실행하고 연출 후 완료 명령을 보냅니다.
-     * @param {number} deltaSeconds - 가변 프레임 델타입니다.
-     * @private
-     */
-    #updateLoraTurn(deltaSeconds) {
-        if (this.model.turn !== 'lora' || this.model.phase !== 'lora') {
-            this.loraTurnState = null;
-            return;
-        }
-        if (this.turnGateSeconds > 0 || this.#isPresentationLocked()) {
-            return;
-        }
-
-        if (!this.loraTurnState) {
-            const before = { x: this.model.lora.x, y: this.model.lora.y };
-            const result = typeof this.model.performLoraTurn === 'function'
-                ? (this.model.performLoraTurn() || {})
-                : {};
-            this.loraTurnState = {
-                elapsed: 0,
-                completionQueued: false,
-                result
-            };
-            this.#presentLoraTurnResult(result, before);
-            this.#refreshTacticalCache();
-        }
-
-        this.loraTurnState.elapsed += deltaSeconds;
-        if (this.#isResultPhase()) {
-            return;
-        }
-        const minimumSeconds = Math.max(
-            this.data.ANIMATION.LORA_TURN_SECONDS,
-            this.loraMovementAnimation?.duration ?? 0,
-            this.data.ANIMATION.ATTACK_SECONDS + this.data.ANIMATION.TURN_GATE_SECONDS
-        );
-        if (this.loraTurnState.elapsed >= minimumSeconds
-            && !this.loraTurnState.completionQueued) {
-            this.loraTurnState.completionQueued = true;
-            enqueueSimulationCommand({ type: TUTORIAL_COMMANDS.COMPLETE_LORA_TURN });
-        }
-    }
-
-    /**
-     * 로라 AI 결과를 이동 애니메이션, 피해 텍스트와 전술 로그로 변환합니다.
-     * @param {object} result - 모델의 로라 턴 결과입니다.
-     * @param {{x:number,y:number}} before - 행동 전 로라 좌표입니다.
-     * @private
-     */
-    #presentLoraTurnResult(result, before) {
-        const movement = result?.movement;
-        const rawPath = Array.isArray(movement?.path)
-            ? movement.path
-            : (movement?.to
-                ? [movement.from || before, movement.to]
-                : (result?.to
-                    ? [result.from || before, result.to]
-                    : (before.x !== this.model.lora.x || before.y !== this.model.lora.y
-                        ? [before, { x: this.model.lora.x, y: this.model.lora.y }]
-                        : [])));
-        const path = rawPath
-            .filter((point) => point && Number.isInteger(point.x) && Number.isInteger(point.y))
-            .map((point) => ({ x: point.x, y: point.y }));
-        if (path.length > 1) {
-            this.loraMovementAnimation = {
-                path,
-                elapsed: 0,
-                duration: (path.length - 1) * this.data.ANIMATION.MOVE_SECONDS_PER_TILE
-            };
-            this.#appendEvent(`로라 이동 · (${path[path.length - 1].x}, ${path[path.length - 1].y})`);
-        }
-
-        const action = typeof result?.action === 'string'
-            ? result.action
-            : result?.action?.type;
-        const damage = Math.max(0, Number(result?.damage ?? result?.action?.damage) || 0);
-        let line = typeof result?.line === 'string'
-            ? result.line
-            : (typeof result?.action?.line === 'string' ? result.action.line : '');
-        if (!line && this.model.lora.alive === true) {
-            line = pickDifferentLine(this.data.TEXT.LORA_LINES || [], this.lastLoraLine);
-        }
-        if (line) {
-            this.lastLoraLine = line;
-            this.#setSpeech(LORA_ID, line);
-        }
-
-        if (damage > 0 || action === 'melee' || action === 'ranged') {
-            const playerPosition = { x: this.model.player.x, y: this.model.player.y };
-            this.actionAnimation = {
-                type: 'lora-attack',
-                targetId: PLAYER_ID,
-                targetPosition: playerPosition,
-                elapsed: 0,
-                duration: this.data.ANIMATION.ATTACK_SECONDS
-            };
-            this.#spawnImpact(playerPosition, false);
-            this.#spawnFloatingText(playerPosition, `-${damage}`, ColorSchemes.Tactics.UI.Danger);
-            this.screenShakeSeconds = this.data.ANIMATION.SHAKE_SECONDS;
-            const attackLabel = action === 'ranged' ? '원거리 공격' : '근접 공격';
-            this.#appendEvent(`로라 ${attackLabel} · ${damage} 피해 · HP ${this.model.player.hp}/${this.model.player.maxHp}`);
-        } else if (action === 'defend') {
-            this.#spawnFloatingText(this.model.lora, 'DEFEND', ColorSchemes.Tactics.UI.Accent);
-            this.#appendEvent('로라 방어 · 다음 피해를 50% 줄입니다.');
-        } else if (action === 'talk') {
-            this.#appendEvent(`로라 · ${line || '말없이 플레이어를 바라봅니다.'}`);
-        } else if (action === 'skip' && this.model.lora.alive === false) {
-            this.#appendEvent('로라는 무력화되어 행동할 수 없습니다.');
-        } else {
-            this.#appendEvent(line ? `로라 · ${line}` : '로라가 행동하지 않았습니다.');
-        }
-    }
-
-    /**
-     * 이동, 공격, 파티클, 말풍선과 화면 흔들림 표시 상태를 갱신합니다.
-     * @param {number} deltaSeconds - 가변 프레임 델타입니다.
-     * @private
-     */
-    #updatePresentation(deltaSeconds) {
-        if (this.movementAnimation) {
-            this.movementAnimation.elapsed += deltaSeconds;
-            if (this.movementAnimation.elapsed >= this.movementAnimation.duration) {
-                this.movementAnimation = null;
-            }
-        }
-        if (this.loraMovementAnimation) {
-            this.loraMovementAnimation.elapsed += deltaSeconds;
-            if (this.loraMovementAnimation.elapsed >= this.loraMovementAnimation.duration) {
-                this.loraMovementAnimation = null;
-            }
-        }
-        if (this.actionAnimation) {
-            this.actionAnimation.elapsed += deltaSeconds;
-            if (this.actionAnimation.elapsed >= this.actionAnimation.duration) {
-                this.actionAnimation = null;
-            }
-        }
-        if (this.speechBubble) {
-            this.speechBubble.elapsed += deltaSeconds;
-            if (this.speechBubble.elapsed >= this.speechBubble.duration) {
-                this.speechBubble = null;
-            }
-        }
-
-        this.turnGateSeconds = Math.max(0, this.turnGateSeconds - deltaSeconds);
-        this.#updateParticles(deltaSeconds);
-        this.#updateFloatingTexts(deltaSeconds);
-        this.#updateScreenShake(deltaSeconds);
-    }
-
-    /**
-     * 활성 파티클의 위치와 남은 수명을 갱신합니다.
-     * @param {number} deltaSeconds - 가변 프레임 델타입니다.
-     * @private
-     */
-    #updateParticles(deltaSeconds) {
-        for (const particle of this.particles) {
-            particle.elapsed += deltaSeconds;
-            particle.x += particle.vx * deltaSeconds;
-            particle.y += particle.vy * deltaSeconds;
-            particle.vy += this.tileSize * deltaSeconds;
-        }
-        this.particles = this.particles.filter((particle) => particle.elapsed < particle.duration);
-    }
-
-    /**
-     * 피해 및 파괴 텍스트의 상승 위치와 수명을 갱신합니다.
-     * @param {number} deltaSeconds - 가변 프레임 델타입니다.
-     * @private
-     */
-    #updateFloatingTexts(deltaSeconds) {
-        for (const floatingText of this.floatingTexts) {
-            floatingText.elapsed += deltaSeconds;
-            floatingText.y -= this.tileSize * 0.35 * deltaSeconds;
-        }
-        this.floatingTexts = this.floatingTexts.filter((item) => item.elapsed < item.duration);
-    }
-
-    /**
-     * 짧은 피격 흔들림의 월드 레이어 오프셋을 계산합니다.
-     * @param {number} deltaSeconds - 가변 프레임 델타입니다.
-     * @private
-     */
-    #updateScreenShake(deltaSeconds) {
-        this.screenShakeSeconds = Math.max(0, this.screenShakeSeconds - deltaSeconds);
-        if (this.screenShakeSeconds <= 0) {
-            this.shakeX = 0;
-            this.shakeY = 0;
-            return;
-        }
-
-        const strength = this.tileSize * this.data.ANIMATION.SHAKE_TILE_RATIO
-            * (this.screenShakeSeconds / this.data.ANIMATION.SHAKE_SECONDS);
-        this.shakeX = (Math.random() - 0.5) * strength;
-        this.shakeY = (Math.random() - 0.5) * strength;
-    }
-
-    /**
-     * 대상 타일 중심에서 공격 파편을 생성합니다.
-     * @param {{x:number,y:number}} target - 피격 타일입니다.
-     * @param {boolean} isBox - 상자 파편 색을 사용할지 여부입니다.
-     * @private
-     */
-    #spawnImpact(target, isBox) {
-        const visual = this.#getTileVisual(target.x, target.y);
         const colors = ColorSchemes.Tactics;
-        for (let index = 0; index < this.data.ANIMATION.PARTICLE_COUNT; index++) {
-            const angle = (Math.PI * 2 * index / this.data.ANIMATION.PARTICLE_COUNT)
-                + ((Math.random() - 0.5) * 0.45);
-            const speed = this.tileSize * (0.65 + (Math.random() * 0.75));
-            this.particles.push({
-                x: visual.centerX,
-                y: visual.centerY,
-                vx: Math.cos(angle) * speed,
-                vy: Math.sin(angle) * speed,
-                elapsed: 0,
-                duration: this.data.ANIMATION.PARTICLE_SECONDS,
-                size: this.tileSize * (0.035 + (Math.random() * 0.035)),
-                color: isBox ? colors.Effects.Debris : colors.Effects.Hit
+        const ready = this.#canAcceptBattleInput();
+        const actionRect = this.hudRects.SECONDARY_ACTIONS;
+        const actionLayout = this.data.LAYOUT.ACTIONS;
+        const columns = Number(actionLayout.COLUMNS) || 4;
+        const gapX = this.#uww(actionLayout.GAP_X_UIWW);
+        const actionColumnW = (
+            actionRect.w - (gapX * (columns - 1))
+        ) / columns;
+        const actionH = Math.min(actionRect.h, clampNumber(this.#uwh(7), 48, 64));
+        const actionY = actionRect.y + ((actionRect.h - actionH) * 0.5);
+        const hasAttackTarget = toList(this.model.getValidTargets()).length > 0;
+        const actionSpecs = [
+            {
+                key: 'attack',
+                label: this.attackSelected ? '1 공격 취소' : '1 공격',
+                enabled: ready && !this.model.actionUsed && hasAttackTarget,
+                active: this.attackSelected,
+                type: COMMANDS.SELECT_ATTACK
+            },
+            {
+                key: 'defend',
+                label: '2 방어',
+                enabled: ready && !this.model.actionUsed,
+                type: COMMANDS.DEFEND
+            },
+            {
+                key: 'idle',
+                label: '3 대기',
+                enabled: ready && !this.model.actionUsed,
+                type: COMMANDS.IDLE
+            },
+            {
+                key: 'escape',
+                label: '게이트 탈출',
+                enabled: ready && this.#canEscape(),
+                active: this.#canEscape(),
+                type: COMMANDS.ESCAPE
+            }
+        ];
+        actionSpecs.forEach((spec, index) => {
+            this.#createButton('battle-' + spec.key, {
+                x: actionRect.x + (index * (actionColumnW + gapX)),
+                y: actionY,
+                w: actionColumnW,
+                h: actionH,
+                label: spec.label,
+                enabled: spec.enabled,
+                active: spec.active,
+                onClick: () => this.#queueUiCommand(spec.type)
+            });
+        });
+        const primaryRect = this.hudRects.PRIMARY_ACTION;
+        const primaryH = Math.min(primaryRect.h, clampNumber(this.#uwh(7), 48, 72));
+        this.#createButton('battle-end', {
+            x: primaryRect.x,
+            y: primaryRect.y + ((primaryRect.h - primaryH) * 0.5),
+            w: primaryRect.w,
+            h: primaryH,
+            label: '턴 종료  [Space]',
+            enabled: ready,
+            idleColor: colors.UI.Primary,
+            hoverColor: colors.UI.PrimaryHover,
+            textColor: colors.UI.OnPrimary,
+            radius: this.#uwh(1.35),
+            shadow: { blur: 10, color: colors.UI.ButtonShadow },
+            onClick: () => this.#queueUiCommand(COMMANDS.END_TURN)
+        });
+        const menuRect = this.hudRects.MENU;
+        const menuH = Math.min(menuRect.h, clampNumber(this.#uwh(4.2), 32, 48));
+        this.#createButton('battle-menu', {
+            x: menuRect.x,
+            y: menuRect.y + ((menuRect.h - menuH) * 0.5),
+            w: menuRect.w,
+            h: menuH,
+            label: 'Esc  메뉴',
+            enabled: !this.presentationLocked,
+            idleColor: colors.UI.Card,
+            hoverColor: colors.UI.ButtonHover,
+            textColor: colors.UI.Text,
+            radius: this.#uwh(1),
+            shadow: { blur: 8, color: colors.UI.CardShadow },
+            onClick: () => this.#queueUiCommand(COMMANDS.RETURN_MENU)
+        });
+        const undoRect = this.hudRects.UNDO;
+        const undoH = Math.min(undoRect.h, clampNumber(this.#uwh(4.2), 32, 48));
+        this.#createButton('battle-undo', {
+            x: undoRect.x,
+            y: undoRect.y + ((undoRect.h - undoH) * 0.5),
+            w: undoRect.w,
+            h: undoH,
+            label: this.data.TEXT.ACTIONS.UNDO_SHORT,
+            enabled: this.#canUndo(),
+            idleColor: colors.UI.Undo,
+            hoverColor: colors.UI.UndoHover,
+            textColor: colors.UI.OnPrimary,
+            radius: this.#uwh(1),
+            shadow: { blur: 8, color: colors.UI.CardShadow },
+            onClick: () => this.#queueUiCommand(COMMANDS.UNDO)
+        });
+
+        const paging = this.#getInventoryPaging();
+        this.inventoryPage = paging.page;
+        const inventoryRect = this.hudRects.INVENTORY_CARD;
+        const inventoryLayout = this.data.LAYOUT.INVENTORY;
+        const inventoryColumns = Number(inventoryLayout.COLUMNS) || 3;
+        const inventoryRows = Number(inventoryLayout.ROWS) || 2;
+        const inventoryPad = this.#uww(0.9);
+        const inventoryGapX = this.#uww(0.45);
+        const itemGapY = this.#uwh(0.6);
+        const headerH = clampNumber(inventoryRect.h * 0.22, 30, 46);
+        const inventoryY = inventoryRect.y
+            + headerH
+            + clampNumber(inventoryRect.h * 0.05, 6, 12);
+        const inventoryColumnW = (
+            inventoryRect.w
+            - (inventoryPad * 2)
+            - (inventoryGapX * (inventoryColumns - 1))
+        ) / inventoryColumns;
+        const availableItemH = (
+            inventoryRect.y + inventoryRect.h - inventoryPad - inventoryY
+            - (itemGapY * (inventoryRows - 1))
+        ) / inventoryRows;
+        const itemH = clampNumber(availableItemH, 30, 56);
+        paging.entries.forEach((entry, index) => {
+            const column = index % inventoryColumns;
+            const row = Math.floor(index / inventoryColumns);
+            const usable = ready && !this.model.actionUsed && this.#isItemUsable(entry.itemId);
+            const known = this.#isItemKnown(entry.itemId);
+            const item = this.data.ITEMS[entry.itemId];
+            const countLabel = ' ×' + String(entry.count);
+            const itemLabel = known ? item?.label || entry.itemId : '미확인';
+            const label = this.#truncateText(
+                itemLabel,
+                this.fonts.BUTTON,
+                inventoryColumnW
+                    - this.#uww(1.2)
+                    - measureText(countLabel, this.fonts.BUTTON)
+            ) + countLabel;
+            this.#createButton('item-' + entry.itemId, {
+                x: inventoryRect.x
+                    + inventoryPad
+                    + (column * (inventoryColumnW + inventoryGapX)),
+                y: inventoryY + (row * (itemH + itemGapY)),
+                w: inventoryColumnW,
+                h: itemH,
+                label,
+                enabled: usable,
+                idleColor: colors.UI.CardHeader,
+                hoverColor: colors.UI.ButtonHover,
+                onClick: () => this.#queueUiCommand(COMMANDS.USE_ITEM, {
+                    itemId: entry.itemId
+                })
+            });
+        });
+
+        if (paging.pageCount > 1) {
+            const navH = clampNumber(headerH * 0.78, 26, 36);
+            const navW = clampNumber(inventoryRect.w * 0.09, 28, 42);
+            const navGap = this.#uww(0.35);
+            const right = inventoryRect.x + inventoryRect.w - inventoryPad;
+            this.#createButton('inventory-prev', {
+                x: right - (navW * 2) - navGap,
+                y: inventoryRect.y + ((headerH - navH) * 0.5),
+                w: navW,
+                h: navH,
+                label: '◀',
+                idleColor: colors.UI.CardHeader,
+                hoverColor: colors.UI.ButtonHover,
+                onClick: () => this.#changeInventoryPage(-1)
+            });
+            this.#createButton('inventory-next', {
+                x: right - navW,
+                y: inventoryRect.y + ((headerH - navH) * 0.5),
+                w: navW,
+                h: navH,
+                label: '▶',
+                idleColor: colors.UI.CardHeader,
+                hoverColor: colors.UI.ButtonHover,
+                onClick: () => this.#changeInventoryPage(1)
             });
         }
     }
 
     /**
-     * 대상 타일 위에 잠시 떠오르는 결과 텍스트를 생성합니다.
-     * @param {{x:number,y:number}} target - 기준 타일입니다.
-     * @param {string} text - 표시할 문자열입니다.
-     * @param {string} color - 텍스트 색상입니다.
+     * 결과 화면 버튼을 구성합니다.
      * @private
      */
-    #spawnFloatingText(target, text, color) {
-        const visual = this.#getTileVisual(target.x, target.y);
-        this.floatingTexts.push({
-            x: visual.centerX,
-            y: visual.centerY - (this.tileSize * 0.42),
-            text,
-            color,
-            elapsed: 0,
-            duration: this.data.ANIMATION.SPEECH_SECONDS * 0.6
+    #buildResultButtons() {
+        const w = this.#uww(15);
+        const h = this.#uwh(5.5);
+        const centerX = this.UIOffsetX + (this.UIWW * 0.5);
+        this.#createButton('result-undo', {
+            x: centerX - (w * 1.5) - this.#uww(2),
+            y: this.#uwh(72),
+            w,
+            h,
+            label: this.data.TEXT.ACTIONS.UNDO + '  [Ctrl+Z]',
+            enabled: this.#canUndo(),
+            idleColor: ColorSchemes.Tactics.UI.Undo,
+            hoverColor: ColorSchemes.Tactics.UI.UndoHover,
+            textColor: ColorSchemes.Tactics.UI.OnPrimary,
+            onClick: () => this.#queueUiCommand(COMMANDS.UNDO)
+        });
+        this.#createButton('result-retry', {
+            x: centerX - (w * 0.5),
+            y: this.#uwh(72),
+            w,
+            h,
+            label: '다시 시작  [R]',
+            enabled: !this.presentationLocked,
+            onClick: () => this.#queueUiCommand(COMMANDS.RESTART)
+        });
+        this.#createButton('result-menu', {
+            x: centerX + (w * 0.5) + this.#uww(2),
+            y: this.#uwh(72),
+            w,
+            h,
+            label: '메뉴  [Esc]',
+            enabled: !this.presentationLocked,
+            onClick: () => this.#queueUiCommand(COMMANDS.RETURN_MENU)
         });
     }
 
     /**
-     * 지정한 화자의 말풍선을 새 텍스트로 교체합니다.
-     * @param {'player'|'lora'} speaker - 화자 ID입니다.
-     * @param {string} text - 대사입니다.
+     * 컷씬 진행과 닫기 버튼을 구성합니다.
      * @private
      */
-    #setSpeech(speaker, text) {
-        this.speechBubble = {
-            speaker,
-            text,
-            elapsed: 0,
-            duration: this.data.ANIMATION.SPEECH_SECONDS
+    #buildCutsceneButtons() {
+        const state = this.cutscenes.getState();
+        const modal = this.#getCutsceneRect();
+        const h = this.#uwh(5);
+        this.#createButton('cutscene-next', {
+            x: modal.x + (modal.w * 0.61),
+            y: modal.y + modal.h - h - this.#uwh(2.2),
+            w: modal.w * 0.27,
+            h,
+            label: state.hasNextCard ? '다음  [Enter]' : '완료  [Enter]',
+            enabled: !this.presentationLocked,
+            onClick: () => this.#queueUiCommand(COMMANDS.CUTSCENE_NEXT)
+        });
+        this.#createButton('cutscene-close', {
+            x: modal.x + (modal.w * 0.12),
+            y: modal.y + modal.h - h - this.#uwh(2.2),
+            w: modal.w * 0.2,
+            h,
+            label: '닫기  [Esc]',
+            enabled: !this.presentationLocked,
+            onClick: () => this.#queueUiCommand(COMMANDS.CUTSCENE_CLOSE)
+        });
+        if (this.#canUndo()) {
+            this.#createButton('cutscene-undo', {
+                x: modal.x + (modal.w * 0.36),
+                y: modal.y + modal.h - h - this.#uwh(2.2),
+                w: modal.w * 0.2,
+                h,
+                label: this.data.TEXT.ACTIONS.UNDO_SHORT,
+                idleColor: ColorSchemes.Tactics.UI.Undo,
+                hoverColor: ColorSchemes.Tactics.UI.UndoHover,
+                textColor: ColorSchemes.Tactics.UI.OnPrimary,
+                onClick: () => this.#queueUiCommand(COMMANDS.UNDO)
+            });
+        }
+    }
+
+    /**
+     * 텍스트 하나를 중앙 배치한 풀 기반 버튼을 만듭니다.
+     * @param {string} key - 버튼 키입니다.
+     * @param {object} options - 버튼 구성값입니다.
+     * @private
+     */
+    #createButton(key, options) {
+        const colors = ColorSchemes.Tactics;
+        const enabled = options.enabled !== false;
+        const textElement = UIPool.text_element.get();
+        textElement.init({
+            parent: this,
+            layer: 'ui',
+            text: options.label,
+            font: this.data.TYPOGRAPHY.BUTTON.FAMILY,
+            fontWeight: this.data.TYPOGRAPHY.BUTTON.WEIGHT,
+            size: clampNumber(
+                this.UIWW * (this.data.TYPOGRAPHY.BUTTON.SIZE_UIWW / 100),
+                this.data.TYPOGRAPHY.BUTTON.MIN,
+                this.data.TYPOGRAPHY.BUTTON.MAX
+            ),
+            color: enabled ? (options.textColor || colors.UI.Text) : colors.UI.Muted,
+            align: 'center'
+        });
+        const button = UIPool.button.get();
+        button.init({
+            parent: this,
+            layer: 'ui',
+            x: options.x,
+            y: options.y,
+            width: options.w,
+            height: options.h,
+            center: [textElement],
+            radius: options.radius ?? this.#uwh(
+                this.data.LAYOUT.ACTIONS.BUTTON_RADIUS_WH
+            ),
+            shadow: options.shadow,
+            idleColor: enabled
+                ? (options.idleColor
+                    || (options.active ? colors.UI.Accent : colors.UI.ButtonIdle))
+                : colors.UI.ButtonDisabled,
+            hoverColor: enabled
+                ? (options.hoverColor || colors.UI.ButtonHover)
+                : colors.UI.ButtonDisabled,
+            color: colors.UI.Text,
+            clickAble: enabled,
+            onClick: options.onClick
+        });
+        button.clickAble = enabled;
+        button.hoverScaleMultiplier = Number(
+            this.data.ANIMATION.BUTTON_HOVER_SCALE
+        ) || 1.035;
+        button.pressScaleMultiplier = Number(
+            this.data.ANIMATION.BUTTON_PRESS_SCALE
+        ) || 0.965;
+        this.buttons[key] = { item: button, text: textElement };
+    }
+
+    /**
+     * 모든 풀 기반 버튼을 반납합니다.
+     * @private
+     */
+    #releaseButtons() {
+        for (const button of Object.values(this.buttons)) {
+            releaseUIItem(button?.item);
+        }
+        this.buttons = {};
+    }
+
+    /**
+     * 버튼 상호작용을 갱신합니다.
+     * @private
+     */
+    #updateButtons() {
+        for (const button of Object.values(this.buttons)) {
+            button.item.update();
+        }
+    }
+
+    /**
+     * 버튼을 그립니다.
+     * @private
+     */
+    #drawButtons() {
+        for (const button of Object.values(this.buttons)) {
+            button.item.draw();
+        }
+    }
+
+    /**
+     * 현재 인벤토리를 아이템 ID와 수량 배열로 반환합니다.
+     * @returns {Array<{itemId:string,count:number}>} 인벤토리입니다.
+     * @private
+     */
+    #getInventoryEntries() {
+        if (!this.model) {
+            return [];
+        }
+        if (this.model.inventory instanceof Map) {
+            return Array.from(this.model.inventory.entries())
+                .filter(([, count]) => Number(count) > 0)
+                .map(([itemId, count]) => ({ itemId, count: Number(count) }));
+        }
+        return toList(this.#getSnapshot()?.inventory)
+            .filter((entry) => Number(entry?.count) > 0)
+            .map((entry) => ({
+                itemId: entry.itemId,
+                count: Number(entry.count)
+            }));
+    }
+
+    /**
+     * 현재 인벤토리 페이지와 표시 항목을 계산합니다.
+     * @returns {{entries:Array<{itemId:string,count:number}>,page:number,pageCount:number}} 페이지 정보입니다.
+     * @private
+     */
+    #getInventoryPaging() {
+        const entries = this.#getInventoryEntries();
+        const pageSize = Math.max(
+            1,
+            Number(this.data.LAYOUT.INVENTORY.PAGE_SIZE) || 6
+        );
+        const pageCount = Math.max(1, Math.ceil(entries.length / pageSize));
+        const page = clampNumber(Math.floor(this.inventoryPage), 0, pageCount - 1);
+        return {
+            entries: entries.slice(page * pageSize, (page + 1) * pageSize),
+            page,
+            pageCount
         };
     }
 
     /**
-     * 최근 이벤트를 제한된 길이의 HUD 로그에 추가합니다.
-     * @param {string} text - 추가할 이벤트 문구입니다.
+     * 인벤토리 표시 페이지를 순환하고 클릭의 보드 전파를 막습니다.
+     * @param {number} delta - 페이지 이동량입니다.
      * @private
      */
-    #appendEvent(text) {
-        if (typeof text !== 'string' || text.length === 0) {
+    #changeInventoryPage(delta) {
+        const paging = this.#getInventoryPaging();
+        if (paging.pageCount <= 1) {
             return;
         }
-        this.eventLog.unshift(text);
-        this.eventLog.length = Math.min(this.eventLog.length, this.data.RULES.EVENT_LOG_LIMIT);
+        this.uiActionHandled = true;
+        consumeMouseState('left', 'clicked');
+        this.inventoryPage = (
+            paging.page + Math.sign(delta) + paging.pageCount
+        ) % paging.pageCount;
+        this.buttonSignature = '';
     }
 
     /**
-     * 입력을 전부 차단하는 결과 단계인지 확인합니다.
-     * @returns {boolean} 결과 단계이면 true입니다.
+     * 아이템을 현재 행동으로 사용할 수 있는지 확인합니다.
+     * @param {string} itemId - 아이템 ID입니다.
+     * @returns {boolean} 사용 가능 여부입니다.
      * @private
      */
-    #isResultPhase() {
-        return this.model.phase === 'result'
-            || this.model.turn === 'result'
-            || this.model.phase === 'victory';
+    #isItemUsable(itemId) {
+        const item = this.data.ITEMS[itemId];
+        return Boolean(item && (item.consumable || item.useOnce));
     }
 
     /**
-     * 짝수 라운드 강제 대화 단계인지 확인합니다.
-     * @returns {boolean} 대화 단계이면 true입니다.
+     * 아이템 이름이 반복 플레이에서 공개됐는지 확인합니다.
+     * @param {string} itemId - 아이템 ID입니다.
+     * @returns {boolean} 공개 여부입니다.
      * @private
      */
-    #isDialoguePhase() {
-        return this.model.phase === 'dialogue' || this.model.turn === 'dialogue';
+    #isItemKnown(itemId) {
+        return KNOWN_STARTER_IDS.has(itemId)
+            || this.meta.identifiedItemIds.includes(itemId);
     }
 
     /**
-     * 현재 위치에서 게이트 탈출 행동을 사용할 수 있는지 확인합니다.
-     * @returns {boolean} 탈출할 수 있으면 true입니다.
+     * 화면, 보드 투영, HUD, 글꼴을 다시 계산합니다.
      * @private
      */
-    #canEscape() {
-        return typeof this.model.canEscape === 'function'
-            ? this.model.canEscape() === true
-            : false;
+    #syncViewport() {
+        this.WW = getWW();
+        this.WH = getWH();
+        this.UIWW = getUIWW();
+        this.UIOffsetX = getUIOffsetX();
+        this.fonts = Object.fromEntries(
+            Object.entries(this.data.TYPOGRAPHY).map(([key, spec]) => (
+                [key, createResponsiveFont(spec, this.UIWW)]
+            ))
+        );
+
+        const boardLayout = this.data.LAYOUT.BOARD;
+        const boardLeft = this.UIOffsetX + this.#uww(boardLayout.X_UIWW);
+        const boardTop = this.#uwh(boardLayout.Y_WH);
+        const boardW = this.#uww(boardLayout.MAX_WIDTH_UIWW);
+        const boardH = this.#uwh(boardLayout.MAX_HEIGHT_WH);
+        this.boardRect = {
+            x: boardLeft,
+            y: boardTop,
+            w: boardW,
+            h: boardH
+        };
+        const minBoardSide = Math.min(boardW, boardH);
+        this.boardPadding = Math.min(
+            Math.max(4, minBoardSide * boardLayout.FRAME_PADDING_RATIO),
+            boardW * 0.08,
+            boardH * 0.08
+        );
+        const gapRatio = Math.max(0, Number(boardLayout.TILE_GAP_RATIO) || 0);
+        const mapWidth = this.data.MAP.WIDTH;
+        const mapHeight = this.data.MAP.HEIGHT;
+        const widthUnits = mapWidth + ((mapWidth - 1) * gapRatio);
+        const heightUnits = mapHeight + ((mapHeight - 1) * gapRatio);
+        this.tileSide = Math.max(1, Math.floor(Math.min(
+            (boardW - (this.boardPadding * 2)) / widthUnits,
+            (boardH - (this.boardPadding * 2)) / heightUnits
+        )));
+        this.tileGap = this.tileSide * gapRatio;
+        this.tileStep = this.tileSide + this.tileGap;
+        const gridW = (mapWidth * this.tileSide) + ((mapWidth - 1) * this.tileGap);
+        const gridH = (mapHeight * this.tileSide) + ((mapHeight - 1) * this.tileGap);
+        this.gridRect = {
+            x: boardLeft + ((boardW - gridW) * 0.5),
+            y: boardTop + ((boardH - gridH) * 0.5),
+            w: gridW,
+            h: gridH
+        };
+
+        this.hudRects = Object.fromEntries(
+            Object.entries(this.data.LAYOUT.HUD).map(([key, layout]) => ([key, {
+                x: this.UIOffsetX + this.#uww(layout.X_UIWW),
+                y: this.#uwh(layout.Y_WH),
+                w: this.#uww(layout.WIDTH_UIWW),
+                h: this.#uwh(layout.HEIGHT_WH)
+            }]))
+        );
+        this.buttonSignature = '';
+        this.#ensureButtons();
     }
 
     /**
-     * 이동 또는 공격 연출이 진행 중인지 반환합니다.
-     * @returns {boolean} 플레이어 입력을 잠가야 하면 true입니다.
+     * UI 기준 너비 백분율을 픽셀로 변환합니다.
+     * @param {number} value - 백분율입니다.
+     * @returns {number} 픽셀 값입니다.
      * @private
      */
-    #isPresentationLocked() {
-        return Boolean(
-            this.movementAnimation
-            || this.loraMovementAnimation
-            || this.actionAnimation
+    #uww(value) {
+        return this.UIWW * (value / 100);
+    }
+
+    /**
+     * 화면 높이 백분율을 픽셀로 변환합니다.
+     * @param {number} value - 백분율입니다.
+     * @returns {number} 픽셀 값입니다.
+     * @private
+     */
+    #uwh(value) {
+        return this.WH * (value / 100);
+    }
+
+    /**
+     * 이름 있는 표현 속성 하나를 AnimationSystem 표준 애니메이션으로 갱신합니다.
+     * @param {string} slot - 씬 내부 애니메이션 슬롯입니다.
+     * @param {object} owner - 대상 객체입니다.
+     * @param {string} variable - 대상 속성입니다.
+     * @param {number} endValue - 목표 값입니다.
+     * @param {number} duration - 지속 시간입니다.
+     * @param {number|string} [startValue=current] - 시작 값입니다.
+     * @returns {Promise<void>} 완료 Promise입니다.
+     * @private
+     */
+    #animateSlot(slot, owner, variable, endValue, duration, startValue = 'current') {
+        const previousId = this.animationSlots.get(slot);
+        if (Number.isInteger(previousId) && previousId >= 0) {
+            remove(previousId);
+            this.ownedAnimationIds.delete(previousId);
+        }
+        const safeDuration = Math.max(0, Number(duration) || 0);
+        if (safeDuration <= 0 || Number(owner?.[variable]) === Number(endValue)) {
+            owner[variable] = endValue;
+            this.animationSlots.delete(slot);
+            return Promise.resolve();
+        }
+        const animation = animate(owner, {
+            variable,
+            startValue,
+            endValue,
+            duration: safeDuration,
+            type: this.data.ANIMATION.EASING
+        });
+        this.animationSlots.set(slot, animation.id);
+        this.ownedAnimationIds.add(animation.id);
+        return animation.promise.then(() => {
+            if (this.animationSlots.get(slot) === animation.id) {
+                this.animationSlots.delete(slot);
+            }
+            this.ownedAnimationIds.delete(animation.id);
+        });
+    }
+
+    /**
+     * 씬이 생성한 모든 표준 애니메이션을 취소하고 표현 잠금을 풉니다.
+     * @private
+     */
+    #clearOwnedAnimations() {
+        for (const animationId of this.ownedAnimationIds) {
+            remove(animationId);
+        }
+        this.ownedAnimationIds.clear();
+        this.animationSlots.clear();
+        this.presentationLocked = false;
+    }
+
+    /**
+     * 호버, 경로, 공격 대상, 메뉴 선택의 진입 값을 easeOutExpo로 보간합니다.
+     * @param {'hover'|'path'|'attack'|'menu-selection'} kind - 선택 연출 종류입니다.
+     * @private
+     */
+    #startSelectionAnimation(kind) {
+        const fields = {
+            hover: 'hoverProgress',
+            path: 'pathProgress',
+            attack: 'attackProgress',
+            'menu-selection': 'menuSelectionProgress'
+        };
+        const field = fields[kind];
+        if (!field) {
+            return;
+        }
+        this.presentation[field] = 0;
+        void this.#animateSlot(
+            'selection-' + kind,
+            this.presentation,
+            field,
+            1,
+            this.data.ANIMATION.SELECTION_SECONDS,
+            0
         );
     }
 
     /**
-     * 타일의 고지 오프셋을 반영한 화면 좌표와 중심을 반환합니다.
-     * @param {number} x - 타일 X 좌표입니다.
-     * @param {number} y - 타일 Y 좌표입니다.
-     * @param {boolean} [includeShake=true] - 화면 흔들림을 적용할지 여부입니다.
-     * @returns {{left:number,top:number,centerX:number,centerY:number,height:number}} 표시 좌표입니다.
+     * 모델의 HP와 불안정도를 현재 표시값에서 부드럽게 보간합니다.
+     * @returns {Promise<void>[]} 각 게이지 완료 Promise입니다.
      * @private
      */
-    #getTileVisual(x, y, includeShake = true) {
-        const height = this.model.getTileHeight(x, y) ?? 0;
-        const shakeX = includeShake ? this.shakeX : 0;
-        const shakeY = includeShake ? this.shakeY : 0;
-        const left = this.boardX + (x * this.tileSize) + shakeX;
-        const top = this.boardY + (y * this.tileSize) - (height * this.elevationLift) + shakeY;
+    #animateHudToModel() {
+        if (!this.model) {
+            return [];
+        }
+        const duration = this.data.ANIMATION.GAUGE_SECONDS;
+        return [
+            this.#animateSlot(
+                'hud-player-hp',
+                this.presentation,
+                'playerHp',
+                Number(this.model.player?.hp) || 0,
+                duration
+            ),
+            this.#animateSlot(
+                'hud-lora-hp',
+                this.presentation,
+                'loraHp',
+                Number(this.model.lora?.hp) || 0,
+                duration
+            ),
+            this.#animateSlot(
+                'hud-instability',
+                this.presentation,
+                'instability',
+                Number(this.model.lora?.instability) || 0,
+                duration
+            )
+        ];
+    }
+
+    /**
+     * 이동 외 플레이어 행동 동안 짧은 충격 연출과 입력 잠금을 적용합니다.
+     * @param {object} result - 모델 행동 결과입니다.
+     * @param {number} [duration] - 재생 시간입니다.
+     * @private
+     */
+    #startActionPresentation(result, duration = this.data.ANIMATION.ATTACK_SECONDS) {
+        if (result?.ok !== true) {
+            return;
+        }
+        const revision = this.timelineRevision;
+        this.presentationLocked = true;
+        this.presentation.actionPulse = 1;
+        this.buttonSignature = '';
+        void this.#animateSlot(
+            'action-pulse',
+            this.presentation,
+            'actionPulse',
+            0,
+            duration,
+            1
+        ).then(() => {
+            this.#finishPresentationLock(revision);
+        });
+    }
+
+    /**
+     * 모델이 반환한 실제 경로를 칸별로 재생하고 텔레포트 점프를 별도로 표현합니다.
+     * @param {Array<{x:number,y:number}>} path - 실제 이동 경로입니다.
+     * @param {Array<{from:object,to:object}>} [teleportSegments] - 텔레포트 구간입니다.
+     * @private
+     */
+    #startPlayerPathPresentation(path, teleportSegments = []) {
+        const route = this.#normalizePath(path);
+        const revision = this.timelineRevision;
+        this.presentationLocked = true;
+        this.buttonSignature = '';
+        if (route.length <= 1) {
+            const stayScale = Number(this.data.ANIMATION.STAY_SCALE) || 0.86;
+            this.presentation.playerScale = stayScale;
+            void this.#animateSlot(
+                'player-scale',
+                this.presentation,
+                'playerScale',
+                1,
+                this.data.ANIMATION.SELECTION_SECONDS,
+                stayScale
+            ).then(() => {
+                this.#finishPresentationLock(revision);
+            });
+            return;
+        }
+        void this.#animatePlayerRoute(
+            route,
+            revision,
+            this.data.ANIMATION.MOVE_SECONDS_PER_TILE,
+            teleportSegments
+        ).then(() => {
+            if (revision === this.timelineRevision && this.model) {
+                this.presentation.playerX = Number(this.model.player?.x) || 0;
+                this.presentation.playerY = Number(this.model.player?.y) || 0;
+                this.presentation.playerAlpha = 1;
+                this.presentation.playerScale = 1;
+                this.presentation.floorIndex = Number(this.model.floorIndex) || 0;
+            }
+            this.#finishPresentationLock(revision);
+        });
+    }
+
+    /**
+     * 좌표 경로를 순차 보간하며 맨해튼 인접이 아닌 단계는 텔레포트로 처리합니다.
+     * @param {Array<{x:number,y:number}>} route - 재생할 좌표 목록입니다.
+     * @param {number} revision - 시작 시점 타임라인 버전입니다.
+     * @param {number} secondsPerTile - 인접 타일당 시간입니다.
+     * @param {Array<{from:object,to:object}>} [teleportSegments] - 강제 텔레포트 구간입니다.
+     * @returns {Promise<void>} 재생 완료 Promise입니다.
+     * @private
+     */
+    async #animatePlayerRoute(route, revision, secondsPerTile, teleportSegments = []) {
+        for (const tile of route) {
+            if (revision !== this.timelineRevision || !tile) {
+                return;
+            }
+            const dx = Number(tile.x) - Number(this.presentation.playerX);
+            const dy = Number(tile.y) - Number(this.presentation.playerY);
+            if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) {
+                continue;
+            }
+            const isAdjacent = Math.abs(dx) + Math.abs(dy) <= 1.001;
+            const isTeleport = this.#isTeleportTransition(
+                this.presentation,
+                tile,
+                teleportSegments
+            );
+            if (!isAdjacent || isTeleport) {
+                await this.#animateTeleportTo(tile, revision);
+                continue;
+            }
+            await Promise.all([
+                this.#animateSlot(
+                    'player-x',
+                    this.presentation,
+                    'playerX',
+                    tile.x,
+                    secondsPerTile
+                ),
+                this.#animateSlot(
+                    'player-y',
+                    this.presentation,
+                    'playerY',
+                    tile.y,
+                    secondsPerTile
+                )
+            ]);
+        }
+    }
+
+    /**
+     * 플레이어를 축소·페이드한 뒤 새 타일로 옮기고 다시 나타냅니다.
+     * @param {{x:number,y:number}} tile - 도착 타일입니다.
+     * @param {number} revision - 시작 시점 타임라인 버전입니다.
+     * @returns {Promise<void>} 완료 Promise입니다.
+     * @private
+     */
+    async #animateTeleportTo(tile, revision) {
+        if (!tile) {
+            return;
+        }
+        await Promise.all([
+            this.#animateSlot(
+                'player-alpha',
+                this.presentation,
+                'playerAlpha',
+                0,
+                this.data.ANIMATION.TELEPORT_OUT_SECONDS
+            ),
+            this.#animateSlot(
+                'player-scale',
+                this.presentation,
+                'playerScale',
+                this.data.ANIMATION.TELEPORT_MIN_SCALE,
+                this.data.ANIMATION.TELEPORT_OUT_SECONDS
+            )
+        ]);
+        if (revision !== this.timelineRevision) {
+            return;
+        }
+        this.presentation.playerX = tile.x;
+        this.presentation.playerY = tile.y;
+        await Promise.all([
+            this.#animateSlot(
+                'player-alpha',
+                this.presentation,
+                'playerAlpha',
+                1,
+                this.data.ANIMATION.TELEPORT_IN_SECONDS,
+                0
+            ),
+            this.#animateSlot(
+                'player-scale',
+                this.presentation,
+                'playerScale',
+                1,
+                this.data.ANIMATION.TELEPORT_IN_SECONDS,
+                this.data.ANIMATION.TELEPORT_MIN_SCALE
+            )
+        ]);
+    }
+
+    /**
+     * 자동 층 전환 시 플레이어를 페이드한 뒤 새 층 시작 좌표에 배치합니다.
+     * @private
+     */
+    #startFloorTransitionPresentation() {
+        if (!this.model) {
+            return;
+        }
+        const revision = this.timelineRevision;
+        const target = cloneTile(this.model.player);
+        const targetFloorIndex = Number(this.model.floorIndex) || 0;
+        this.presentationLocked = true;
+        this.buttonSignature = '';
+        void this.#animateSlot(
+            'player-alpha',
+            this.presentation,
+            'playerAlpha',
+            0,
+            this.data.ANIMATION.UNDO_FADE_SECONDS
+        ).then(async () => {
+            if (revision !== this.timelineRevision || !target) {
+                return;
+            }
+            this.presentation.floorIndex = targetFloorIndex;
+            this.presentation.playerX = target.x;
+            this.presentation.playerY = target.y;
+            await this.#animateSlot(
+                'player-alpha',
+                this.presentation,
+                'playerAlpha',
+                1,
+                this.data.ANIMATION.TELEPORT_IN_SECONDS,
+                0
+            );
+            this.#finishPresentationLock(revision);
+        });
+    }
+
+    /**
+     * Undo 대상 경로를 역재생하고 게이지를 복원값까지 보간합니다.
+     * @param {object} entry - Undo 기록 항목입니다.
+     * @param {object} targetPresentation - 체크포인트 표현 상태입니다.
+     * @param {number} previousFloorIndex - Undo 직전 층입니다.
+     * @private
+     */
+    #startUndoPresentation(entry, targetPresentation, previousFloorIndex) {
+        const revision = this.timelineRevision;
+        const targetFloorIndex = Number(this.model?.floorIndex) || 0;
+        this.presentationLocked = true;
+        this.buttonSignature = '';
+        const gaugePromises = this.#animateHudToModel();
+        let playerPromise;
+        if (previousFloorIndex !== targetFloorIndex) {
+            const playerTarget = cloneTile(this.model.player);
+            playerPromise = this.#animateTeleportTo(playerTarget, revision).then(() => {
+                if (revision === this.timelineRevision) {
+                    this.presentation.floorIndex = targetFloorIndex;
+                }
+            });
+        } else {
+            this.presentation.playerAlpha = 1;
+            this.presentation.playerScale = 1;
+            const reversePath = this.#buildUndoRoute(entry.resultPath);
+            playerPromise = this.#animatePlayerRoute(
+                reversePath,
+                revision,
+                this.data.ANIMATION.UNDO_SECONDS_PER_TILE,
+                entry.teleportSegments
+            );
+        }
+        void Promise.all([...gaugePromises, playerPromise]).then(() => {
+            if (revision !== this.timelineRevision) {
+                return;
+            }
+            this.presentation = {
+                ...this.presentation,
+                ...cloneCheckpointValue(targetPresentation),
+                floorIndex: targetFloorIndex,
+                playerX: Number(this.model.player?.x) || 0,
+                playerY: Number(this.model.player?.y) || 0,
+                playerAlpha: 1,
+                playerScale: 1,
+                playerHp: Number(this.model.player?.hp) || 0,
+                loraHp: Number(this.model.lora?.hp) || 0,
+                instability: Number(this.model.lora?.instability) || 0
+            };
+            this.#startSelectionAnimation(this.attackSelected ? 'attack' : 'path');
+            this.#finishPresentationLock(revision);
+        });
+    }
+
+    /**
+     * 현재 표시 위치에서 가장 가까운 실제 이동 경로 지점부터 역방향 경로를 만듭니다.
+     * @param {*} path - 성공 결과에 기록된 실제 경로입니다.
+     * @returns {Array<{x:number,y:number}>} Undo 재생 경로입니다.
+     * @private
+     */
+    #buildUndoRoute(path) {
+        const reversePath = this.#normalizePath(path).reverse();
+        const target = cloneTile(this.model?.player);
+        if (reversePath.length === 0) {
+            return target ? [target] : [];
+        }
+        let closestIndex = 0;
+        let closestDistance = Number.POSITIVE_INFINITY;
+        reversePath.forEach((tile, index) => {
+            const dx = tile.x - Number(this.presentation.playerX);
+            const dy = tile.y - Number(this.presentation.playerY);
+            const distance = (dx * dx) + (dy * dy);
+            if (distance < closestDistance) {
+                closestDistance = distance;
+                closestIndex = index;
+            }
+        });
+        const route = reversePath.slice(closestIndex);
+        if (target && !route.some((tile) => tile.x === target.x && tile.y === target.y)) {
+            route.push(target);
+        }
+        return route;
+    }
+
+    /**
+     * 현재 표시 좌표와 다음 타일이 기록된 텔레포트 구간인지 양방향으로 확인합니다.
+     * @param {object} from - 현재 표시 좌표를 가진 객체입니다.
+     * @param {{x:number,y:number}} to - 다음 타일입니다.
+     * @param {Array<{from:object,to:object}>} segments - 텔레포트 구간입니다.
+     * @returns {boolean} 텔레포트 전환 여부입니다.
+     * @private
+     */
+    #isTeleportTransition(from, to, segments) {
+        const fromX = Number(from?.playerX ?? from?.x);
+        const fromY = Number(from?.playerY ?? from?.y);
+        return toList(segments).some((segment) => {
+            const forward = segment?.from?.x === fromX
+                && segment?.from?.y === fromY
+                && segment?.to?.x === to.x
+                && segment?.to?.y === to.y;
+            const backward = segment?.to?.x === fromX
+                && segment?.to?.y === fromY
+                && segment?.from?.x === to.x
+                && segment?.from?.y === to.y;
+            return forward || backward;
+        });
+    }
+
+    /**
+     * 시작 타임라인이 여전히 유효할 때만 표현 입력 잠금을 해제합니다.
+     * @param {number} revision - 애니메이션 시작 타임라인 버전입니다.
+     * @private
+     */
+    #finishPresentationLock(revision) {
+        if (this.destroyed || revision !== this.timelineRevision) {
+            return;
+        }
+        this.presentationLocked = false;
+        this.buttonSignature = '';
+    }
+
+    /**
+     * 현재 보드 화면 흔들림 오프셋을 반환합니다.
+     * @returns {{x:number,y:number}} 흔들림 오프셋입니다.
+     * @private
+     */
+    #getBoardShake() {
+        if (this.screenShakeSeconds <= 0) {
+            return { x: 0, y: 0 };
+        }
+        const ratio = Number(this.data.ANIMATION.SHAKE_TILE_RATIO) || 0.055;
         return {
-            left,
-            top,
-            centerX: left + (this.tileSize * 0.5),
-            centerY: top + (this.tileSize * 0.5),
+            x: Math.sin(this.elapsedSeconds * 74) * this.tileSide * ratio,
+            y: Math.cos(this.elapsedSeconds * 61) * this.tileSide * ratio
+        };
+    }
+
+    /**
+     * 타일 좌표를 축 정렬 정사각형 탑뷰 화면 좌표로 변환합니다.
+     * @param {number} x - 타일 X입니다.
+     * @param {number} y - 타일 Y입니다.
+     * @returns {{x:number,y:number,height:number}} 화면 좌표입니다.
+     * @private
+     */
+    #projectTile(x, y) {
+        const height = Number(this.model?.getTileHeight?.(x, y))
+            || Number(this.#getCurrentFloor()?.heights?.[y]?.[x])
+            || 0;
+        const shake = this.#getBoardShake();
+        return {
+            x: this.gridRect.x + (this.tileSide * 0.5) + (x * this.tileStep)
+                + shake.x,
+            y: this.gridRect.y + (this.tileSide * 0.5) + (y * this.tileStep)
+                + shake.y,
             height
         };
     }
 
     /**
-     * 이동 및 공격 연출을 반영한 플레이어 중심 화면 좌표를 반환합니다.
-     * @returns {{x:number,y:number}} 렌더링 중심입니다.
+     * 포인터 좌표를 축 정렬 탑뷰 타일로 역변환합니다.
+     * @param {number} px - 화면 X입니다.
+     * @param {number} py - 화면 Y입니다.
+     * @returns {{x:number,y:number}|null} 타일 좌표입니다.
      * @private
      */
-    #getPlayerRenderPoint() {
-        let point;
-        if (this.movementAnimation) {
-            const animation = this.movementAnimation;
-            const segmentDuration = this.data.ANIMATION.MOVE_SECONDS_PER_TILE;
-            const segmentIndex = Math.min(
-                animation.path.length - 2,
-                Math.floor(animation.elapsed / segmentDuration)
-            );
-            const segmentProgress = easeOutCubic(
-                (animation.elapsed - (segmentIndex * segmentDuration)) / segmentDuration
-            );
-            const from = this.#getTileVisual(
-                animation.path[segmentIndex].x,
-                animation.path[segmentIndex].y
-            );
-            const to = this.#getTileVisual(
-                animation.path[segmentIndex + 1].x,
-                animation.path[segmentIndex + 1].y
-            );
-            point = {
-                x: lerpNumber(from.centerX, to.centerX, segmentProgress),
-                y: lerpNumber(from.centerY, to.centerY, segmentProgress)
-            };
-        } else {
-            const tile = this.#getTileVisual(this.model.player.x, this.model.player.y);
-            point = { x: tile.centerX, y: tile.centerY };
+    #hitTestTile(px, py) {
+        if (!Number.isFinite(px) || !Number.isFinite(py)) {
+            return null;
         }
-
-        if (this.actionAnimation?.type === ACTION_ATTACK) {
-            const target = this.#getTileVisual(
-                this.actionAnimation.targetPosition.x,
-                this.actionAnimation.targetPosition.y
-            );
-            const progress = clampNumber(
-                this.actionAnimation.elapsed / this.actionAnimation.duration,
-                0,
-                1
-            );
-            const lunge = Math.sin(progress * Math.PI) * 0.34;
-            point.x = lerpNumber(point.x, target.centerX, lunge);
-            point.y = lerpNumber(point.y, target.centerY, lunge);
+        const shake = this.#getBoardShake();
+        const localX = px - shake.x - this.gridRect.x;
+        const localY = py - shake.y - this.gridRect.y;
+        if (localX < 0 || localY < 0) {
+            return null;
         }
-        return point;
+        const x = Math.floor(localX / this.tileStep);
+        const y = Math.floor(localY / this.tileStep);
+        if (x < 0
+            || y < 0
+            || x >= this.data.MAP.WIDTH
+            || y >= this.data.MAP.HEIGHT) {
+            return null;
+        }
+        const cellX = localX - (x * this.tileStep);
+        const cellY = localY - (y * this.tileStep);
+        if (cellX > this.tileSide || cellY > this.tileSide) {
+            return null;
+        }
+        return { x, y };
     }
 
     /**
-     * 로라의 자동 이동 연출을 반영한 중심 화면 좌표를 반환합니다.
-     * @returns {{x:number,y:number}} 렌더링 중심입니다.
+     * 현재 층 상태를 얻습니다.
+     * @returns {object|null} 층 상태입니다.
      * @private
      */
-    #getLoraRenderPoint() {
-        if (!this.loraMovementAnimation) {
-            const tile = this.#getTileVisual(this.model.lora.x, this.model.lora.y);
-            return { x: tile.centerX, y: tile.centerY };
+    #getCurrentFloor() {
+        if (!this.model) {
+            return null;
         }
-
-        const animation = this.loraMovementAnimation;
-        const segmentDuration = this.data.ANIMATION.MOVE_SECONDS_PER_TILE;
-        const segmentIndex = Math.min(
-            animation.path.length - 2,
-            Math.floor(animation.elapsed / segmentDuration)
-        );
-        const segmentProgress = easeOutCubic(
-            (animation.elapsed - (segmentIndex * segmentDuration)) / segmentDuration
-        );
-        const from = this.#getTileVisual(
-            animation.path[segmentIndex].x,
-            animation.path[segmentIndex].y
-        );
-        const to = this.#getTileVisual(
-            animation.path[segmentIndex + 1].x,
-            animation.path[segmentIndex + 1].y
-        );
-        return {
-            x: lerpNumber(from.centerX, to.centerX, segmentProgress),
-            y: lerpNumber(from.centerY, to.centerY, segmentProgress)
-        };
+        if (this.floorView) {
+            return this.floorView;
+        }
+        return this.model.floorStates?.[this.model.floorIndex] || null;
     }
 
     /**
-     * 전술 화면 전체 배경과 제목 구분선을 그립니다.
+     * 공통 전체 화면 배경을 그립니다.
      * @private
      */
     #drawBackdrop() {
-        const colors = ColorSchemes.Tactics;
         renderGL('background', {
             shape: 'rect',
             x: this.WW * 0.5,
             y: this.WH * 0.5,
             w: this.WW,
             h: this.WH,
-            fill: colors.Backdrop
+            fill: ColorSchemes.Tactics.Backdrop
         });
+    }
+
+    /**
+     * 메타 로딩 화면을 그립니다.
+     * @private
+     */
+    #drawLoading() {
+        const colors = ColorSchemes.Tactics;
+        const x = this.UIOffsetX + (this.UIWW * 0.5);
+        this.#drawText('ui', '진행도 불러오는 중…', x, this.WH * 0.5, this.fonts.HEADING, colors.UI.Text, 'center');
+    }
+
+    /**
+     * 메인 메뉴를 그립니다.
+     * @private
+     */
+    #drawMenu() {
+        const colors = ColorSchemes.Tactics;
+        const centerX = this.UIOffsetX + (this.UIWW * 0.5);
+        this.#drawText('ui', this.data.TEXT.TITLE, centerX, this.#uwh(24), this.fonts.TITLE, colors.UI.Text, 'center');
+        this.#drawText('ui', this.data.TEXT.SUBTITLE, centerX, this.#uwh(31), this.fonts.SUBTITLE, colors.UI.Muted, 'center');
         renderGL('background', {
             shape: 'rect',
-            x: this.boardFrame.x + (this.boardFrame.w * 0.5),
-            y: this.boardFrame.y + (this.boardFrame.h * 0.5),
-            w: this.boardFrame.w,
-            h: this.boardFrame.h,
-            fill: colors.BoardFrame
+            x: centerX,
+            y: this.#uwh(44),
+            w: this.#uww(38),
+            h: this.#uwh(12),
+            fill: colors.UI.Panel,
+            alpha: 0.9
         });
+        this.#drawText(
+            'ui',
+            '플레이 ' + String(this.meta.playCount) + '회  ·  최고 점수 ' + String(this.meta.bestScore),
+            centerX,
+            this.#uwh(41.5),
+            this.fonts.BODY,
+            colors.UI.Text,
+            'center'
+        );
+        this.#drawText(
+            'ui',
+            '해금 컷씬 ' + String(this.meta.unlockedCutsceneIds.length)
+                + ' / ' + String(this.galleryEntries.length),
+            centerX,
+            this.#uwh(47),
+            this.fonts.SMALL,
+            colors.UI.Muted,
+            'center'
+        );
+        this.#drawText('ui', 'Enter 시작 · G 갤러리', centerX, this.#uwh(82), this.fonts.SMALL, colors.UI.Muted, 'center');
     }
 
     /**
-     * 높이 벽면, 타일 상단, 계단과 현재 전술 범위 강조를 그립니다.
+     * 스타터 선택 화면을 그립니다.
      * @private
      */
-    #drawBoard() {
+    #drawStarterSelect() {
         const colors = ColorSchemes.Tactics;
-        const tileFaceSize = this.tileSize - (this.tileGap * 2);
-
-        for (let y = 0; y < this.data.MAP.HEIGHT; y++) {
-            for (let x = 0; x < this.data.MAP.WIDTH; x++) {
-                const tile = this.#getTileVisual(x, y);
-                if (tile.height <= 0) {
-                    continue;
-                }
-                const wallHeight = tileFaceSize + (tile.height * this.elevationLift);
-                renderGL('background', {
-                    shape: 'rect',
-                    x: tile.centerX,
-                    y: tile.top + (wallHeight * 0.5) + this.tileGap,
-                    w: tileFaceSize,
-                    h: wallHeight,
-                    fill: tile.height > 1 ? colors.Tile.Side2 : colors.Tile.Side1
-                });
-            }
-        }
-
-        for (let y = 0; y < this.data.MAP.HEIGHT; y++) {
-            for (let x = 0; x < this.data.MAP.WIDTH; x++) {
-                const tile = this.#getTileVisual(x, y);
-                const fill = tile.height >= 2
-                    ? colors.Tile.High2
-                    : (tile.height === 1 ? colors.Tile.High1 : colors.Tile.Low);
-                renderGL('background', {
-                    shape: 'rect',
-                    x: tile.centerX,
-                    y: tile.centerY,
-                    w: tileFaceSize,
-                    h: tileFaceSize,
-                    fill
-                });
-                renderGL('background', {
-                    shape: 'rect',
-                    x: tile.centerX,
-                    y: tile.top + this.tileSize - this.tileGap - (this.tileGap * 0.35),
-                    w: tileFaceSize,
-                    h: this.tileGap * 0.7,
-                    fill: colors.Tile.Edge
-                });
-            }
-        }
-
-        for (const stair of this.data.MAP.STAIRS) {
-            const tile = this.#getTileVisual(stair.x, stair.y);
-            for (let step = 1; step <= 3; step++) {
-                renderGL('background', {
-                    shape: 'rect',
-                    x: tile.centerX,
-                    y: tile.top + (this.tileSize * (step / 4)),
-                    w: this.tileSize * 0.64,
-                    h: this.tileGap * 0.75,
-                    fill: colors.Tile.Stair
-                });
-            }
-        }
-        this.#drawTacticalHighlights();
-    }
-
-    /**
-     * 이동 가능 타일, 현재 호버와 공격·대화 대상 타일을 반투명 색으로 표시합니다.
-     * @private
-     */
-    #drawTacticalHighlights() {
-        const colors = ColorSchemes.Tactics;
-        const size = this.tileSize - (this.tileGap * 3.2);
-
-        if (this.model.turn === 'player' && this.model.phase === 'move' && !this.#isPresentationLocked()) {
-            for (const reachable of this.reachability.values()) {
-                const tile = this.#getTileVisual(reachable.x, reachable.y);
-                renderGL('background', {
-                    shape: 'rect',
-                    x: tile.centerX,
-                    y: tile.centerY,
-                    w: size,
-                    h: size,
-                    fill: colors.Tile.Reachable
-                });
-            }
-        }
-
-        if (this.model.turn === 'player' && this.model.phase === 'action') {
-            for (const target of this.actionTargets) {
-                const tile = this.#getTileVisual(target.x, target.y);
-                renderGL('background', {
-                    shape: 'rect',
-                    x: tile.centerX,
-                    y: tile.centerY,
-                    w: size,
-                    h: size,
-                    fill: colors.Tile.Attack
-                });
-            }
-        }
-
-        if (this.hoveredTile) {
-            const key = toTileKey(this.hoveredTile.x, this.hoveredTile.y);
-            const isMoveHover = this.model.phase === 'move' && this.reachability.has(key);
-            const isActionHover = this.model.phase === 'action' && this.actionTargets.some((target) => (
-                target.x === this.hoveredTile.x && target.y === this.hoveredTile.y
-            ));
-            if (isMoveHover || isActionHover) {
-                const tile = this.#getTileVisual(this.hoveredTile.x, this.hoveredTile.y);
-                renderGL('background', {
-                    shape: 'rect',
-                    x: tile.centerX,
-                    y: tile.centerY,
-                    w: size * 0.82,
-                    h: size * 0.82,
-                    fill: colors.Tile.Hover,
-                    alpha: 0.36
-                });
-            }
-        }
-
-        if (this.model.turn === 'player' && this.model.phase === 'action') {
-            const isCursorTarget = this.actionTargets.some((target) => (
-                target.x === this.cursorTile.x && target.y === this.cursorTile.y
-            ));
-            if (isCursorTarget) {
-                const tile = this.#getTileVisual(this.cursorTile.x, this.cursorTile.y);
-                render('texteffect', {
-                    shape: 'rect',
-                    x: tile.centerX - (size * 0.38),
-                    y: tile.centerY - (size * 0.38),
-                    w: size * 0.76,
-                    h: size * 0.76,
-                    fill: false,
-                    stroke: colors.Tile.Hover,
-                    lineWidth: Math.max(2, this.tileSize * 0.045)
-                });
-            }
-        }
-    }
-
-    /**
-     * 맵 위쪽의 철문을 잠김/개방 상태에 맞춰 그립니다.
-     * @private
-     */
-    #drawDoor() {
-        const colors = ColorSchemes.Tactics;
-        const door = this.model.door || this.data.OBJECTS.DOOR;
-        const tile = this.#getTileVisual(door.x, door.y);
-        const doorW = this.tileSize * 0.78;
-        const doorH = this.tileSize * 0.76;
-        const isOpen = this.model.gateOpen === true;
-        if (isOpen) {
-            renderGL('object', {
+        const centerX = this.UIOffsetX + (this.UIWW * 0.5);
+        this.#drawText('ui', '출발 장비 선택', centerX, this.#uwh(18), this.fonts.TITLE, colors.UI.Text, 'center');
+        this.#drawText(
+            'ui',
+            '이동과 행동은 독립적입니다. 이번 플레이의 첫 선택을 고르세요.',
+            centerX,
+            this.#uwh(25),
+            this.fonts.BODY,
+            colors.UI.Muted,
+            'center'
+        );
+        const w = this.#uww(27);
+        const gap = this.#uww(3);
+        const startX = this.UIOffsetX + ((this.UIWW - ((w * 2) + gap)) * 0.5);
+        this.data.STARTER_CHOICES.forEach((choice, index) => {
+            const x = startX + (index * (w + gap));
+            const selected = index === this.starterIndex;
+            const minScale = Number(this.data.ANIMATION.SELECTION_MIN_SCALE) || 0.72;
+            const selectedScale = selected
+                ? minScale + ((1 - minScale) * this.presentation.menuSelectionProgress)
+                : 1;
+            renderGL('background', {
                 shape: 'rect',
-                x: tile.centerX,
-                y: tile.centerY,
-                w: doorW * 0.9,
-                h: doorH * 0.9,
-                fill: colors.UI.Success,
-                alpha: 0.22
+                x: x + (w * 0.5),
+                y: this.#uwh(42),
+                w: w * selectedScale,
+                h: this.#uwh(22) * selectedScale,
+                fill: selected ? colors.UI.PanelStrong : colors.UI.Panel,
+                alpha: 0.95
             });
-            for (const direction of [-1, 1]) {
-                renderGL('object', {
-                    shape: 'rect',
-                    x: tile.centerX + (direction * doorW * 0.42),
-                    y: tile.centerY,
-                    w: doorW * 0.18,
-                    h: doorH,
-                    fill: colors.Entity.PlayerDark
-                });
-            }
+            this.#drawText('ui', choice.label, x + (w * 0.5), this.#uwh(36), this.fonts.HEADING, colors.UI.Text, 'center');
+            const lines = this.#wrapText(choice.description, this.fonts.SMALL, w * 0.8, 3);
+            lines.forEach((line, lineIndex) => {
+                this.#drawText(
+                    'ui',
+                    line,
+                    x + (w * 0.5),
+                    this.#uwh(42) + (lineIndex * this.#uwh(2.7)),
+                    this.fonts.SMALL,
+                    colors.UI.Muted,
+                    'center'
+                );
+            });
+        });
+        this.#drawText('ui', '방향키/WASD 선택 · Enter 확정', centerX, this.#uwh(73), this.fonts.SMALL, colors.UI.Muted, 'center');
+    }
+
+    /**
+     * 컷씬 갤러리를 잠금 상태와 함께 그립니다.
+     * @private
+     */
+    #drawGallery() {
+        const colors = ColorSchemes.Tactics;
+        const centerX = this.UIOffsetX + (this.UIWW * 0.5);
+        this.#drawText('ui', '컷씬 갤러리', centerX, this.#uwh(12), this.fonts.TITLE, colors.UI.Text, 'center');
+        const listX = this.UIOffsetX + this.#uww(12);
+        const listY = this.#uwh(23);
+        const rowH = this.#uwh(5.7);
+        this.galleryEntries.forEach((entry, index) => {
+            const unlocked = this.#isCutsceneUnlocked(entry.id);
+            const selected = index === this.galleryIndex;
+            const minScale = Number(this.data.ANIMATION.SELECTION_MIN_SCALE) || 0.72;
+            const selectedScale = selected
+                ? minScale + ((1 - minScale) * this.presentation.menuSelectionProgress)
+                : 1;
+            renderGL('background', {
+                shape: 'rect',
+                x: listX + this.#uww(17),
+                y: listY + (index * rowH),
+                w: this.#uww(34) * selectedScale,
+                h: rowH * 0.82 * selectedScale,
+                fill: selected ? colors.UI.PanelStrong : colors.UI.Panel,
+                alpha: selected ? 1 : 0.72
+            });
+            this.#drawText(
+                'ui',
+                (unlocked ? '◆ ' : '◇ ') + (unlocked ? entry.title : '잠긴 기록'),
+                listX + this.#uww(1.2),
+                listY + (index * rowH),
+                this.fonts.BODY,
+                unlocked ? colors.UI.Text : colors.UI.Muted
+            );
+        });
+        const entry = this.galleryEntries[this.galleryIndex];
+        const unlocked = entry && this.#isCutsceneUnlocked(entry.id);
+        const cardX = this.UIOffsetX + this.#uww(55);
+        renderGL('background', {
+            shape: 'rect',
+            x: cardX + this.#uww(16),
+            y: this.#uwh(44),
+            w: this.#uww(32),
+            h: this.#uwh(38),
+            fill: colors.UI.Panel,
+            alpha: 0.96
+        });
+        this.#drawText(
+            'ui',
+            unlocked ? entry.title : '잠긴 컷씬',
+            cardX + this.#uww(16),
+            this.#uwh(34),
+            this.fonts.HEADING,
+            unlocked ? colors.UI.Text : colors.UI.Muted,
+            'center'
+        );
+        this.#drawText(
+            'ui',
+            unlocked
+                ? String(entry.cards.length) + '장 · Enter로 재생'
+                : '플레이 중 조건을 달성하고 마지막 카드까지 확인하세요.',
+            cardX + this.#uww(16),
+            this.#uwh(46),
+            this.fonts.BODY,
+            colors.UI.Muted,
+            'center'
+        );
+        this.#drawText(
+            'ui',
+            String(this.galleryIndex + 1) + ' / ' + String(this.galleryEntries.length),
+            centerX,
+            this.#uwh(70),
+            this.fonts.MONO,
+            colors.UI.Muted,
+            'center'
+        );
+    }
+
+    /**
+     * 정사각형 탑뷰 보드와 전투 HUD를 그립니다.
+     * @private
+     */
+    #drawBattle() {
+        if (!this.model) {
             return;
         }
-        renderGL('object', {
+        const colors = ColorSchemes.Tactics;
+        renderGL('background', {
             shape: 'rect',
-            x: tile.centerX,
-            y: tile.centerY - (this.tileSize * 0.04),
-            w: doorW,
-            h: doorH,
-            fill: colors.Entity.PlayerDark
+            x: this.boardRect.x + (this.boardRect.w * 0.5),
+            y: this.boardRect.y + (this.boardRect.h * 0.5),
+            w: this.boardRect.w,
+            h: this.boardRect.h,
+            fill: colors.BoardFrame,
+            alpha: 0.9
         });
-        renderGL('object', {
-            shape: 'rect',
-            x: tile.centerX,
-            y: tile.centerY,
-            w: doorW * 0.78,
-            h: doorH * 0.78,
-            fill: colors.UI.PanelStrong
-        });
-        for (let stripe = -1; stripe <= 1; stripe++) {
-            renderGL('object', {
-                shape: 'rect',
-                x: tile.centerX + (stripe * doorW * 0.22),
-                y: tile.centerY + (doorH * 0.32),
-                w: doorW * 0.12,
-                h: doorH * 0.13,
-                fill: colors.UI.Warning,
-                rotation: 28
-            });
-        }
+        this.#drawTopDownBoard();
+        this.#drawWorldObjects();
+        this.#drawWorldEffects();
+        this.#drawBattleHud();
     }
 
     /**
-     * 상자, 로라, 플레이어를 화면 깊이 순서대로 그립니다.
+     * 층별 색, 이동 범위, 경로, 공격 표식을 그립니다.
      * @private
      */
-    #drawEntities() {
-        const entities = [];
-        for (const box of this.model.boxes) {
-            if (!box.destroyed) {
-                const tile = this.#getTileVisual(box.x, box.y);
-                entities.push({ type: 'box', data: box, sortY: tile.centerY });
+    #drawTopDownBoard() {
+        const colors = ColorSchemes.Tactics;
+        const floorIndex = Number(this.model.floorIndex) || 0;
+        const baseFill = floorIndex === 0 ? colors.Tile.Low : colors.Tile.High2;
+        for (let y = 0; y < this.data.MAP.HEIGHT; y++) {
+            for (let x = 0; x < this.data.MAP.WIDTH; x++) {
+                const point = this.#projectTile(x, y);
+                const alternate = (x + y) % 2 === 0;
+                renderGL('background', {
+                    shape: 'rect',
+                    x: point.x,
+                    y: point.y,
+                    w: this.tileSide,
+                    h: this.tileSide,
+                    fill: floorIndex === 0
+                        ? (alternate ? baseFill : colors.Tile.High1)
+                        : (alternate ? baseFill : colors.Tile.Side2),
+                    alpha: 0.96
+                });
+                renderGL('background', {
+                    shape: 'rect',
+                    x: point.x,
+                    y: point.y,
+                    w: this.tileSide * 0.92,
+                    h: this.tileSide * 0.92,
+                    fill: baseFill,
+                    alpha: 0.9
+                });
             }
         }
-        const loraPoint = this.#getLoraRenderPoint();
-        entities.push({ type: 'lora', data: loraPoint, sortY: loraPoint.y });
-        const playerPoint = this.#getPlayerRenderPoint();
-        entities.push({ type: 'player', data: playerPoint, sortY: playerPoint.y });
-        entities.sort((left, right) => left.sortY - right.sortY);
 
-        for (const entity of entities) {
-            if (entity.type === 'box') this.#drawBox(entity.data, 1);
-            else if (entity.type === 'lora') this.#drawLora(entity.data);
-            else this.#drawPlayer(entity.data);
+        if (this.model.turn === 'player' && !this.model.movementUsed) {
+            for (const tile of this.reachability.values()) {
+                const point = this.#projectTile(tile.x, tile.y);
+                renderGL('background', {
+                    shape: 'rect',
+                    x: point.x,
+                    y: point.y,
+                    w: this.tileSide * 0.76,
+                    h: this.tileSide * 0.76,
+                    fill: colors.Tile.Reachable,
+                    alpha: 0.52
+                });
+            }
         }
-
-        if (this.actionAnimation?.ghostBox) {
-            const alpha = 1 - clampNumber(
-                this.actionAnimation.elapsed / this.actionAnimation.duration,
-                0,
-                1
+        if (this.attackSelected) {
+            this.actionTargets.forEach((target, index) => {
+                const point = this.#projectTile(target.x, target.y);
+                const selected = index === this.targetIndex;
+                const minScale = Number(this.data.ANIMATION.SELECTION_MIN_SCALE) || 0.72;
+                const scale = selected
+                    ? minScale + ((1 - minScale) * this.presentation.attackProgress)
+                    : 0.82;
+                renderGL('background', {
+                    shape: 'rect',
+                    x: point.x,
+                    y: point.y,
+                    w: this.tileSide * scale,
+                    h: this.tileSide * scale,
+                    fill: colors.Tile.Attack,
+                    alpha: selected
+                        ? 0.36 + (0.3 * this.presentation.attackProgress)
+                        : 0.42
+                });
+            });
+        }
+        if (this.hoveredTile) {
+            const point = this.#projectTile(this.hoveredTile.x, this.hoveredTile.y);
+            const minScale = Number(this.data.ANIMATION.SELECTION_MIN_SCALE) || 0.72;
+            const scale = minScale
+                + ((0.88 - minScale) * this.presentation.hoverProgress);
+            renderGL('background', {
+                shape: 'rect',
+                x: point.x,
+                y: point.y,
+                w: this.tileSide * scale,
+                h: this.tileSide * scale,
+                fill: colors.Tile.Hover,
+                alpha: 0.24 + (0.34 * this.presentation.hoverProgress)
+            });
+        }
+        this.plannedPath.slice(1).forEach((tile, index) => {
+            const point = this.#projectTile(tile.x, tile.y);
+            renderGL('object', {
+                shape: 'circle',
+                x: point.x,
+                y: point.y,
+                w: this.tileSide * this.data.LAYOUT.BOARD.PATH_MARKER_RATIO
+                    * (0.72 + (0.28 * this.presentation.pathProgress)),
+                h: this.tileSide * this.data.LAYOUT.BOARD.PATH_MARKER_RATIO
+                    * (0.72 + (0.28 * this.presentation.pathProgress)),
+                fill: colors.Tile.Path
+            });
+            this.#drawText(
+                'texteffect',
+                String(index + 1),
+                point.x,
+                point.y,
+                this.fonts.SMALL,
+                colors.UI.Text,
+                'center'
             );
-            this.#drawBox({
-                id: this.actionAnimation.targetId,
-                x: this.actionAnimation.targetPosition.x,
-                y: this.actionAnimation.targetPosition.y
-            }, alpha);
-        }
-    }
-
-    /**
-     * 전술 유닛의 공통 그림자를 그립니다.
-     * @param {number} x - 중심 X 좌표입니다.
-     * @param {number} y - 중심 Y 좌표입니다.
-     * @param {number} width - 그림자 너비입니다.
-     * @param {number} alpha - 그림자 투명도입니다.
-     * @private
-     */
-    #drawEntityShadow(x, y, width, alpha = 1) {
-        renderGL('object', {
-            shape: 'circle',
-            x,
-            y: y + (this.tileSize * this.data.LAYOUT.BOARD.SHADOW_OFFSET_RATIO),
-            w: width,
-            h: width * 0.46,
-            fill: ColorSchemes.Tactics.Entity.Shadow,
-            alpha
         });
     }
 
     /**
-     * 플레이어 말 모양과 바라보는 방향 화살표를 그립니다.
-     * @param {{x:number,y:number}} point - 플레이어 표시 중심입니다.
+     * 층의 오브젝트와 두 인물을 깊이 순서로 그립니다.
      * @private
      */
-    #drawPlayer(point) {
+    #drawWorldObjects() {
+        const floor = this.#getCurrentFloor();
+        if (!floor) {
+            return;
+        }
+        const entries = [];
+        for (const wall of toList(floor.walls)) {
+            if (!wall.destroyed) {
+                entries.push({ type: 'wall', value: wall });
+            }
+        }
+        for (const item of toList(floor.items)) {
+            if (!item.collected
+                && (!item.hidden || item.identified || item.nearbyHint)) {
+                entries.push({ type: 'item', value: item });
+            }
+        }
+        for (const trap of toList(floor.traps)) {
+            if (trap.revealed
+                || trap.triggered
+                || this.meta.discoveredTrapIds.includes(trap.id)) {
+                entries.push({ type: 'trap', value: trap });
+            }
+        }
+        for (const teleport of toList(floor.teleports)) {
+            if (!teleport.used) {
+                entries.push({ type: 'teleport', value: teleport });
+            }
+        }
+        for (const mob of toList(floor.mobs)) {
+            if (mob.alive !== false && Number(mob.hp) > 0) {
+                entries.push({ type: 'mob', value: mob });
+            }
+        }
+        if (floor.gate) {
+            entries.push({ type: 'gate', value: floor.gate });
+        }
+        if (this.model.lora) {
+            entries.push({ type: 'lora', value: this.model.lora });
+        }
+        if (this.model.player) {
+            entries.push({ type: 'player', value: this.model.player });
+        }
+        entries.sort((left, right) => (
+            Number(left.value.y) - Number(right.value.y)
+            || Number(left.value.x) - Number(right.value.x)
+        ));
+        for (const entry of entries) {
+            if (entry.type === 'wall') this.#drawWall(entry.value);
+            else if (entry.type === 'item') this.#drawWorldItem(entry.value);
+            else if (entry.type === 'trap') this.#drawTrap(entry.value);
+            else if (entry.type === 'teleport') this.#drawTeleport(entry.value);
+            else if (entry.type === 'mob') this.#drawMob(entry.value);
+            else if (entry.type === 'gate') this.#drawGate(entry.value);
+            else if (entry.type === 'lora') this.#drawLora(entry.value);
+            else this.#drawPlayer(entry.value);
+        }
+    }
+
+    /**
+     * 파괴 가능한 벽을 그립니다.
+     * @param {object} wall - 벽 상태입니다.
+     * @private
+     */
+    #drawWall(wall) {
         const colors = ColorSchemes.Tactics;
-        const size = this.tileSize * this.data.LAYOUT.BOARD.ENTITY_SCALE_RATIO;
-        this.#drawEntityShadow(point.x, point.y, size * 0.92);
+        const point = this.#projectTile(wall.x, wall.y);
+        const size = this.tileSide * 0.58;
+        renderGL('object', {
+            shape: 'rect',
+            x: point.x,
+            y: point.y,
+            w: size,
+            h: size,
+            fill: colors.Entity.Wall
+        });
+        renderGL('object', {
+            shape: 'rect',
+            x: point.x,
+            y: point.y,
+            w: size * 0.88,
+            h: size * 0.14,
+            fill: colors.Tile.Wall
+        });
+        this.#drawWorldGlyph('벽', point.x, point.y, colors.UI.Text);
+    }
+
+    /**
+     * 월드 아이템과 공개 상태에 따른 글리프를 그립니다.
+     * @param {object} entry - 아이템 배치 상태입니다.
+     * @private
+     */
+    #drawWorldItem(entry) {
+        const colors = ColorSchemes.Tactics;
+        const point = this.#projectTile(entry.x, entry.y);
+        const known = this.#isItemKnown(entry.itemId) || entry.identified === true;
+        const glyph = known ? this.#getItemGlyph(entry.itemId) : '?';
+        renderGL('object', {
+            shape: 'circle',
+            x: point.x,
+            y: point.y,
+            w: this.tileSide * 0.45,
+            h: this.tileSide * 0.45,
+            fill: colors.Entity.Item
+        });
+        renderGL('object', {
+            shape: 'rect',
+            x: point.x,
+            y: point.y,
+            w: this.tileSide * 0.28,
+            h: this.tileSide * 0.28,
+            fill: colors.Tile.Item
+        });
+        this.#drawWorldGlyph(glyph, point.x, point.y, colors.UI.Text);
+    }
+
+    /**
+     * 발견된 함정을 그립니다.
+     * @param {object} trap - 함정 상태입니다.
+     * @private
+     */
+    #drawTrap(trap) {
+        const colors = ColorSchemes.Tactics;
+        const point = this.#projectTile(trap.x, trap.y);
+        renderGL('object', {
+            shape: 'rect',
+            x: point.x,
+            y: point.y,
+            w: this.tileSide * 0.52,
+            h: this.tileSide * 0.52,
+            fill: colors.Tile.Trap,
+            alpha: trap.triggered ? 0.38 : 0.78
+        });
+        this.#drawWorldGlyph('!', point.x, point.y, colors.UI.Text);
+    }
+
+    /**
+     * 층 이동 텔레포트를 그립니다.
+     * @param {object} teleport - 텔레포트 상태입니다.
+     * @private
+     */
+    #drawTeleport(teleport) {
+        const colors = ColorSchemes.Tactics;
+        const point = this.#projectTile(teleport.x, teleport.y);
+        const pulse = 0.88 + (Math.sin(this.elapsedSeconds * 4) * 0.1);
+        renderGL('object', {
+            shape: 'circle',
+            x: point.x,
+            y: point.y,
+            w: this.tileSide * 0.6 * pulse,
+            h: this.tileSide * 0.6 * pulse,
+            fill: colors.Entity.Teleport,
+            alpha: teleport.used ? 0.32 : 0.68
+        });
+        renderGL('object', {
+            shape: 'circle',
+            x: point.x,
+            y: point.y,
+            w: this.tileSide * 0.34,
+            h: this.tileSide * 0.34,
+            fill: colors.Tile.Teleport
+        });
+        this.#drawWorldGlyph('전', point.x, point.y, colors.UI.Text);
+    }
+
+    /**
+     * 일반 몹을 그립니다.
+     * @param {object} mob - 몹 상태입니다.
+     * @private
+     */
+    #drawMob(mob) {
+        const colors = ColorSchemes.Tactics;
+        const point = this.#projectTile(mob.x, mob.y);
+        const size = this.tileSide * 0.5;
+        this.#drawShadow(point.x, point.y, size);
         renderGL('object', {
             shape: 'circle',
             x: point.x,
             y: point.y,
             w: size,
             h: size,
-            fill: colors.Entity.PlayerDark
+            fill: colors.Entity.MobDark
         });
         renderGL('object', {
             shape: 'circle',
             x: point.x,
-            y: point.y - (size * 0.04),
+            y: point.y,
             w: size * 0.78,
             h: size * 0.78,
-            fill: colors.Entity.Player
+            fill: colors.Entity.Mob
         });
-        renderGL('object', {
-            shape: 'arrow',
-            x: point.x,
-            y: point.y,
-            w: size * 0.25,
-            h: size * 0.34,
-            fill: colors.Entity.PlayerAccent,
-            rotation: this.facing
-        });
+        this.#drawWorldGlyph('M', point.x, point.y, colors.UI.Text);
+        this.#drawWorldHp(point.x, point.y - (size * 0.62), mob.hp, mob.maxHp || 50, size);
     }
 
     /**
-     * 로라의 머리, 몸체, 표식과 월드 HP 칸을 그립니다.
+     * 지하 게이트를 그립니다.
+     * @param {object} gate - 게이트 좌표입니다.
      * @private
      */
-    #drawLora(point = this.#getLoraRenderPoint()) {
+    #drawGate(gate) {
         const colors = ColorSchemes.Tactics;
-        const size = this.tileSize * this.data.LAYOUT.BOARD.ENTITY_SCALE_RATIO;
-        const attackFlash = this.actionAnimation?.targetId === LORA_ID
-            && Math.floor(this.actionAnimation.elapsed * 30) % 2 === 0;
-        const bodyColor = this.model.lora.alive
-            ? (attackFlash ? colors.Entity.LoraAccent : colors.Entity.Lora)
-            : colors.Entity.LoraDark;
-        const alpha = this.model.lora.alive ? 1 : 0.62;
+        const point = this.#projectTile(gate.x, gate.y);
+        const open = this.model.gateOpen === true;
+        const size = this.tileSide * 0.72;
+        renderGL('object', {
+            shape: 'rect',
+            x: point.x,
+            y: point.y,
+            w: size,
+            h: size,
+            fill: open ? colors.UI.Success : colors.Entity.Wall,
+            alpha: open ? 0.58 : 1
+        });
+        renderGL('object', {
+            shape: 'rect',
+            x: point.x,
+            y: point.y,
+            w: size * 0.5,
+            h: size * 0.8,
+            fill: colors.Tile.Gate
+        });
+        this.#drawWorldGlyph(open ? '열' : '문', point.x, point.y, colors.UI.Text);
+    }
 
-        this.#drawEntityShadow(point.x, point.y, size * 0.94, alpha);
+    /**
+     * 플레이어 말을 그립니다.
+     * @param {object} player - 플레이어 상태입니다.
+     * @private
+     */
+    #drawPlayer(player) {
+        const colors = ColorSchemes.Tactics;
+        const point = this.#projectTile(
+            this.presentation.playerX,
+            this.presentation.playerY
+        );
+        const alpha = clampNumber(this.presentation.playerAlpha, 0, 1);
+        const size = this.tileSide * 0.56
+            * this.presentation.playerScale
+            * (1 + (this.presentation.actionPulse
+                * this.data.ANIMATION.ACTION_PLAYER_SCALE));
+        this.#drawShadow(point.x, point.y, size, alpha);
+        renderGL('object', {
+            shape: 'circle',
+            x: point.x,
+            y: point.y,
+            w: size,
+            h: size,
+            fill: colors.Entity.PlayerDark,
+            alpha
+        });
+        renderGL('object', {
+            shape: 'circle',
+            x: point.x,
+            y: point.y,
+            w: size * 0.78,
+            h: size * 0.78,
+            fill: colors.Entity.Player,
+            alpha
+        });
+        this.#drawText(
+            'texteffect',
+            'P',
+            point.x,
+            point.y,
+            this.fonts.HEADING,
+            colors.Entity.PlayerAccent,
+            'center',
+            alpha
+        );
+        this.#drawWorldHp(
+            point.x,
+            point.y - (size * 0.62),
+            this.presentation.playerHp,
+            player.maxHp || 100,
+            size,
+            alpha
+        );
+    }
+
+    /**
+     * 고정 보스 로라를 그립니다.
+     * @param {object} lora - 로라 상태입니다.
+     * @private
+     */
+    #drawLora(lora) {
+        const colors = ColorSchemes.Tactics;
+        const point = this.#projectTile(lora.x, lora.y);
+        const size = this.tileSide * 0.64
+            * (1 + (this.presentation.actionPulse
+                * this.data.ANIMATION.ACTION_LORA_SCALE));
+        const alive = lora.alive !== false && Number(lora.hp) > 0;
+        this.#drawShadow(point.x, point.y, size, alive ? 1 : 0.5);
         renderGL('object', {
             shape: 'circle',
             x: point.x,
@@ -2075,765 +3811,993 @@ export class TutorialScene extends BaseScene {
             w: size,
             h: size,
             fill: colors.Entity.LoraDark,
-            alpha
+            alpha: alive ? 1 : 0.56
         });
         renderGL('object', {
             shape: 'circle',
             x: point.x,
-            y: point.y + (size * 0.03),
-            w: size * 0.78,
-            h: size * 0.78,
-            fill: bodyColor,
-            alpha
+            y: point.y,
+            w: size * 0.8,
+            h: size * 0.8,
+            fill: this.flashSeconds > 0 ? colors.Entity.LoraAccent : colors.Entity.Lora,
+            alpha: alive ? 1 : 0.56
         });
-        renderGL('object', {
-            shape: 'circle',
-            x: point.x,
-            y: point.y - (size * 0.24),
-            w: size * 0.52,
-            h: size * 0.34,
-            fill: colors.Entity.LoraHair,
-            alpha
-        });
-        render('texteffect', {
-            shape: 'text',
-            x: point.x,
-            y: point.y + (size * 0.12),
-            text: 'L',
-            font: this.fonts.MONO,
-            fill: colors.Entity.LoraAccent,
-            align: 'center',
-            baseline: 'middle',
-            alpha
-        });
-
-        const hpRatio = clampNumber(this.model.lora.hp / this.model.lora.maxHp, 0, 1);
-        const barY = point.y - (size * 0.72);
         renderGL('object', {
             shape: 'rect',
             x: point.x,
-            y: barY,
-            w: size,
-            h: size * 0.11,
-            fill: colors.UI.HpEmpty
+            y: point.y - (size * 0.23),
+            w: size * 0.56,
+            h: size * 0.22,
+            fill: colors.Entity.LoraHair
         });
-        if (hpRatio > 0) {
+        if (this.stabilizeSeconds > 0) {
             renderGL('object', {
-                shape: 'rect',
-                x: point.x - (size * 0.5) + (size * hpRatio * 0.5),
-                y: barY,
-                w: size * hpRatio,
-                h: size * 0.11,
-                fill: colors.UI.HpFull
-            });
-        }
-    }
-
-    /**
-     * 파괴 가능한 상자를 몸체와 보강 띠로 그립니다.
-     * @param {{x:number,y:number}} box - 상자 타일 위치입니다.
-     * @param {number} alpha - 파괴 잔상 투명도입니다.
-     * @private
-     */
-    #drawBox(box, alpha) {
-        const colors = ColorSchemes.Tactics;
-        const tile = this.#getTileVisual(box.x, box.y);
-        const size = this.tileSize * 0.58;
-        this.#drawEntityShadow(tile.centerX, tile.centerY, size, alpha);
-        renderGL('object', {
-            shape: 'rect',
-            x: tile.centerX,
-            y: tile.centerY,
-            w: size,
-            h: size,
-            fill: colors.Entity.Box,
-            alpha
-        });
-        renderGL('object', {
-            shape: 'rect',
-            x: tile.centerX,
-            y: tile.centerY,
-            w: size * 0.16,
-            h: size,
-            fill: colors.Entity.BoxBand,
-            alpha
-        });
-        renderGL('object', {
-            shape: 'rect',
-            x: tile.centerX,
-            y: tile.centerY,
-            w: size,
-            h: size * 0.14,
-            fill: colors.Entity.BoxBand,
-            alpha
-        });
-    }
-
-    /**
-     * 호버 또는 키보드 커서 목적지까지의 최단 이동 경로를 선과 순서 점으로 그립니다.
-     * @private
-     */
-    #drawPathPreview() {
-        if (this.model.turn !== 'player'
-            || this.model.phase !== 'move'
-            || this.#isPresentationLocked()) {
-            return;
-        }
-        const previewTile = this.hoveredTile || this.cursorTile;
-        const reachability = this.reachability.get(toTileKey(previewTile.x, previewTile.y));
-        const selectedDestination = this.plannedPath[this.plannedPath.length - 1];
-        const hoverMatchesSelection = this.hoveredTile
-            && selectedDestination.x === this.hoveredTile.x
-            && selectedDestination.y === this.hoveredTile.y;
-        const path = this.plannedDestinationSelected
-            && (!this.hoveredTile || hoverMatchesSelection)
-            ? this.plannedPath
-            : reachability?.path;
-        if (!path || path.length < 2) {
-            return;
-        }
-
-        const colors = ColorSchemes.Tactics;
-        for (let index = 1; index < path.length; index++) {
-            const previous = this.#getTileVisual(
-                path[index - 1].x,
-                path[index - 1].y
-            );
-            const current = this.#getTileVisual(
-                path[index].x,
-                path[index].y
-            );
-            render('texteffect', {
-                shape: 'line',
-                x1: previous.centerX,
-                y1: previous.centerY,
-                x2: current.centerX,
-                y2: current.centerY,
-                stroke: colors.Tile.Path,
-                lineWidth: Math.max(2, this.tileSize * 0.055),
-                lineCap: 'round'
-            });
-            render('texteffect', {
                 shape: 'circle',
-                x: current.centerX,
-                y: current.centerY,
-                radius: this.tileSize * this.data.LAYOUT.BOARD.PATH_MARKER_RATIO,
-                fill: colors.UI.PanelStrong,
-                stroke: colors.Tile.Path,
-                lineWidth: Math.max(1, this.tileSize * 0.035)
-            });
-            render('texteffect', {
-                shape: 'text',
-                x: current.centerX,
-                y: current.centerY,
-                text: `${index}`,
-                font: this.fonts.SMALL,
-                fill: colors.UI.Text,
-                align: 'center',
-                baseline: 'middle'
+                x: point.x,
+                y: point.y,
+                w: size * (1.12 + (this.stabilizeSeconds * 0.2)),
+                h: size * (1.12 + (this.stabilizeSeconds * 0.2)),
+                fill: colors.Effects.Stabilize,
+                alpha: clampNumber(this.stabilizeSeconds, 0, 1) * 0.38
             });
         }
+        this.#drawWorldGlyph('L', point.x, point.y, colors.Entity.LoraAccent);
+        this.#drawWorldHp(
+            point.x,
+            point.y - (size * 0.68),
+            this.presentation.loraHp,
+            lora.maxHp || 100,
+            size * 1.08
+        );
     }
 
     /**
-     * 피격 파티클과 떠오르는 피해 텍스트를 2D 효과 레이어에 그립니다.
+     * 전술 말의 그림자를 그립니다.
+     * @param {number} x - 중심 X입니다.
+     * @param {number} y - 중심 Y입니다.
+     * @param {number} size - 기준 크기입니다.
+     * @param {number} [alpha=1] - 투명도입니다.
      * @private
      */
-    #drawWorldEffects() {
-        for (const particle of this.particles) {
-            const alpha = 1 - (particle.elapsed / particle.duration);
-            render('texteffect', {
-                shape: 'circle',
-                x: particle.x,
-                y: particle.y,
-                radius: particle.size,
-                fill: particle.color,
-                alpha
-            });
-        }
-        for (const floatingText of this.floatingTexts) {
-            const alpha = 1 - (floatingText.elapsed / floatingText.duration);
-            render('texteffect', {
-                shape: 'text',
-                x: floatingText.x,
-                y: floatingText.y,
-                text: floatingText.text,
-                font: this.fonts.HEADING,
-                fill: floatingText.color,
-                align: 'center',
-                baseline: 'middle',
-                alpha
-            });
-        }
+    #drawShadow(x, y, size, alpha = 1) {
+        const offset = Number(this.data.LAYOUT.BOARD.SHADOW_OFFSET_RATIO) || 0.08;
+        renderGL('object', {
+            shape: 'circle',
+            x,
+            y: y + (size * offset),
+            w: size,
+            h: size * 0.36,
+            fill: ColorSchemes.Tactics.Entity.Shadow,
+            alpha
+        });
     }
 
     /**
-     * 제목, 임무 상태, 로라 HP, 이벤트 로그와 행동 버튼을 그립니다.
+     * 월드 HP 막대를 그립니다.
+     * @param {number} x - 중심 X입니다.
+     * @param {number} y - 중심 Y입니다.
+     * @param {number} hp - 현재 HP입니다.
+     * @param {number} maxHp - 최대 HP입니다.
+     * @param {number} width - 막대 너비입니다.
+     * @param {number} [alpha=1] - 막대 투명도입니다.
      * @private
      */
-    #drawHud() {
+    #drawWorldHp(x, y, hp, maxHp, width, alpha = 1) {
         const colors = ColorSchemes.Tactics;
-        const header = this.data.LAYOUT.HEADER;
-        const headerX = this.UIOffsetX + this.#uww(header.X_UIWW);
-        const headerY = this.#uwh(header.Y_WH);
-        render('ui', {
-            shape: 'text',
-            x: headerX,
-            y: headerY,
-            text: this.data.TEXT.TITLE,
-            font: this.fonts.TITLE,
-            fill: colors.UI.Text,
-            baseline: 'middle'
-        });
-        render('ui', {
-            shape: 'text',
-            x: headerX,
-            y: headerY + this.#uwh(3.2),
-            text: this.data.TEXT.SUBTITLE,
-            font: this.fonts.SUBTITLE,
-            fill: colors.UI.Muted,
-            baseline: 'middle'
-        });
-
-        render('ui', {
-            shape: 'roundRect',
-            x: this.sidebar.x,
-            y: this.sidebar.y,
-            w: this.sidebar.w,
-            h: this.sidebar.h,
-            radius: this.sidebar.radius,
-            fill: colors.UI.Panel,
-            stroke: colors.UI.Border,
-            lineWidth: Math.max(1, this.UIWW * 0.0012),
-            shadowBlur: this.#uww(0.8),
-            shadowColor: colors.Entity.Shadow
-        });
-
-        const left = this.sidebar.x + this.sidebar.padding;
-        const right = this.sidebar.x + this.sidebar.w - this.sidebar.padding;
-        const contentWidth = right - left;
-        const turnColor = this.model.turn === 'player' ? colors.UI.Accent : colors.UI.Warning;
-        render('ui', {
-            shape: 'text',
-            x: left,
-            y: this.sidebar.y + this.#uwh(4.2),
-            text: this.#getTurnLabel(),
-            font: this.fonts.HEADING,
-            fill: turnColor,
-            baseline: 'middle'
-        });
-        render('ui', {
-            shape: 'text',
-            x: right,
-            y: this.sidebar.y + this.#uwh(4.2),
-            text: `ROUND ${this.model.round}/${this.model.maxRounds ?? 8}`,
-            font: this.fonts.MONO,
-            fill: colors.UI.Muted,
-            align: 'right',
-            baseline: 'middle'
-        });
-        this.#drawDivider(this.sidebar.y + this.#uwh(7.2));
-
-        this.#drawHudBar({
-            label: '플레이어 HP',
-            value: this.model.player.hp,
-            max: this.model.player.maxHp,
-            y: this.sidebar.y + this.#uwh(9.8),
-            color: colors.Entity.Player
-        });
-        this.#drawHudBar({
-            label: `로라 HP${this.model.lora.defending ? ' · 방어 중' : ''}`,
-            value: this.model.lora.hp,
-            max: this.model.lora.maxHp,
-            y: this.sidebar.y + this.#uwh(15.1),
-            color: colors.UI.HpFull
-        });
-        const instabilityState = typeof this.model.getInstabilityState === 'function'
-            ? this.model.getInstabilityState()
-            : null;
-        const instabilityLabel = typeof instabilityState === 'string'
-            ? instabilityState
-            : (instabilityState?.label || instabilityState?.name || '불안정');
-        this.#drawHudBar({
-            label: `불안정도 · ${instabilityLabel}`,
-            value: this.model.lora.instability,
-            max: this.model.lora.maxInstability ?? 100,
-            y: this.sidebar.y + this.#uwh(20.4),
-            color: (this.model.lora.instability ?? 0) > 60 ? colors.UI.Danger : colors.UI.Warning
-        });
-
-        render('ui', {
-            shape: 'text',
-            x: left,
-            y: this.sidebar.y + this.#uwh(27),
-            text: `게이트 · ${this.model.gateOpen ? '개방' : '잠김'}${this.model.player.defending ? '  /  플레이어 방어 중' : ''}`,
-            font: this.fonts.BODY,
-            fill: this.model.gateOpen ? colors.UI.Success : colors.UI.Muted,
-            baseline: 'middle'
-        });
-        this.#drawDivider(this.sidebar.y + this.#uwh(30));
-
-        render('ui', {
-            shape: 'text',
-            x: left,
-            y: this.sidebar.y + this.#uwh(33),
-            text: this.#getPhaseLabel(),
-            font: this.fonts.HEADING,
-            fill: colors.UI.Text,
-            baseline: 'middle'
-        });
-        this.#drawWrappedText({
-            text: this.#getTacticalStatusText(),
-            x: left,
-            y: this.sidebar.y + this.#uwh(36),
-            maxWidth: contentWidth,
-            font: this.fonts.SMALL,
-            color: colors.UI.Accent,
-            maxLines: 2
-        });
-
-        render('ui', {
-            shape: 'text',
-            x: left,
-            y: this.sidebar.y + this.#uwh(43),
-            text: '전술 로그',
-            font: this.fonts.BODY,
-            fill: colors.UI.Text,
-            baseline: 'middle'
-        });
-        let logY = this.sidebar.y + this.#uwh(46);
-        for (let index = 0; index < this.eventLog.length; index++) {
-            const lines = this.#drawWrappedText({
-                text: `${index === 0 ? '›' : '·'} ${this.eventLog[index]}`,
-                x: left,
-                y: logY,
-                maxWidth: contentWidth,
-                font: this.fonts.SMALL,
-                color: index === 0 ? colors.UI.Text : colors.UI.Muted,
-                maxLines: 2
-            });
-            logY += lines * this.#getFontSize(this.data.TYPOGRAPHY.SMALL) * 1.24;
-            if (logY > this.#uwh(this.data.LAYOUT.ACTIONS.TOP_WH - 1.5)) {
-                break;
-            }
-        }
-
-        if (!this.#isResultPhase() && !this.#isDialoguePhase()) {
-            for (const key of ['attack', 'defend', 'endTurn', 'undo', 'escape']) {
-                this.buttons[key]?.item.draw();
-            }
-        }
-        render('ui', {
-            shape: 'text',
-            x: right,
-            y: this.sidebar.y + this.sidebar.h - this.#uwh(1.5),
-            text: this.data.TEXT.CONTROLS,
-            font: this.fonts.SMALL,
-            fill: colors.UI.Muted,
-            align: 'right',
-            baseline: 'bottom'
-        });
-    }
-
-    /**
-     * 현재 턴 소유자에 맞는 짧은 HUD 문구를 반환합니다.
-     * @returns {string} 턴 라벨입니다.
-     * @private
-     */
-    #getTurnLabel() {
-        if (this.#isResultPhase()) return '전투 결과';
-        if (this.#isDialoguePhase()) return '강제 대화';
-        if (this.model.turn === 'lora') return '로라의 턴';
-        return '플레이어 턴';
-    }
-
-    /**
-     * 현재 전술 단계 제목을 반환합니다.
-     * @returns {string} 단계 라벨입니다.
-     * @private
-     */
-    #getPhaseLabel() {
-        if (this.#isResultPhase()) return '전투 종료';
-        if (this.#isDialoguePhase()) return '대화 선택';
-        if (this.model.phase === 'lora') return '로라가 생각 중...';
-        if (this.model.phase === 'action') {
-            return '행동 선택';
-        }
-        return '이동 경로 선택';
-    }
-
-    /**
-     * 현재 호버 경로 비용이나 행동 안내를 반환합니다.
-     * @returns {string} 전술 상태 문구입니다.
-     * @private
-     */
-    #getTacticalStatusText() {
-        if (this.#isResultPhase()) {
-            return 'R 또는 아래 버튼으로 다시 시작할 수 있습니다.';
-        }
-        if (this.#isDialoguePhase()) {
-            return '회피·공격·이해·거짓말 중 지금의 답을 선택하세요.';
-        }
-        if (this.model.phase === 'lora') {
-            return '로라가 이동하고 상황에 따라 공격하거나 방어합니다.';
-        }
-        if (this.model.phase === 'action') {
-            const targetCount = this.actionTargets.length;
-            if (this.#canEscape()) {
-                return '게이트 위에 도착했습니다. 게이트 탈출을 선택하세요.';
-            }
-            return `이동력 ${this.lastMoveCost}/${this.data.MAP.MOVE_RANGE} 사용 · 공격 대상 ${targetCount}개`;
-        }
-
-        const preview = this.hoveredTile || this.cursorTile;
-        if (this.plannedDestinationSelected) {
-            return `선택 경로 ${this.plannedPathCost}/${this.data.MAP.MOVE_RANGE} · 재클릭 또는 Enter로 확정`;
-        }
-        const reachable = this.reachability.get(toTileKey(preview.x, preview.y));
-        if (reachable) {
-            return `예상 경로 ${reachable.cost}/${this.data.MAP.MOVE_RANGE} · 첫 클릭으로 선택`;
-        }
-        return `이동력 ${this.data.MAP.MOVE_RANGE} · 청록색 타일 안에서 선택`;
-    }
-
-    /**
-     * HUD에 라벨, 숫자와 연속형 상태 바를 그립니다.
-     * @param {{label:string,value:number,max:number,y:number,color:string}} options - 바 표시값입니다.
-     * @private
-     */
-    #drawHudBar(options) {
-        const colors = ColorSchemes.Tactics;
-        const left = this.sidebar.x + this.sidebar.padding;
-        const right = this.sidebar.x + this.sidebar.w - this.sidebar.padding;
-        const width = right - left;
-        const max = Math.max(1, Number(options.max) || 1);
-        const value = clampNumber(options.value, 0, max);
-        const ratio = value / max;
-        render('ui', {
-            shape: 'text',
-            x: left,
-            y: options.y,
-            text: options.label,
-            font: this.fonts.SMALL,
-            fill: colors.UI.Text,
-            baseline: 'middle'
-        });
-        render('ui', {
-            shape: 'text',
-            x: right,
-            y: options.y,
-            text: `${Math.round(value)}/${Math.round(max)}`,
-            font: this.fonts.MONO,
-            fill: colors.UI.Muted,
-            align: 'right',
-            baseline: 'middle'
-        });
-        const barY = options.y + this.#uwh(1.7);
-        render('ui', {
-            shape: 'roundRect',
-            x: left,
-            y: barY,
+        const ratio = clampNumber(Number(hp) / Math.max(1, Number(maxHp)), 0, 1);
+        renderGL('object', {
+            shape: 'rect',
+            x,
+            y,
             w: width,
-            h: this.#uwh(1.15),
-            radius: this.#uwh(0.35),
-            fill: colors.UI.HpEmpty
+            h: Math.max(2, width * 0.09),
+            fill: colors.UI.HpEmpty,
+            alpha
         });
         if (ratio > 0) {
-            render('ui', {
-                shape: 'roundRect',
-                x: left,
-                y: barY,
+            renderGL('object', {
+                shape: 'rect',
+                x: x - (width * 0.5) + ((width * ratio) * 0.5),
+                y,
                 w: width * ratio,
-                h: this.#uwh(1.15),
-                radius: this.#uwh(0.35),
-                fill: options.color
+                h: Math.max(2, width * 0.09),
+                fill: colors.UI.HpFull,
+                alpha
             });
         }
     }
 
     /**
-     * 사이드바 내부 구분선을 그립니다.
-     * @param {number} y - 선의 Y 좌표입니다.
+     * 월드 오브젝트의 짧은 글리프를 그립니다.
+     * @param {string} text - 글리프입니다.
+     * @param {number} x - 중심 X입니다.
+     * @param {number} y - 중심 Y입니다.
+     * @param {string} fill - 색입니다.
      * @private
      */
-    #drawDivider(y) {
+    #drawWorldGlyph(text, x, y, fill) {
+        this.#drawText('texteffect', text, x, y, this.fonts.HEADING, fill, 'center');
+    }
+
+    /**
+     * 아이템 ID의 짧은 글리프를 반환합니다.
+     * @param {string} itemId - 아이템 ID입니다.
+     * @returns {string} 글리프입니다.
+     * @private
+     */
+    #getItemGlyph(itemId) {
+        const glyphs = {
+            bow: '활',
+            bandage: '+',
+            'old-teddy': '곰',
+            'music-box': '음',
+            eyeliner: '선',
+            'diamond-pickaxe': '곡',
+            'glitch-item': 'G',
+            mirror: '경',
+            mushroom: '버',
+            'speed-boots': '속',
+            'shield-core': '실',
+            'memory-photo': '사'
+        };
+        return glyphs[itemId] || 'I';
+    }
+
+    /**
+     * 전투 프로젝트, 상태, 목표, 로그를 사이드바에 그립니다.
+     * @private
+     */
+    #drawBattleHud() {
+        this.#drawBattleStageHeader();
+        this.#drawLoraStatusCard();
+        this.#drawMissionCard();
+        this.#drawPlayerStatus();
+        this.#drawInventoryCard();
+    }
+
+    /**
+     * Figma 기준의 스테이지 제목, 턴 주체, 층별 턴 핍을 그립니다.
+     * @private
+     */
+    #drawBattleStageHeader() {
+        const colors = ColorSchemes.Tactics;
+        const rect = this.hudRects.STAGE_HEADER;
+        const floor = this.#getCurrentFloor();
+        const rawStageTitle = Number(this.model.floorIndex) === 0
+            ? (floor?.label || '1층') + ' · 로라의 방'
+            : (floor?.label || '지하층') + ' · 게이트 전실';
+        const titleMaxWidth = rect.w * 0.58;
+        const stageTitle = this.#truncateText(
+            rawStageTitle,
+            this.fonts.HEADING,
+            titleMaxWidth
+        );
+        const titleY = rect.y + clampNumber(rect.h * 0.2, 18, 30);
+        this.#drawText('ui', stageTitle, rect.x, titleY, this.fonts.HEADING, colors.UI.Text);
+        const rawTurnLabel = (this.model.turn === 'player' ? '내 턴' : '로라의 턴')
+            + '  ·  ' + String(this.model.turnNumber) + '/' + String(this.model.maxTurns);
+        const turnLabel = this.#truncateText(
+            rawTurnLabel,
+            this.fonts.SMALL,
+            rect.w - titleMaxWidth - this.#uww(0.8)
+        );
+        this.#drawText(
+            'ui',
+            turnLabel,
+            rect.x + rect.w,
+            titleY,
+            this.fonts.SMALL,
+            this.model.turn === 'player' ? colors.UI.Primary : colors.UI.Muted,
+            'right'
+        );
+
+        const dotSize = clampNumber(this.#uwh(2.3), 16, 24);
+        const dotGap = this.#uww(0.45);
+        const dotY = rect.y + rect.h - (dotSize * 0.6);
+        const floorTurn = ((Math.max(1, Number(this.model.turnNumber)) - 1) % 4) + 1;
+        for (let index = 0; index < 4; index++) {
+            const active = index < floorTurn;
+            const dotX = rect.x + (dotSize * 0.5) + (index * (dotSize + dotGap));
+            render('ui', {
+                shape: 'circle',
+                x: dotX,
+                y: dotY,
+                radius: dotSize * 0.5,
+                fill: active ? colors.UI.Primary : colors.UI.CardHeader,
+                stroke: colors.UI.Border,
+                lineWidth: 1
+            });
+            this.#drawText(
+                'ui',
+                String(index + 1),
+                dotX,
+                dotY,
+                this.fonts.SMALL,
+                active ? colors.UI.OnPrimary : colors.UI.Muted,
+                'center'
+            );
+        }
+    }
+
+    /**
+     * 로라 초상, HP, 불안정도 게이지를 우상단 카드에 그립니다.
+     * @private
+     */
+    #drawLoraStatusCard() {
+        const colors = ColorSchemes.Tactics;
+        const rect = this.hudRects.LORA_CARD;
+        const pad = clampNumber(rect.w * 0.035, 10, 18);
+        this.#drawHudCard(rect);
+        const portraitH = rect.h - (pad * 2);
+        const portraitW = portraitH * (200 / 240);
+        const portraitX = rect.x + pad;
+        const portraitY = rect.y + pad;
+        if (this.loraPortrait?.complete && this.loraPortrait.naturalWidth > 0) {
+            render('ui', {
+                shape: 'image',
+                image: this.loraPortrait,
+                x: portraitX,
+                y: portraitY,
+                w: portraitW,
+                h: portraitH
+            });
+        } else {
+            render('ui', {
+                shape: 'roundRect',
+                x: portraitX,
+                y: portraitY,
+                w: portraitW,
+                h: portraitH,
+                radius: this.#uwh(1),
+                fill: colors.UI.CardHeader,
+                stroke: colors.UI.Border,
+                lineWidth: 1
+            });
+            this.#drawText(
+                'ui',
+                'L',
+                portraitX + (portraitW * 0.5),
+                portraitY + (portraitH * 0.5),
+                this.fonts.TITLE,
+                colors.UI.Primary,
+                'center'
+            );
+        }
+
+        const contentX = portraitX + portraitW + pad;
+        const contentRight = rect.x + rect.w - pad;
+        const contentW = Math.max(1, contentRight - contentX);
+        const headerH = rect.h * 0.28;
         render('ui', {
-            shape: 'line',
-            x1: this.sidebar.x + this.sidebar.padding,
-            y1: y,
-            x2: this.sidebar.x + this.sidebar.w - this.sidebar.padding,
-            y2: y,
-            stroke: ColorSchemes.Tactics.UI.Border,
+            shape: 'roundRect',
+            x: contentX - (pad * 0.35),
+            y: rect.y + pad,
+            w: contentW + (pad * 0.35),
+            h: headerH - pad,
+            radius: this.#uwh(0.8),
+            fill: colors.UI.CardHeader
+        });
+        const state = typeof this.model.getInstabilityState === 'function'
+            ? this.model.getInstabilityState()
+            : null;
+        const stateLabel = state?.label || state?.id || '상태 확인 중';
+        this.#drawText(
+            'ui',
+            'Rora',
+            contentX,
+            rect.y + (headerH * 0.52),
+            this.fonts.HEADING,
+            colors.UI.Text
+        );
+        this.#drawText(
+            'ui',
+            stateLabel,
+            contentRight,
+            rect.y + (headerH * 0.52),
+            this.fonts.SMALL,
+            Number(this.presentation.instability) <= 10
+                ? colors.UI.Success
+                : colors.UI.Warning,
+            'right'
+        );
+
+        const loraHp = Math.max(0, Number(this.presentation.loraHp) || 0);
+        const loraMaxHp = Math.max(1, Number(this.model.lora?.maxHp) || 100);
+        const instability = clampNumber(this.presentation.instability, 0, 100);
+        const gaugeH = clampNumber(rect.h * 0.055, 7, 12);
+        const hpLabelY = rect.y + (rect.h * 0.48);
+        this.#drawText(
+            'ui',
+            'HP  ' + String(Math.round(loraHp)) + '/' + String(loraMaxHp),
+            contentX,
+            hpLabelY,
+            this.fonts.SMALL,
+            colors.UI.Text
+        );
+        this.#drawGauge(
+            contentX,
+            rect.y + (rect.h * 0.57),
+            contentW,
+            gaugeH,
+            loraHp / loraMaxHp,
+            colors.UI.GaugeHp
+        );
+        const instabilityY = rect.y + (rect.h * 0.73);
+        this.#drawText(
+            'ui',
+            '불안정도  ' + String(Math.round(instability)),
+            contentX,
+            instabilityY,
+            this.fonts.SMALL,
+            colors.UI.Text
+        );
+        this.#drawGauge(
+            contentX,
+            rect.y + (rect.h * 0.82),
+            contentW,
+            gaugeH,
+            instability / 100,
+            colors.UI.GaugeInstability
+        );
+    }
+
+    /**
+     * 목표와 최근 이벤트를 우측 플로팅 카드에 그립니다.
+     * @private
+     */
+    #drawMissionCard() {
+        const colors = ColorSchemes.Tactics;
+        const rect = this.hudRects.MISSION_CARD;
+        const pad = clampNumber(rect.w * 0.07, 14, 22);
+        const lineH = clampNumber(this.#uwh(2.7), 18, 30);
+        this.#drawHudCard(rect);
+        let y = rect.y + pad;
+        this.#drawText(
+            'ui',
+            'MISSION  ·  ' + this.data.TEXT.CORE_LOOP,
+            rect.x + pad,
+            y,
+            this.fonts.BODY,
+            colors.UI.Primary
+        );
+        y += lineH * 1.4;
+        const objectiveLines = this.#wrapText(
+            this.data.TEXT.OBJECTIVE,
+            this.fonts.SMALL,
+            rect.w - (pad * 2),
+            3
+        );
+        objectiveLines.forEach((line) => {
+            this.#drawText('ui', line, rect.x + pad, y, this.fonts.SMALL, colors.UI.Text);
+            y += lineH;
+        });
+
+        y += lineH * 0.35;
+        render('ui', {
+            shape: 'rect',
+            x: rect.x + pad,
+            y,
+            w: rect.w - (pad * 2),
+            h: 1,
+            fill: colors.UI.Border
+        });
+        y += lineH;
+        this.#drawText('ui', '최근 이벤트', rect.x + pad, y, this.fonts.BODY, colors.UI.Text);
+        y += lineH * 1.25;
+        this.eventLog.slice(-3).forEach((entry) => {
+            const line = this.#truncateText(
+                '· ' + entry,
+                this.fonts.SMALL,
+                rect.w - (pad * 2)
+            );
+            this.#drawText('ui', line, rect.x + pad, y, this.fonts.SMALL, colors.UI.Muted);
+            y += lineH;
+        });
+
+        const statusLine = this.data.TEXT.TURN_SUMMARY + '  ·  이동 '
+            + (this.model.movementUsed ? '사용' : '가능')
+            + '  ·  행동 ' + (this.model.actionUsed ? '사용' : '가능');
+        this.#drawText(
+            'ui',
+            this.#truncateText(
+                statusLine,
+                this.fonts.SMALL,
+                rect.w - (pad * 2)
+            ),
+            rect.x + rect.w - pad,
+            rect.y + rect.h - pad,
+            this.fonts.SMALL,
+            colors.UI.Accent,
+            'right'
+        );
+    }
+
+    /**
+     * 플레이어 HP 라벨과 게이지를 좌하단에 그립니다.
+     * @private
+     */
+    #drawPlayerStatus() {
+        const colors = ColorSchemes.Tactics;
+        const rect = this.hudRects.PLAYER_STATUS;
+        const playerHp = Math.max(0, Number(this.presentation.playerHp) || 0);
+        const playerMaxHp = Math.max(1, Number(this.model.player?.maxHp) || 100);
+        const gaugeH = clampNumber(rect.h * 0.24, 8, 12);
+        this.#drawText(
+            'ui',
+            'HP',
+            rect.x,
+            rect.y + (rect.h * 0.28),
+            this.fonts.BODY,
+            colors.UI.Text
+        );
+        this.#drawText(
+            'ui',
+            String(Math.round(playerHp)) + '/' + String(playerMaxHp),
+            rect.x + rect.w,
+            rect.y + (rect.h * 0.28),
+            this.fonts.MONO,
+            colors.UI.Muted,
+            'right'
+        );
+        this.#drawGauge(
+            rect.x,
+            rect.y + rect.h - gaugeH,
+            rect.w,
+            gaugeH,
+            playerHp / playerMaxHp,
+            colors.UI.GaugeHp
+        );
+    }
+
+    /**
+     * 인벤토리 슬롯의 공통 카드와 페이지 정보를 그립니다.
+     * @private
+     */
+    #drawInventoryCard() {
+        const colors = ColorSchemes.Tactics;
+        const rect = this.hudRects.INVENTORY_CARD;
+        const pad = this.#uww(0.9);
+        const paging = this.#getInventoryPaging();
+        const headerH = clampNumber(rect.h * 0.22, 30, 46);
+        this.#drawHudCard(rect);
+        this.#drawText(
+            'ui',
+            'ITEMS  ' + String(paging.page + 1) + '/' + String(paging.pageCount),
+            rect.x + pad,
+            rect.y + (headerH * 0.5),
+            this.fonts.BODY,
+            colors.UI.Text
+        );
+    }
+
+    /**
+     * 그림자와 테두리가 있는 Figma 스타일 플로팅 카드를 그립니다.
+     * @param {{x:number,y:number,w:number,h:number}} rect - 카드 사각형입니다.
+     * @private
+     */
+    #drawHudCard(rect) {
+        const colors = ColorSchemes.Tactics;
+        const radius = this.#uwh(1.1);
+        render('ui', {
+            shape: 'roundRect',
+            x: rect.x + 2,
+            y: rect.y + 3,
+            w: rect.w,
+            h: rect.h,
+            radius,
+            fill: colors.UI.CardShadow
+        });
+        render('ui', {
+            shape: 'roundRect',
+            x: rect.x,
+            y: rect.y,
+            w: rect.w,
+            h: rect.h,
+            radius,
+            fill: colors.UI.Card,
+            stroke: colors.UI.Border,
             lineWidth: 1
         });
     }
 
     /**
-     * 한국어 텍스트를 지정 폭과 줄 수에 맞춰 그립니다.
-     * @param {{text:string,x:number,y:number,maxWidth:number,font:string,color:string,maxLines:number}} options - 텍스트 배치입니다.
-     * @returns {number} 실제로 그린 줄 수입니다.
+     * 지정 비율만큼 채운 둥근 게이지를 그립니다.
+     * @param {number} x - 게이지 X입니다.
+     * @param {number} y - 게이지 Y입니다.
+     * @param {number} w - 게이지 너비입니다.
+     * @param {number} h - 게이지 높이입니다.
+     * @param {number} ratio - 0~1 채움 비율입니다.
+     * @param {string} fill - 채움 색입니다.
      * @private
      */
-    #drawWrappedText(options) {
-        const fontSizeMatch = /([0-9.]+)px/.exec(options.font);
-        const fontSize = Number(fontSizeMatch?.[1]) || 12;
-        const lines = wrapTextByCharacters(options.text, {
-            maxWidth: options.maxWidth,
-            maxLines: options.maxLines,
-            measureWidth: (line) => measureText(line, options.font)
-        });
-        lines.forEach((line, index) => {
-            render('ui', {
-                shape: 'text',
-                x: options.x,
-                y: options.y + (fontSize * 1.28 * index),
-                text: line,
-                font: options.font,
-                fill: options.color,
-                baseline: 'top'
-            });
-        });
-        return lines.length;
-    }
-
-    /**
-     * 현재 UI 폭에서 폰트 규격의 실제 픽셀 크기를 반환합니다.
-     * @param {object} spec - 반응형 폰트 규격입니다.
-     * @returns {number} 실제 크기입니다.
-     * @private
-     */
-    #getFontSize(spec) {
-        return clampNumber(this.UIWW * (spec.SIZE_UIWW / 100), spec.MIN, spec.MAX);
-    }
-
-    /**
-     * 현재 화자 위에 대사 말풍선을 그립니다.
-     * @private
-     */
-    #drawSpeechBubble() {
-        if (!this.speechBubble) {
-            return;
-        }
+    #drawGauge(x, y, w, h, ratio, fill) {
         const colors = ColorSchemes.Tactics;
-        const speech = this.data.LAYOUT.SPEECH;
-        const actorPoint = this.speechBubble.speaker === LORA_ID
-            ? this.#getLoraRenderPoint()
-            : this.#getPlayerRenderPoint();
-        const actor = { centerX: actorPoint.x, centerY: actorPoint.y };
-        const actorX = actor.centerX;
-        const actorY = actor.centerY;
-        const width = this.#uww(speech.WIDTH_UIWW);
-        const height = this.#uwh(speech.HEIGHT_WH);
-        const minX = this.UIOffsetX + this.#uww(1);
-        const maxX = this.UIOffsetX + this.UIWW - width - this.#uww(1);
-        const x = clampNumber(actorX - (width * 0.5), minX, maxX);
-        const preferredY = actorY - (this.tileSize * speech.OFFSET_Y_TILES) - height;
-        const y = Math.max(this.#uwh(1.4), preferredY);
-        const alpha = Math.min(1, (this.speechBubble.duration - this.speechBubble.elapsed) * 3);
-
+        const safeRatio = clampNumber(ratio, 0, 1);
         render('ui', {
             shape: 'roundRect',
             x,
             y,
-            w: width,
-            h: height,
-            radius: this.#uwh(speech.RADIUS_WH),
+            w,
+            h,
+            radius: h * 0.5,
+            fill: colors.UI.GaugeTrack
+        });
+        if (safeRatio <= 0) {
+            return;
+        }
+        render('ui', {
+            shape: 'roundRect',
+            x,
+            y,
+            w: w * safeRatio,
+            h,
+            radius: h * 0.5,
+            fill
+        });
+    }
+
+    /**
+     * 전투 중 떠오르는 글자와 입자를 그립니다.
+     * @private
+     */
+    #drawWorldEffects() {
+        const colors = ColorSchemes.Tactics;
+        for (const particle of this.particles) {
+            const ratio = clampNumber(particle.seconds / particle.duration, 0, 1);
+            renderGL('object', {
+                shape: 'circle',
+                x: particle.x + (particle.dx * ratio),
+                y: particle.y + (particle.dy * ratio),
+                w: particle.size * (1 - ratio),
+                h: particle.size * (1 - ratio),
+                fill: particle.fill || colors.Effects.Move,
+                alpha: 1 - ratio
+            });
+        }
+        for (const entry of this.floatingTexts) {
+            const ratio = clampNumber(entry.seconds / entry.duration, 0, 1);
+            this.#drawText(
+                'texteffect',
+                entry.text,
+                entry.x,
+                entry.y - (ratio * this.#uwh(3)),
+                this.fonts.BODY,
+                entry.fill,
+                'center',
+                1 - ratio
+            );
+        }
+    }
+
+    /**
+     * 결과 화면을 엔딩, 점수, 불안정도와 함께 그립니다.
+     * @private
+     */
+    #drawResult() {
+        const colors = ColorSchemes.Tactics;
+        const centerX = this.UIOffsetX + (this.UIWW * 0.5);
+        const rect = {
+            x: centerX - this.#uww(22),
+            y: this.#uwh(20),
+            w: this.#uww(44),
+            h: this.#uwh(58)
+        };
+        renderGL('background', {
+            shape: 'rect',
+            x: rect.x + (rect.w * 0.5),
+            y: rect.y + (rect.h * 0.5),
+            w: rect.w,
+            h: rect.h,
             fill: colors.UI.PanelStrong,
-            stroke: this.speechBubble.speaker === LORA_ID ? colors.Entity.Lora : colors.Entity.Player,
-            lineWidth: Math.max(1, this.UIWW * 0.0015),
-            alpha,
-            shadowBlur: this.#uww(0.65),
-            shadowColor: colors.Entity.Shadow
+            alpha: 0.98
+        });
+        this.#drawText('ui', '작전 결과', centerX, rect.y + this.#uwh(8), this.fonts.TITLE, colors.UI.Text, 'center');
+        this.#drawText(
+            'ui',
+            this.resultData?.label || '작전 종료',
+            centerX,
+            rect.y + this.#uwh(19),
+            this.fonts.HEADING,
+            colors.UI.Accent,
+            'center'
+        );
+        this.#drawText(
+            'ui',
+            '점수  ' + String(this.resultData?.score || 0),
+            centerX,
+            rect.y + this.#uwh(29),
+            this.fonts.TITLE,
+            colors.UI.Text,
+            'center'
+        );
+        this.#drawText(
+            'ui',
+            '최종 불안정도  ' + String(this.resultData?.instability || 0),
+            centerX,
+            rect.y + this.#uwh(37),
+            this.fonts.BODY,
+            colors.UI.Muted,
+            'center'
+        );
+        this.#drawText(
+            'ui',
+            '최고 점수  ' + String(this.meta.bestScore),
+            centerX,
+            rect.y + this.#uwh(43),
+            this.fonts.BODY,
+            colors.UI.Muted,
+            'center'
+        );
+    }
+
+    /**
+     * 현재 고정 카드 컷씬을 모달로 그립니다.
+     * @private
+     */
+    #drawCutscene() {
+        const colors = ColorSchemes.Tactics;
+        const state = this.cutscenes.getState();
+        const card = this.cutscenes.getCurrentCard();
+        const modal = this.#getCutsceneRect();
+        render('ui', {
+            shape: 'rect',
+            x: 0,
+            y: 0,
+            w: this.WW,
+            h: this.WH,
+            fill: colors.UI.OverlayDim,
+            alpha: 0.78
         });
         render('ui', {
+            shape: 'roundRect',
+            x: modal.x,
+            y: modal.y,
+            w: modal.w,
+            h: modal.h,
+            radius: this.#uwh(1.5),
+            fill: colors.UI.PanelStrong,
+            alpha: 0.99
+        });
+        const centerX = modal.x + (modal.w * 0.5);
+        this.#drawText('ui', state.title, centerX, modal.y + this.#uwh(5), this.fonts.HEADING, colors.UI.Text, 'center');
+        this.#drawText(
+            'ui',
+            String(state.cardIndex + 1) + ' / ' + String(state.cardCount),
+            modal.x + modal.w - this.#uww(2),
+            modal.y + this.#uwh(5),
+            this.fonts.MONO,
+            colors.UI.Muted,
+            'right'
+        );
+        this.#drawText(
+            'ui',
+            card?.speaker || '',
+            modal.x + this.#uww(4),
+            modal.y + this.#uwh(11),
+            this.fonts.BODY,
+            colors.UI.Accent
+        );
+        const lines = this.#wrapText(
+            card?.text || '',
+            this.fonts.BODY,
+            modal.w - this.#uww(8),
+            5
+        );
+        lines.forEach((line, index) => {
+            this.#drawText(
+                'ui',
+                line,
+                modal.x + this.#uww(4),
+                modal.y + this.#uwh(17) + (index * this.#uwh(3.8)),
+                this.fonts.BODY,
+                colors.UI.Text
+            );
+        });
+    }
+
+    /**
+     * 컷씬 모달 사각형을 반환합니다.
+     * @returns {{x:number,y:number,w:number,h:number}} 모달 영역입니다.
+     * @private
+     */
+    #getCutsceneRect() {
+        const w = this.#uww(52);
+        const h = this.#uwh(48);
+        return {
+            x: this.UIOffsetX + ((this.UIWW - w) * 0.5),
+            y: (this.WH - h) * 0.5,
+            w,
+            h
+        };
+    }
+
+    /**
+     * 이벤트 목록을 로그와 간단한 전투 연출로 변환합니다.
+     * @param {*} events - 모델 이벤트 목록입니다.
+     * @private
+     */
+    #consumeEvents(events) {
+        for (const event of toList(events)) {
+            const message = this.#formatEvent(event);
+            if (message) {
+                this.#appendEvent(message);
+            }
+            if (event?.type === 'trap-triggered' && event.trapId) {
+                this.#replaceMeta(discoverTutorialTrap(this.meta, event.trapId));
+            }
+            if (event?.type === 'item-used' && event.itemId) {
+                this.#replaceMeta(identifyTutorialItem(this.meta, event.itemId));
+            }
+            this.#spawnEventEffect(event);
+        }
+    }
+
+    /**
+     * 모델 이벤트 하나를 한국어 로그로 변환합니다.
+     * @param {object} event - 모델 이벤트입니다.
+     * @returns {string} 로그 문자열입니다.
+     * @private
+     */
+    #formatEvent(event) {
+        if (!event || typeof event.type !== 'string') {
+            return '';
+        }
+        const itemLabel = this.data.ITEMS[event.itemId]?.label || event.itemId || '아이템';
+        const damage = Math.max(
+            0,
+            Math.round(Number(event.damage ?? event.amount) || 0)
+        );
+        const values = {
+            'item-picked': itemLabel + ' 획득',
+            'item-dropped': itemLabel + ' 드롭',
+            'wall-destroyed': '벽 파괴',
+            'trap-triggered': '함정 발동',
+            'item-lost': itemLabel + ' 분실',
+            teleported: '텔레포트 작동',
+            'mob-damaged': '몹에게 ' + String(damage) + ' 피해',
+            'mob-defeated': '몹 격파',
+            'lora-damaged': '로라에게 ' + String(damage) + ' 피해',
+            'instability-changed': '로라 불안정도 변화',
+            'player-healed': '플레이어 HP 회복',
+            'lora-healed': '로라 HP 회복',
+            'player-damaged': '플레이어가 ' + String(damage) + ' 피해',
+            'item-used': itemLabel + ' 사용',
+            'player-defended': '플레이어 방어',
+            'player-waited': '플레이어 대기',
+            'lora-defended': '로라 방어',
+            'lora-restrained': '로라 행동 봉쇄',
+            peace: '로라가 공격하지 않았습니다.',
+            'lora-attack': '로라 공격',
+            'floor-transition': '지하층으로 이동',
+            'gate-opened': '탈출 게이트 개방',
+            'battle-finished': '작전 판정 완료'
+        };
+        return values[event.type] || '';
+    }
+
+    /**
+     * 거절 사유를 짧은 안내로 변환합니다.
+     * @param {*} reason - 모델 사유입니다.
+     * @returns {string} 안내 문자열입니다.
+     * @private
+     */
+    #formatReason(reason) {
+        const values = {
+            'movement-used': '이번 턴 이동을 이미 사용했습니다.',
+            'action-used': '이번 턴 행동을 이미 사용했습니다.',
+            'movement-unavailable': '이번 턴 이동을 사용할 수 없습니다.',
+            'action-unavailable': '이번 턴 행동을 사용할 수 없습니다.',
+            'unreachable-destination': '그 타일까지 도달할 수 없습니다.',
+            'invalid-path': '그 경로로 이동할 수 없습니다.',
+            'out-of-range': '대상이 범위 밖에 있습니다.',
+            'invalid-target': '선택할 수 없는 대상입니다.',
+            'item-missing': '해당 아이템이 없습니다.',
+            'item-not-owned': '해당 아이템을 보유하지 않았습니다.',
+            'passive-item': '자동 적용 아이템은 직접 사용할 수 없습니다.',
+            'item-already-used': '이번 플레이에서 이미 사용한 아이템입니다.',
+            'peace-active': '평화 효과 중에는 공격할 수 없습니다.',
+            'gate-closed': '게이트가 아직 닫혀 있습니다.',
+            'not-at-gate': '게이트 타일로 이동해야 합니다.',
+            'escape-conditions-not-met': '로라를 무력화한 뒤 지하 게이트 위에서 탈출하세요.'
+        };
+        return values[reason] || '지금은 그 선택을 적용할 수 없습니다.';
+    }
+
+    /**
+     * 이벤트에 맞는 떠오르는 글자와 화면 반응을 만듭니다.
+     * @param {object} event - 모델 이벤트입니다.
+     * @private
+     */
+    #spawnEventEffect(event) {
+        if (!event || !this.model) {
+            return;
+        }
+        if (event.type === 'lora-attack') {
+            return;
+        }
+        const colors = ColorSchemes.Tactics;
+        let tile = cloneTile(event);
+        if (!tile && event.type?.startsWith('player-')) {
+            tile = cloneTile(this.model.player);
+        } else if (!tile && (event.type?.startsWith('lora-')
+            || event.type === 'instability-changed')) {
+            tile = cloneTile(this.model.lora);
+        }
+        if (!tile) {
+            return;
+        }
+        const point = this.#projectTile(tile.x, tile.y);
+        const damage = Math.max(
+            0,
+            Math.round(Number(event.damage ?? event.amount) || 0)
+        );
+        const heal = Math.max(0, Math.round(Number(event.amount || event.heal) || 0));
+        if (damage > 0) {
+            this.floatingTexts.push({
+                text: '-' + String(damage),
+                x: point.x,
+                y: point.y - (this.tileSide * 0.42),
+                fill: colors.UI.Danger,
+                seconds: 0,
+                duration: 0.7
+            });
+            this.screenShakeSeconds = Math.max(
+                this.screenShakeSeconds,
+                Number(this.data.ANIMATION.SHAKE_SECONDS) || 0.18
+            );
+            this.flashSeconds = Math.max(this.flashSeconds, 0.2);
+        } else if (heal > 0) {
+            this.floatingTexts.push({
+                text: '+' + String(heal),
+                x: point.x,
+                y: point.y - (this.tileSide * 0.42),
+                fill: colors.UI.Success,
+                seconds: 0,
+                duration: 0.8
+            });
+        }
+        if (event.type === 'instability-changed'
+            && Number(event.change ?? event.delta ?? event.amount) < 0) {
+            this.stabilizeSeconds = Math.max(this.stabilizeSeconds, 0.9);
+        }
+    }
+
+    /**
+     * 이동 경로를 따라 짧은 입자를 생성합니다.
+     * @param {Array<{x:number,y:number}>} path - 이동 경로입니다.
+     * @private
+     */
+    #spawnPathParticles(path) {
+        const fill = ColorSchemes.Tactics.Effects.Move;
+        const steps = this.#normalizePath(path).slice(1);
+        if (steps.length === 0) {
+            return;
+        }
+        const count = Math.max(1, Number(this.data.ANIMATION.PARTICLE_COUNT) || 12);
+        const duration = Math.max(
+            0.01,
+            Number(this.data.ANIMATION.PARTICLE_SECONDS) || 0.48
+        );
+        for (let index = 0; index < count; index++) {
+            const tile = steps[index % steps.length];
+            const point = this.#projectTile(tile.x, tile.y);
+            this.particles.push({
+                x: point.x,
+                y: point.y,
+                dx: (Math.random() - 0.5) * this.tileSide,
+                dy: -this.tileSide * (0.2 + (Math.random() * 0.5)),
+                size: this.tileSide * 0.12,
+                fill,
+                seconds: 0,
+                duration
+            });
+        }
+    }
+
+    /**
+     * 표현 전용 수명을 갱신합니다.
+     * @param {number} deltaSeconds - 경과 초입니다.
+     * @private
+     */
+    #updatePresentation(deltaSeconds) {
+        this.screenShakeSeconds = Math.max(0, this.screenShakeSeconds - deltaSeconds);
+        this.stabilizeSeconds = Math.max(0, this.stabilizeSeconds - deltaSeconds);
+        this.flashSeconds = Math.max(0, this.flashSeconds - deltaSeconds);
+        for (const entry of this.floatingTexts) {
+            entry.seconds += deltaSeconds;
+        }
+        for (const particle of this.particles) {
+            particle.seconds += deltaSeconds;
+        }
+        this.floatingTexts = this.floatingTexts.filter(
+            (entry) => entry.seconds < entry.duration
+        );
+        this.particles = this.particles.filter(
+            (entry) => entry.seconds < entry.duration
+        );
+    }
+
+    /**
+     * 이벤트 로그 끝에 중복을 줄여 새 메시지를 추가합니다.
+     * @param {string} message - 로그 메시지입니다.
+     * @private
+     */
+    #appendEvent(message) {
+        if (!message || this.eventLog[this.eventLog.length - 1] === message) {
+            return;
+        }
+        this.eventLog.push(message);
+        const limit = Number(this.data.RULES.EVENT_LOG_LIMIT) || 80;
+        if (this.eventLog.length > limit) {
+            this.eventLog.splice(0, this.eventLog.length - limit);
+        }
+    }
+
+    /**
+     * 텍스트를 지정 폭과 줄 수에 맞춰 나눕니다.
+     * @param {string} text - 원문입니다.
+     * @param {string} font - Canvas 글꼴입니다.
+     * @param {number} maxWidth - 최대 폭입니다.
+     * @param {number} maxLines - 최대 줄 수입니다.
+     * @returns {string[]} 줄 목록입니다.
+     * @private
+     */
+    #wrapText(text, font, maxWidth, maxLines) {
+        return wrapTextByCharacters(text, {
+            maxWidth,
+            maxLines,
+            measureWidth: (value) => measureText(value, font)
+        });
+    }
+
+    /**
+     * 한 줄 텍스트를 지정 폭에 맞춰 말줄임합니다.
+     * @param {string} text - 원문입니다.
+     * @param {string} font - Canvas 글꼴입니다.
+     * @param {number} maxWidth - 최대 폭입니다.
+     * @returns {string} 말줄임된 텍스트입니다.
+     * @private
+     */
+    #truncateText(text, font, maxWidth) {
+        const value = String(text ?? '');
+        if (maxWidth <= 0) {
+            return '';
+        }
+        if (measureText(value, font) <= maxWidth) {
+            return value;
+        }
+        const ellipsis = '…';
+        let end = value.length;
+        while (end > 0
+            && measureText(value.slice(0, end) + ellipsis, font) > maxWidth) {
+            end--;
+        }
+        return end > 0 ? value.slice(0, end) + ellipsis : ellipsis;
+    }
+
+    /**
+     * 공통 텍스트 렌더 명령을 실행합니다.
+     * @param {string} layer - 렌더 레이어입니다.
+     * @param {string} text - 표시 문자열입니다.
+     * @param {number} x - X 좌표입니다.
+     * @param {number} y - Y 좌표입니다.
+     * @param {string} font - Canvas 글꼴입니다.
+     * @param {string} fill - 색입니다.
+     * @param {string} [align=left] - 가로 정렬입니다.
+     * @param {number} [alpha=1] - 투명도입니다.
+     * @private
+     */
+    #drawText(layer, text, x, y, font, fill, align = 'left', alpha = 1) {
+        render(layer, {
             shape: 'text',
-            x: x + this.#uww(1.1),
-            y: y + this.#uwh(1.6),
-            text: this.speechBubble.speaker === LORA_ID ? '로라' : '플레이어',
-            font: this.fonts.SMALL,
-            fill: this.speechBubble.speaker === LORA_ID ? colors.Entity.Lora : colors.Entity.Player,
-            baseline: 'top',
+            text: String(text ?? ''),
+            x,
+            y,
+            font,
+            fill,
+            align,
+            baseline: 'middle',
             alpha
         });
-        this.#drawWrappedText({
-            text: this.speechBubble.text,
-            x: x + this.#uww(1.1),
-            y: y + this.#uwh(4),
-            maxWidth: width - this.#uww(2.2),
-            font: this.fonts.BODY,
-            color: colors.UI.Text,
-            maxLines: 2
-        });
-    }
-
-    /**
-     * 짝수 라운드에 전투 입력을 차단하는 4지선다 대화 패널을 그립니다.
-     * @private
-     */
-    #drawDialogueOverlay() {
-        if (!this.#isDialoguePhase()) {
-            return;
-        }
-        const colors = ColorSchemes.Tactics;
-        const modal = this.data.LAYOUT.MODAL;
-        const width = Math.max(this.#uww(modal.WIDTH_UIWW), this.#uww(42));
-        const height = Math.max(this.#uwh(modal.HEIGHT_WH), this.#uwh(48));
-        const x = this.UIOffsetX + ((this.UIWW - width) * 0.5);
-        const y = (this.WH - height) * 0.5;
-        render('ui', {
-            shape: 'rect',
-            x: 0,
-            y: 0,
-            w: this.WW,
-            h: this.WH,
-            fill: colors.UI.OverlayDim
-        });
-        render('ui', {
-            shape: 'roundRect',
-            x,
-            y,
-            w: width,
-            h: height,
-            radius: this.#uwh(modal.RADIUS_WH),
-            fill: colors.UI.Panel,
-            stroke: colors.Entity.Lora,
-            lineWidth: Math.max(2, this.UIWW * 0.0018),
-            shadowBlur: this.#uww(1.2),
-            shadowColor: colors.Entity.Shadow
-        });
-        render('ui', {
-            shape: 'text',
-            x: x + (width * 0.5),
-            y: y + (height * 0.13),
-            text: `ROUND ${this.model.round} · 대화`,
-            font: this.fonts.TITLE,
-            fill: colors.Entity.LoraAccent,
-            align: 'center',
-            baseline: 'middle'
-        });
-        render('ui', {
-            shape: 'text',
-            x: x + (width * 0.5),
-            y: y + (height * 0.27),
-            text: '로라에게 어떻게 답할까?',
-            font: this.fonts.HEADING,
-            fill: colors.UI.Text,
-            align: 'center',
-            baseline: 'middle'
-        });
-        for (const choice of DIALOGUE_CHOICES) {
-            this.buttons[`dialogue-${choice.id}`]?.item.draw();
-        }
-    }
-
-    /**
-     * 탈출 성공, 플레이어 전투 불능, 8라운드 초과 결과를 공통 패널에 표시합니다.
-     * @private
-     */
-    #drawResultOverlay() {
-        if (!this.#isResultPhase()) {
-            return;
-        }
-        const colors = ColorSchemes.Tactics;
-        const modal = this.data.LAYOUT.MODAL;
-        const width = this.#uww(modal.WIDTH_UIWW);
-        const height = this.#uwh(modal.HEIGHT_WH);
-        const x = this.UIOffsetX + ((this.UIWW - width) * 0.5);
-        const y = (this.WH - height) * 0.5;
-        const presentation = this.#getResultPresentation();
-        const result = this.model.result || {};
-        const resultRound = result.round ?? this.model.round;
-        const resultInstability = result.instability ?? this.model.lora.instability ?? 0;
-
-        render('ui', {
-            shape: 'rect',
-            x: 0,
-            y: 0,
-            w: this.WW,
-            h: this.WH,
-            fill: colors.UI.OverlayDim
-        });
-        render('ui', {
-            shape: 'roundRect',
-            x,
-            y,
-            w: width,
-            h: height,
-            radius: this.#uwh(modal.RADIUS_WH),
-            fill: colors.UI.Panel,
-            stroke: presentation.success ? colors.UI.Success : colors.UI.Danger,
-            lineWidth: Math.max(2, this.UIWW * 0.0018),
-            shadowBlur: this.#uww(1.2),
-            shadowColor: colors.Entity.Shadow
-        });
-        render('ui', {
-            shape: 'text',
-            x: x + (width * 0.5),
-            y: y + (height * 0.2),
-            text: presentation.title,
-            font: this.fonts.TITLE,
-            fill: presentation.success ? colors.UI.Success : colors.UI.Danger,
-            align: 'center',
-            baseline: 'middle'
-        });
-        render('ui', {
-            shape: 'text',
-            x: x + (width * 0.5),
-            y: y + (height * 0.4),
-            text: presentation.message,
-            font: this.fonts.HEADING,
-            fill: colors.UI.Text,
-            align: 'center',
-            baseline: 'middle'
-        });
-        render('ui', {
-            shape: 'text',
-            x: x + (width * 0.5),
-            y: y + (height * 0.56),
-            text: `라운드 ${resultRound}/${this.model.maxRounds ?? 8}  ·  최종 불안정도 ${Math.round(resultInstability)}`,
-            font: this.fonts.MONO,
-            fill: colors.UI.Muted,
-            align: 'center',
-            baseline: 'middle'
-        });
-        this.buttons.resultRestart?.item.draw();
-    }
-
-    /**
-     * 모델 결과 사유를 결과 패널 제목과 설명으로 변환합니다.
-     * @returns {{success:boolean,title:string,message:string}} 결과 표시값입니다.
-     * @private
-     */
-    #getResultPresentation() {
-        const result = this.model.result;
-        const type = typeof result === 'string'
-            ? result
-            : (result?.outcome || result?.type || result?.reason || '');
-        const reason = typeof result === 'object' ? result?.reason : type;
-        const success = result?.success === true
-            || result?.outcome === 'success'
-            || reason === 'escaped'
-            || ['success', 'escaped', 'escape'].includes(type);
-        if (success) {
-            return {
-                success: true,
-                title: 'MISSION CLEAR',
-                message: '로라를 무력화하고 게이트로 탈출했습니다.'
-            };
-        }
-        if ((result?.playerHp ?? this.model.player.hp) <= 0
-            || reason === 'player-defeated'
-            || ['player-defeated', 'defeat', 'hp-zero'].includes(type)) {
-            return {
-                success: false,
-                title: 'MISSION FAILED',
-                message: '플레이어가 더 이상 싸울 수 없습니다.'
-            };
-        }
-        return {
-            success: false,
-            title: 'TIME OVER',
-            message: '8라운드 안에 게이트를 통과하지 못했습니다.'
-        };
     }
 }

@@ -80,8 +80,12 @@ const DARK_TACTICS_THEME = Object.freeze({
         Reachable: 'rgba(56, 207, 232, 0.38)',
         Path: '#a0f3ff',
         Attack: 'rgba(255, 105, 118, 0.56)',
-        Talk: 'rgba(255, 199, 92, 0.52)',
-        Stair: '#3d8792'
+        Item: 'rgba(255, 199, 92, 0.52)',
+        Stair: '#3d8792',
+        Wall: '#40536a',
+        Trap: '#a54e5d',
+        Teleport: '#765fd2',
+        Gate: '#3bc78c'
     }),
     Entity: Object.freeze({
         Player: '#53ddff',
@@ -93,7 +97,13 @@ const DARK_TACTICS_THEME = Object.freeze({
         LoraAccent: '#ffe8ec',
         Shadow: 'rgba(0, 5, 14, 0.48)',
         Box: '#9b6749',
-        BoxBand: '#e0a867'
+        BoxBand: '#e0a867',
+        Mob: '#9a82dc',
+        MobDark: '#4c397c',
+        Item: '#ffd15c',
+        Wall: '#45566b',
+        Trap: '#ff6979',
+        Teleport: '#a886ff'
     }),
     UI: Object.freeze({
         Panel: 'rgba(9, 22, 38, 0.90)',
@@ -102,6 +112,16 @@ const DARK_TACTICS_THEME = Object.freeze({
         Text: '#e9f7fb',
         Muted: '#8da7b5',
         Accent: '#52dbff',
+        Primary: '#EC6565',
+        PrimaryHover: '#F17A7A',
+        Undo: '#526b83',
+        UndoHover: '#6685a3',
+        OnPrimary: '#ffffff',
+        Card: '#0d2136',
+        CardHeader: '#183047',
+        GaugeTrack: '#3a4a58',
+        GaugeHp: '#EC6565',
+        GaugeInstability: '#F0B35A',
         Danger: '#ff6979',
         Success: '#61e6ad',
         Warning: '#ffc75c',
@@ -110,13 +130,15 @@ const DARK_TACTICS_THEME = Object.freeze({
         ButtonDisabled: '#263645',
         HpFull: '#ff6678',
         HpEmpty: '#3a4a58',
-        OverlayDim: 'rgba(1, 7, 16, 0.58)'
+        OverlayDim: 'rgba(1, 7, 16, 0.58)',
+        ButtonShadow: 'rgba(0, 0, 0, 0.38)',
+        CardShadow: 'rgba(0, 0, 0, 0.34)'
     }),
     Effects: Object.freeze({
         Move: '#5ce5ff',
         Hit: '#ff8b78',
         Debris: '#d19a67',
-        Talk: '#ffd875'
+        Stabilize: '#ffd875'
     })
 });
 
