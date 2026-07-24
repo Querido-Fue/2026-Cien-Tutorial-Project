@@ -46,7 +46,36 @@ const LORA_INSTABILITY_STATES = [
  */
 export const TUTORIAL_GAME_DATA = deepFreeze({
     ASSETS: {
-        LORA_PORTRAIT: '../asset/ui/tutorial/lora-portrait.png'
+        LORA_PORTRAIT: '../asset/ui/tutorial/lora-portrait.png',
+        ITEM_ICON_ATLAS: '../asset/ui/tutorial/item-icons-atlas.png',
+        LORA_SPRITE: '../asset/ui/tutorial/lora-sprite.png'
+    },
+    SPRITES: {
+        ITEM_ATLAS: {
+            COLUMNS: 4,
+            ROWS: 2,
+            CELLS: {
+                'music-box': { COLUMN: 0, ROW: 0 },
+                'old-teddy': { COLUMN: 1, ROW: 0 },
+                mirror: { COLUMN: 2, ROW: 0 },
+                eyeliner: { COLUMN: 3, ROW: 0 },
+                bow: { COLUMN: 0, ROW: 1 },
+                bandage: { COLUMN: 1, ROW: 1 },
+                'diamond-pickaxe': { COLUMN: 2, ROW: 1 },
+                mushroom: { COLUMN: 3, ROW: 1 }
+            },
+            WORLD_HALO_SIZE_TILE_RATIO: 0.45,
+            WORLD_ICON_SIZE_TILE_RATIO: 0.64,
+            BUTTON_ICON_SIZE_RATIO: 0.66,
+            BUTTON_ICON_GAP_UIWW: 0.25
+        },
+        LORA: {
+            BASE_SIZE_TILE_RATIO: 0.64,
+            SPRITE_SIZE_TILE_RATIO: 0.84,
+            OFFSET_Y_TILE_RATIO: 0,
+            FLASH_GLOW_SIZE_RATIO: 1.08,
+            FLASH_GLOW_ALPHA: 0.34
+        }
     },
     MAP: {
         WIDTH: 9,
@@ -355,6 +384,10 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         TURN_GATE_SECONDS: 0.22,
         PARTICLE_SECONDS: 0.48,
         SHAKE_SECONDS: 0.18,
+        DAMAGE_TEXT_SECONDS: 0.7,
+        HEAL_TEXT_SECONDS: 0.8,
+        HIT_FLASH_SECONDS: 0.2,
+        STABILIZE_SECONDS: 0.9,
         TELEPORT_OUT_SECONDS: 0.14,
         TELEPORT_IN_SECONDS: 0.22,
         UNDO_SECONDS_PER_TILE: 0.12,

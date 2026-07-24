@@ -100,6 +100,8 @@ const WATCHED_KEY_CODES = Object.freeze([
     'Escape'
 ]);
 
+const CONTROL_KEY_CODES = Object.freeze(['ControlLeft', 'ControlRight']);
+
 const KEY_DIRECTIONS = Object.freeze([
     Object.freeze({ codes: Object.freeze(['ArrowUp', 'KeyW']), x: 0, y: -1 }),
     Object.freeze({ codes: Object.freeze(['ArrowRight', 'KeyD']), x: 1, y: 0 }),
@@ -245,6 +247,7 @@ export class TutorialScene extends BaseScene {
         this.mode = MODES.LOADING;
         this.model = null;
         this.floorView = null;
+        this.floorActorView = null;
         this.meta = createDefaultTutorialMeta();
         this.committedMeta = cloneCheckpointValue(this.meta);
         this.metaStaging = false;
@@ -305,6 +308,37 @@ export class TutorialScene extends BaseScene {
             this.loraPortrait.decoding = 'async';
             this.loraPortrait.src = this.data.ASSETS.LORA_PORTRAIT;
         }
+        this.itemIconCanvases = new Map();
+        this.itemAtlasImage = typeof Image === 'function' ? new Image() : null;
+        if (this.itemAtlasImage) {
+            this.itemAtlasImage.decoding = 'async';
+            this.itemAtlasImage.onload = () => {
+                if (!this.destroyed) {
+                    this.#sliceItemAtlas();
+                }
+            };
+            this.itemAtlasImage.onerror = () => {
+                if (!this.destroyed) {
+                    this.itemIconCanvases.clear();
+                    this.buttonSignature = '';
+                }
+            };
+            this.itemAtlasImage.src = this.data.ASSETS.ITEM_ICON_ATLAS;
+        }
+        this.loraSpriteReady = false;
+        this.loraSprite = typeof Image === 'function' ? new Image() : null;
+        if (this.loraSprite) {
+            this.loraSprite.decoding = 'async';
+            this.loraSprite.onload = () => {
+                if (!this.destroyed && this.#isImageReady(this.loraSprite)) {
+                    this.loraSpriteReady = true;
+                }
+            };
+            this.loraSprite.onerror = () => {
+                this.loraSpriteReady = false;
+            };
+            this.loraSprite.src = this.data.ASSETS.LORA_SPRITE;
+        }
 
         this.buttons = {};
         this.buttonSignature = '';
@@ -312,6 +346,20 @@ export class TutorialScene extends BaseScene {
         this.keyboardLatch = new Map();
         this.keyboardPressObserved = new Map();
         this.frameKeyEdges = new Set();
+        this.pendingUndoShortcut = false;
+        this.undoShortcutKeyDownHandler = (event) => {
+            if (event?.code !== 'KeyZ'
+                || event.ctrlKey !== true) {
+                return;
+            }
+            event.preventDefault?.();
+            if (event.repeat !== true) {
+                this.pendingUndoShortcut = true;
+            }
+        };
+        if (typeof window !== 'undefined') {
+            window.addEventListener('keydown', this.undoShortcutKeyDownHandler, true);
+        }
         const initialEventTime = Number(getKeyboardSnapshot()?.lastEvent?.timeStamp);
         this.lastKeyboardEventTimestamp = Number.isFinite(initialEventTime)
             ? initialEventTime
@@ -402,6 +450,8 @@ export class TutorialScene extends BaseScene {
                 continue;
             }
 
+            const revisionBeforeCommand = this.timelineRevision;
+
             switch (command.type) {
                 case COMMANDS.META_READY:
                     this.#applyMetaReady(command.payload);
@@ -478,6 +528,11 @@ export class TutorialScene extends BaseScene {
                 default:
                     break;
             }
+
+            // Undo/재시작처럼 타임라인을 교체한 뒤에는 같은 drain의 명령이 모두 구식입니다.
+            if (this.timelineRevision !== revisionBeforeCommand) {
+                break;
+            }
         }
         this.buttonSignature = '';
     }
@@ -514,6 +569,20 @@ export class TutorialScene extends BaseScene {
         this.destroyed = true;
         this.timelineRevision += 1;
         this.#clearOwnedAnimations();
+        if (typeof window !== 'undefined') {
+            window.removeEventListener('keydown', this.undoShortcutKeyDownHandler, true);
+        }
+        this.pendingUndoShortcut = false;
+        if (this.itemAtlasImage) {
+            this.itemAtlasImage.onload = null;
+            this.itemAtlasImage.onerror = null;
+        }
+        if (this.loraSprite) {
+            this.loraSprite.onload = null;
+            this.loraSprite.onerror = null;
+        }
+        this.itemIconCanvases.clear();
+        this.loraSpriteReady = false;
         clearSimulationCommands();
         this.#releaseButtons();
         this.cutscenes.close();
@@ -522,7 +591,75 @@ export class TutorialScene extends BaseScene {
         this.floatingTexts = [];
         this.particles = [];
         this.loraTurnState = null;
+        this.floorView = null;
+        this.floorActorView = null;
         this.undoHistory = [];
+    }
+
+    /**
+     * 이미지가 실제 픽셀까지 로드됐는지 확인합니다.
+     * @param {HTMLImageElement|null} image - 확인할 이미지입니다.
+     * @returns {boolean} 렌더 가능한 이미지 여부입니다.
+     * @private
+     */
+    #isImageReady(image) {
+        return Boolean(image?.complete
+            && Number(image.naturalWidth) > 0
+            && Number(image.naturalHeight) > 0);
+    }
+
+    /**
+     * 아이템 atlas의 fractional 셀을 정사각형 2D canvas 여덟 개로 분할합니다.
+     * @private
+     */
+    #sliceItemAtlas() {
+        this.itemIconCanvases.clear();
+        if (!this.#isImageReady(this.itemAtlasImage)
+            || typeof document === 'undefined') {
+            this.buttonSignature = '';
+            return;
+        }
+        const atlasData = this.data.SPRITES.ITEM_ATLAS;
+        const columns = Math.max(1, Number(atlasData.COLUMNS) || 1);
+        const rows = Math.max(1, Number(atlasData.ROWS) || 1);
+        const sourceWidth = this.itemAtlasImage.naturalWidth / columns;
+        const sourceHeight = this.itemAtlasImage.naturalHeight / rows;
+        const canvasSize = Math.max(1, Math.ceil(Math.max(sourceWidth, sourceHeight)));
+
+        for (const [itemId, cell] of Object.entries(atlasData.CELLS)) {
+            const column = Number(cell.COLUMN);
+            const row = Number(cell.ROW);
+            if (!Number.isInteger(column)
+                || !Number.isInteger(row)
+                || column < 0
+                || row < 0
+                || column >= columns
+                || row >= rows) {
+                continue;
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = canvasSize;
+            canvas.height = canvasSize;
+            const context = canvas.getContext('2d');
+            if (!context) {
+                continue;
+            }
+            context.clearRect(0, 0, canvasSize, canvasSize);
+            context.imageSmoothingEnabled = true;
+            context.drawImage(
+                this.itemAtlasImage,
+                column * sourceWidth,
+                row * sourceHeight,
+                sourceWidth,
+                sourceHeight,
+                (canvasSize - sourceWidth) * 0.5,
+                (canvasSize - sourceHeight) * 0.5,
+                sourceWidth,
+                sourceHeight
+            );
+            this.itemIconCanvases.set(itemId, canvas);
+        }
+        this.buttonSignature = '';
     }
 
     /**
@@ -585,6 +722,7 @@ export class TutorialScene extends BaseScene {
         this.cutsceneReturnMode = MODES.MENU;
         this.model = null;
         this.floorView = null;
+        this.floorActorView = null;
         this.mode = MODES.MENU;
         this.resultData = null;
         this.loraTurnState = null;
@@ -1093,6 +1231,8 @@ export class TutorialScene extends BaseScene {
             screenShakeSeconds: this.screenShakeSeconds,
             stabilizeSeconds: this.stabilizeSeconds,
             flashSeconds: this.flashSeconds,
+            floorView: cloneCheckpointValue(this.floorView),
+            floorActorView: cloneCheckpointValue(this.floorActorView),
             presentation: cloneCheckpointValue(this.presentation)
         };
     }
@@ -1107,11 +1247,23 @@ export class TutorialScene extends BaseScene {
         }
         const entry = this.undoHistory.pop();
         const previousPresentation = cloneCheckpointValue(this.presentation);
-        const previousFloorIndex = Number(this.model?.floorIndex) || 0;
+        const rawPreviousFloorIndex = Number(previousPresentation?.floorIndex);
+        const previousFloorIndex = Number.isFinite(rawPreviousFloorIndex)
+            ? rawPreviousFloorIndex
+            : (Number(this.model?.floorIndex) || 0);
+        const previousFloorView = cloneCheckpointValue(this.floorView);
+        const previousFloorActorView = cloneCheckpointValue(this.floorActorView);
         this.timelineRevision += 1;
         this.#clearOwnedAnimations();
         try {
             const targetPresentation = this.#restoreSceneCheckpoint(entry.checkpoint);
+            const targetFloorIndex = Number(this.model?.floorIndex) || 0;
+            const targetFloorView = cloneCheckpointValue(this.floorView);
+            const targetFloorActorView = cloneCheckpointValue(this.floorActorView);
+            if (previousFloorIndex !== targetFloorIndex) {
+                this.floorView = previousFloorView;
+                this.floorActorView = previousFloorActorView;
+            }
             this.presentation = {
                 ...targetPresentation,
                 ...previousPresentation,
@@ -1119,7 +1271,13 @@ export class TutorialScene extends BaseScene {
             };
             this.presentationLocked = false;
             this.#appendEvent(this.data.TEXT.ACTIONS.UNDO_EVENT);
-            this.#startUndoPresentation(entry, targetPresentation, previousFloorIndex);
+            this.#startUndoPresentation(
+                entry,
+                targetPresentation,
+                previousFloorIndex,
+                targetFloorView,
+                targetFloorActorView
+            );
         } catch (error) {
             this.undoHistory.push(entry);
             console.warn('행동 되돌리기 오류:', error);
@@ -1162,7 +1320,10 @@ export class TutorialScene extends BaseScene {
         this.stabilizeSeconds = Number(checkpoint.stabilizeSeconds) || 0;
         this.flashSeconds = Number(checkpoint.flashSeconds) || 0;
         this.#restoreCutsceneState(checkpoint.cutscene);
-        this.floorView = this.model.getCurrentFloorState();
+        this.floorView = cloneCheckpointValue(checkpoint.floorView)
+            || this.model.getCurrentFloorState();
+        this.floorActorView = cloneCheckpointValue(checkpoint.floorActorView)
+            || this.#captureFloorActorView();
         return cloneCheckpointValue(checkpoint.presentation);
     }
 
@@ -1488,17 +1649,43 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
+     * 현재 논리 층의 인물과 게이트 상태를 표현용으로 방어 복제합니다.
+     * @returns {object|null} 층 인물 표현 상태입니다.
+     * @private
+     */
+    #captureFloorActorView() {
+        if (!this.model) {
+            return null;
+        }
+        return {
+            floorIndex: Number(this.model.floorIndex) || 0,
+            player: cloneCheckpointValue(this.model.player),
+            lora: cloneCheckpointValue(this.model.lora),
+            gateOpen: this.model.gateOpen === true
+        };
+    }
+
+    /**
      * 전투 캐시를 모델의 현재 상태에 맞춥니다.
      * @private
      */
     #refreshBattleCache() {
         this.reachability = new Map();
         this.actionTargets = [];
-        if (!this.model || this.mode !== MODES.BATTLE) {
+        if (!this.model) {
             this.floorView = null;
+            this.floorActorView = null;
             return;
         }
-        this.floorView = this.model.getCurrentFloorState();
+        if (this.mode !== MODES.BATTLE) {
+            return;
+        }
+        const logicalFloorIndex = Number(this.model.floorIndex) || 0;
+        const presentationFloorIndex = Number(this.presentation.floorIndex) || 0;
+        if (!this.floorView || logicalFloorIndex === presentationFloorIndex) {
+            this.floorView = this.model.getCurrentFloorState();
+            this.floorActorView = this.#captureFloorActorView();
+        }
         if (this.model.turn === 'player' && !this.model.movementUsed) {
             this.reachability = this.#normalizeReachability(this.model.getReachability());
         }
@@ -1658,10 +1845,11 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #handleKeyboardInput() {
+        const undoShortcutPressed = this.#consumeUndoShortcut();
         if (this.mode === MODES.LOADING) {
             return;
         }
-        if (this.#isUndoShortcutPressed() && this.#canUndo()) {
+        if (undoShortcutPressed && this.#canUndo()) {
             enqueueSimulationCommand({ type: COMMANDS.UNDO });
             return;
         }
@@ -1893,18 +2081,31 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * Ctrl+Z 상승 에지를 좌우 Control 키 상태와 함께 확인합니다.
+     * DOM에서 포착한 Ctrl+Z를 우선 소비하고 프레임 에지와 현재 modifier로 보완합니다.
      * @returns {boolean} Undo 단축키 입력 여부입니다.
      * @private
      */
-    #isUndoShortcutPressed() {
+    #consumeUndoShortcut() {
+        const capturedShortcut = this.pendingUndoShortcut;
+        this.pendingUndoShortcut = false;
+        if (capturedShortcut) {
+            return true;
+        }
         if (!this.#wasKeyPressed('KeyZ')) {
             return false;
         }
-        return getKeyboardCodeInput('ControlLeft') === true
-            || getKeyboardCodeInput('ControlRight') === true
-            || this.keyboardLatch.get('ControlLeft') === true
-            || this.keyboardLatch.get('ControlRight') === true;
+        const modifierDown = CONTROL_KEY_CODES.some(
+            (code) => getKeyboardCodeInput(code) === true
+        );
+        if (!modifierDown) {
+            return false;
+        }
+        const modifierEdge = this.#wasAnyKeyPressed(CONTROL_KEY_CODES);
+        const modifierObserved = CONTROL_KEY_CODES.some((code) => (
+            this.keyboardPressObserved.get(code) === true
+                || this.keyboardLatch.get(code) === true
+        ));
+        return modifierEdge || modifierObserved;
     }
 
     /**
@@ -2254,12 +2455,23 @@ export class TutorialScene extends BaseScene {
             - (itemGapY * (inventoryRows - 1))
         ) / inventoryRows;
         const itemH = clampNumber(availableItemH, 30, 56);
+        const itemAtlasLayout = this.data.SPRITES.ITEM_ATLAS;
         paging.entries.forEach((entry, index) => {
             const column = index % inventoryColumns;
             const row = Math.floor(index / inventoryColumns);
             const usable = ready && !this.model.actionUsed && this.#isItemUsable(entry.itemId);
             const known = this.#isItemKnown(entry.itemId);
             const item = this.data.ITEMS[entry.itemId];
+            const itemIcon = known
+                ? this.#createItemIconChild(
+                    entry.itemId,
+                    itemH * itemAtlasLayout.BUTTON_ICON_SIZE_RATIO
+                )
+                : null;
+            const itemIconWidth = Number(itemIcon?.width) || 0;
+            const itemIconGap = itemIcon
+                ? this.#uww(itemAtlasLayout.BUTTON_ICON_GAP_UIWW)
+                : 0;
             const countLabel = ' ×' + String(entry.count);
             const itemLabel = known ? item?.label || entry.itemId : '미확인';
             const label = this.#truncateText(
@@ -2267,6 +2479,8 @@ export class TutorialScene extends BaseScene {
                 this.fonts.BUTTON,
                 inventoryColumnW
                     - this.#uww(1.2)
+                    - itemIconWidth
+                    - itemIconGap
                     - measureText(countLabel, this.fonts.BUTTON)
             ) + countLabel;
             this.#createButton('item-' + entry.itemId, {
@@ -2277,6 +2491,8 @@ export class TutorialScene extends BaseScene {
                 w: inventoryColumnW,
                 h: itemH,
                 label,
+                icon: itemIcon,
+                itemSpacing: itemIconGap,
                 enabled: usable,
                 idleColor: colors.UI.CardHeader,
                 hoverColor: colors.UI.ButtonHover,
@@ -2396,7 +2612,7 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * 텍스트 하나를 중앙 배치한 풀 기반 버튼을 만듭니다.
+     * 텍스트와 선택적 아이콘을 중앙 배치한 풀 기반 버튼을 만듭니다.
      * @param {string} key - 버튼 키입니다.
      * @param {object} options - 버튼 구성값입니다.
      * @private
@@ -2420,6 +2636,9 @@ export class TutorialScene extends BaseScene {
             align: 'center'
         });
         const button = UIPool.button.get();
+        const centerItems = options.icon
+            ? [options.icon, textElement]
+            : [textElement];
         button.init({
             parent: this,
             layer: 'ui',
@@ -2427,7 +2646,8 @@ export class TutorialScene extends BaseScene {
             y: options.y,
             width: options.w,
             height: options.h,
-            center: [textElement],
+            center: centerItems,
+            itemSpacing: options.itemSpacing,
             radius: options.radius ?? this.#uwh(
                 this.data.LAYOUT.ACTIONS.BUTTON_RADIUS_WH
             ),
@@ -2451,6 +2671,35 @@ export class TutorialScene extends BaseScene {
             this.data.ANIMATION.BUTTON_PRESS_SCALE
         ) || 0.965;
         this.buttons[key] = { item: button, text: textElement };
+    }
+
+    /**
+     * 버튼 레이아웃이 그릴 수 있는 atlas 아이콘 자식을 생성합니다.
+     * @param {string} itemId - 아이템 ID입니다.
+     * @param {number} width - 버튼 안에서 차지할 아이콘 폭입니다.
+     * @returns {object|null} 버튼용 아이콘 객체입니다.
+     * @private
+     */
+    #createItemIconChild(itemId, width) {
+        const image = this.itemIconCanvases.get(itemId);
+        if (!image || !Number.isFinite(width) || width <= 0) {
+            return null;
+        }
+        return {
+            type: 'tutorial-item-atlas',
+            width,
+            draw: (layer, x, y, w, h, scale, alpha) => {
+                render(layer, {
+                    shape: 'image',
+                    image,
+                    x,
+                    y,
+                    w,
+                    h,
+                    alpha
+                });
+            }
+        };
     }
 
     /**
@@ -2828,7 +3077,10 @@ export class TutorialScene extends BaseScene {
                 this.presentation.playerY = Number(this.model.player?.y) || 0;
                 this.presentation.playerAlpha = 1;
                 this.presentation.playerScale = 1;
-                this.presentation.floorIndex = Number(this.model.floorIndex) || 0;
+                const logicalFloorIndex = Number(this.model.floorIndex) || 0;
+                if (Number(this.floorView?.index) === logicalFloorIndex) {
+                    this.presentation.floorIndex = logicalFloorIndex;
+                }
             }
             this.#finishPresentationLock(revision);
         });
@@ -2935,6 +3187,64 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
+     * 현재 층을 유지한 채 플레이어를 숨기고, 완전히 사라진 뒤 목표 층 스냅샷으로 교체합니다.
+     * @param {{x:number,y:number}} tile - 목표 층의 플레이어 타일입니다.
+     * @param {number} floorIndex - 목표 층 인덱스입니다.
+     * @param {object} floorView - 목표 층 표현 스냅샷입니다.
+     * @param {object} floorActorView - 목표 층 인물 표현 스냅샷입니다.
+     * @param {number} revision - 시작 시점 타임라인 버전입니다.
+     * @returns {Promise<void>} 완료 Promise입니다.
+     * @private
+     */
+    async #animateFloorSwapTo(tile, floorIndex, floorView, floorActorView, revision) {
+        if (!tile) {
+            return;
+        }
+        await Promise.all([
+            this.#animateSlot(
+                'player-alpha',
+                this.presentation,
+                'playerAlpha',
+                0,
+                this.data.ANIMATION.UNDO_FADE_SECONDS
+            ),
+            this.#animateSlot(
+                'player-scale',
+                this.presentation,
+                'playerScale',
+                this.data.ANIMATION.TELEPORT_MIN_SCALE,
+                this.data.ANIMATION.UNDO_FADE_SECONDS
+            )
+        ]);
+        if (revision !== this.timelineRevision) {
+            return;
+        }
+        this.floorView = cloneCheckpointValue(floorView);
+        this.floorActorView = cloneCheckpointValue(floorActorView);
+        this.presentation.floorIndex = floorIndex;
+        this.presentation.playerX = tile.x;
+        this.presentation.playerY = tile.y;
+        await Promise.all([
+            this.#animateSlot(
+                'player-alpha',
+                this.presentation,
+                'playerAlpha',
+                1,
+                this.data.ANIMATION.TELEPORT_IN_SECONDS,
+                0
+            ),
+            this.#animateSlot(
+                'player-scale',
+                this.presentation,
+                'playerScale',
+                1,
+                this.data.ANIMATION.TELEPORT_IN_SECONDS,
+                this.data.ANIMATION.TELEPORT_MIN_SCALE
+            )
+        ]);
+    }
+
+    /**
      * 자동 층 전환 시 플레이어를 페이드한 뒤 새 층 시작 좌표에 배치합니다.
      * @private
      */
@@ -2945,29 +3255,17 @@ export class TutorialScene extends BaseScene {
         const revision = this.timelineRevision;
         const target = cloneTile(this.model.player);
         const targetFloorIndex = Number(this.model.floorIndex) || 0;
+        const targetFloorView = this.model.getCurrentFloorState();
+        const targetFloorActorView = this.#captureFloorActorView();
         this.presentationLocked = true;
         this.buttonSignature = '';
-        void this.#animateSlot(
-            'player-alpha',
-            this.presentation,
-            'playerAlpha',
-            0,
-            this.data.ANIMATION.UNDO_FADE_SECONDS
-        ).then(async () => {
-            if (revision !== this.timelineRevision || !target) {
-                return;
-            }
-            this.presentation.floorIndex = targetFloorIndex;
-            this.presentation.playerX = target.x;
-            this.presentation.playerY = target.y;
-            await this.#animateSlot(
-                'player-alpha',
-                this.presentation,
-                'playerAlpha',
-                1,
-                this.data.ANIMATION.TELEPORT_IN_SECONDS,
-                0
-            );
+        void this.#animateFloorSwapTo(
+            target,
+            targetFloorIndex,
+            targetFloorView,
+            targetFloorActorView,
+            revision
+        ).then(() => {
             this.#finishPresentationLock(revision);
         });
     }
@@ -2977,9 +3275,17 @@ export class TutorialScene extends BaseScene {
      * @param {object} entry - Undo 기록 항목입니다.
      * @param {object} targetPresentation - 체크포인트 표현 상태입니다.
      * @param {number} previousFloorIndex - Undo 직전 층입니다.
+     * @param {object} targetFloorView - 복원할 층 표현 스냅샷입니다.
+     * @param {object} targetFloorActorView - 복원할 인물 표현 스냅샷입니다.
      * @private
      */
-    #startUndoPresentation(entry, targetPresentation, previousFloorIndex) {
+    #startUndoPresentation(
+        entry,
+        targetPresentation,
+        previousFloorIndex,
+        targetFloorView,
+        targetFloorActorView
+    ) {
         const revision = this.timelineRevision;
         const targetFloorIndex = Number(this.model?.floorIndex) || 0;
         this.presentationLocked = true;
@@ -2988,11 +3294,13 @@ export class TutorialScene extends BaseScene {
         let playerPromise;
         if (previousFloorIndex !== targetFloorIndex) {
             const playerTarget = cloneTile(this.model.player);
-            playerPromise = this.#animateTeleportTo(playerTarget, revision).then(() => {
-                if (revision === this.timelineRevision) {
-                    this.presentation.floorIndex = targetFloorIndex;
-                }
-            });
+            playerPromise = this.#animateFloorSwapTo(
+                playerTarget,
+                targetFloorIndex,
+                targetFloorView,
+                targetFloorActorView,
+                revision
+            );
         } else {
             this.presentation.playerAlpha = 1;
             this.presentation.playerScale = 1;
@@ -3008,6 +3316,8 @@ export class TutorialScene extends BaseScene {
             if (revision !== this.timelineRevision) {
                 return;
             }
+            this.floorView = cloneCheckpointValue(targetFloorView);
+            this.floorActorView = cloneCheckpointValue(targetFloorActorView);
             this.presentation = {
                 ...this.presentation,
                 ...cloneCheckpointValue(targetPresentation),
@@ -3116,8 +3426,7 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #projectTile(x, y) {
-        const height = Number(this.model?.getTileHeight?.(x, y))
-            || Number(this.#getCurrentFloor()?.heights?.[y]?.[x])
+        const height = Number(this.#getCurrentFloor()?.heights?.[y]?.[x])
             || 0;
         const shake = this.#getBoardShake();
         return {
@@ -3174,7 +3483,8 @@ export class TutorialScene extends BaseScene {
         if (this.floorView) {
             return this.floorView;
         }
-        return this.model.floorStates?.[this.model.floorIndex] || null;
+        const floorIndex = Number(this.presentation.floorIndex) || 0;
+        return this.model.floorStates?.[floorIndex] || null;
     }
 
     /**
@@ -3404,7 +3714,7 @@ export class TutorialScene extends BaseScene {
      */
     #drawTopDownBoard() {
         const colors = ColorSchemes.Tactics;
-        const floorIndex = Number(this.model.floorIndex) || 0;
+        const floorIndex = Number(this.presentation.floorIndex) || 0;
         const baseFill = floorIndex === 0 ? colors.Tile.Low : colors.Tile.High2;
         for (let y = 0; y < this.data.MAP.HEIGHT; y++) {
             for (let x = 0; x < this.data.MAP.WIDTH; x++) {
@@ -3431,6 +3741,10 @@ export class TutorialScene extends BaseScene {
                     alpha: 0.9
                 });
             }
+        }
+
+        if (floorIndex !== (Number(this.model.floorIndex) || 0)) {
+            return;
         }
 
         if (this.model.turn === 'player' && !this.model.movementUsed) {
@@ -3516,6 +3830,14 @@ export class TutorialScene extends BaseScene {
         if (!floor) {
             return;
         }
+        const actorView = this.floorActorView;
+        const presentationMatchesModel = Number(this.presentation.floorIndex) === (
+            Number(this.model.floorIndex) || 0
+        );
+        const lora = actorView?.lora
+            || (presentationMatchesModel ? this.model.lora : null);
+        const player = actorView?.player
+            || (presentationMatchesModel ? this.model.player : null);
         const entries = [];
         for (const wall of toList(floor.walls)) {
             if (!wall.destroyed) {
@@ -3548,11 +3870,11 @@ export class TutorialScene extends BaseScene {
         if (floor.gate) {
             entries.push({ type: 'gate', value: floor.gate });
         }
-        if (this.model.lora) {
-            entries.push({ type: 'lora', value: this.model.lora });
+        if (lora) {
+            entries.push({ type: 'lora', value: lora });
         }
-        if (this.model.player) {
-            entries.push({ type: 'player', value: this.model.player });
+        if (player) {
+            entries.push({ type: 'player', value: player });
         }
         entries.sort((left, right) => (
             Number(left.value.y) - Number(right.value.y)
@@ -3608,14 +3930,28 @@ export class TutorialScene extends BaseScene {
         const point = this.#projectTile(entry.x, entry.y);
         const known = this.#isItemKnown(entry.itemId) || entry.identified === true;
         const glyph = known ? this.#getItemGlyph(entry.itemId) : '?';
+        const itemAtlasLayout = this.data.SPRITES.ITEM_ATLAS;
+        const icon = known ? this.itemIconCanvases.get(entry.itemId) : null;
         renderGL('object', {
             shape: 'circle',
             x: point.x,
             y: point.y,
-            w: this.tileSide * 0.45,
-            h: this.tileSide * 0.45,
+            w: this.tileSide * itemAtlasLayout.WORLD_HALO_SIZE_TILE_RATIO,
+            h: this.tileSide * itemAtlasLayout.WORLD_HALO_SIZE_TILE_RATIO,
             fill: colors.Entity.Item
         });
+        if (icon) {
+            const iconSize = this.tileSide * itemAtlasLayout.WORLD_ICON_SIZE_TILE_RATIO;
+            render('texteffect', {
+                shape: 'image',
+                image: icon,
+                x: point.x - (iconSize * 0.5),
+                y: point.y - (iconSize * 0.5),
+                w: iconSize,
+                h: iconSize
+            });
+            return;
+        }
         renderGL('object', {
             shape: 'rect',
             x: point.x,
@@ -3714,7 +4050,12 @@ export class TutorialScene extends BaseScene {
     #drawGate(gate) {
         const colors = ColorSchemes.Tactics;
         const point = this.#projectTile(gate.x, gate.y);
-        const open = this.model.gateOpen === true;
+        const presentationMatchesModel = Number(this.presentation.floorIndex) === (
+            Number(this.model.floorIndex) || 0
+        );
+        const open = this.floorActorView
+            ? this.floorActorView.gateOpen === true
+            : (presentationMatchesModel && this.model.gateOpen === true);
         const size = this.tileSide * 0.72;
         renderGL('object', {
             shape: 'rect',
@@ -3799,37 +4140,67 @@ export class TutorialScene extends BaseScene {
     #drawLora(lora) {
         const colors = ColorSchemes.Tactics;
         const point = this.#projectTile(lora.x, lora.y);
-        const size = this.tileSide * 0.64
-            * (1 + (this.presentation.actionPulse
-                * this.data.ANIMATION.ACTION_LORA_SCALE));
+        const spriteLayout = this.data.SPRITES.LORA;
+        const actionScale = 1 + (this.presentation.actionPulse
+            * this.data.ANIMATION.ACTION_LORA_SCALE);
+        const size = this.tileSide * spriteLayout.BASE_SIZE_TILE_RATIO * actionScale;
+        const spriteSize = this.tileSide
+            * spriteLayout.SPRITE_SIZE_TILE_RATIO
+            * actionScale;
         const alive = lora.alive !== false && Number(lora.hp) > 0;
+        const alpha = alive ? 1 : 0.56;
+        const spriteReady = this.loraSpriteReady
+            && this.#isImageReady(this.loraSprite);
         this.#drawShadow(point.x, point.y, size, alive ? 1 : 0.5);
-        renderGL('object', {
-            shape: 'circle',
-            x: point.x,
-            y: point.y,
-            w: size,
-            h: size,
-            fill: colors.Entity.LoraDark,
-            alpha: alive ? 1 : 0.56
-        });
-        renderGL('object', {
-            shape: 'circle',
-            x: point.x,
-            y: point.y,
-            w: size * 0.8,
-            h: size * 0.8,
-            fill: this.flashSeconds > 0 ? colors.Entity.LoraAccent : colors.Entity.Lora,
-            alpha: alive ? 1 : 0.56
-        });
-        renderGL('object', {
-            shape: 'rect',
-            x: point.x,
-            y: point.y - (size * 0.23),
-            w: size * 0.56,
-            h: size * 0.22,
-            fill: colors.Entity.LoraHair
-        });
+        if (spriteReady) {
+            if (this.flashSeconds > 0) {
+                renderGL('object', {
+                    shape: 'circle',
+                    x: point.x,
+                    y: point.y,
+                    w: size * spriteLayout.FLASH_GLOW_SIZE_RATIO,
+                    h: size * spriteLayout.FLASH_GLOW_SIZE_RATIO,
+                    fill: colors.Entity.LoraAccent,
+                    alpha: spriteLayout.FLASH_GLOW_ALPHA * alpha
+                });
+            }
+            renderGL('object', {
+                image: this.loraSprite,
+                x: point.x - (spriteSize * 0.5),
+                y: point.y - (spriteSize * 0.5)
+                    + (this.tileSide * spriteLayout.OFFSET_Y_TILE_RATIO),
+                w: spriteSize,
+                h: spriteSize,
+                alpha
+            });
+        } else {
+            renderGL('object', {
+                shape: 'circle',
+                x: point.x,
+                y: point.y,
+                w: size,
+                h: size,
+                fill: colors.Entity.LoraDark,
+                alpha
+            });
+            renderGL('object', {
+                shape: 'circle',
+                x: point.x,
+                y: point.y,
+                w: size * 0.8,
+                h: size * 0.8,
+                fill: this.flashSeconds > 0 ? colors.Entity.LoraAccent : colors.Entity.Lora,
+                alpha
+            });
+            renderGL('object', {
+                shape: 'rect',
+                x: point.x,
+                y: point.y - (size * 0.23),
+                w: size * 0.56,
+                h: size * 0.22,
+                fill: colors.Entity.LoraHair
+            });
+        }
         if (this.stabilizeSeconds > 0) {
             renderGL('object', {
                 shape: 'circle',
@@ -3841,7 +4212,9 @@ export class TutorialScene extends BaseScene {
                 alpha: clampNumber(this.stabilizeSeconds, 0, 1) * 0.38
             });
         }
-        this.#drawWorldGlyph('L', point.x, point.y, colors.Entity.LoraAccent);
+        if (!spriteReady) {
+            this.#drawWorldGlyph('L', point.x, point.y, colors.Entity.LoraAccent);
+        }
         this.#drawWorldHp(
             point.x,
             point.y - (size * 0.68),
@@ -3963,7 +4336,7 @@ export class TutorialScene extends BaseScene {
         const colors = ColorSchemes.Tactics;
         const rect = this.hudRects.STAGE_HEADER;
         const floor = this.#getCurrentFloor();
-        const rawStageTitle = Number(this.model.floorIndex) === 0
+        const rawStageTitle = Number(this.presentation.floorIndex) === 0
             ? (floor?.label || '1층') + ' · 로라의 방'
             : (floor?.label || '지하층') + ' · 게이트 전실';
         const titleMaxWidth = rect.w * 0.58;
@@ -4341,6 +4714,9 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #drawWorldEffects() {
+        if (Number(this.presentation.floorIndex) !== (Number(this.model?.floorIndex) || 0)) {
+            return;
+        }
         const colors = ColorSchemes.Tactics;
         for (const particle of this.particles) {
             const ratio = clampNumber(particle.seconds / particle.duration, 0, 1);
@@ -4639,13 +5015,16 @@ export class TutorialScene extends BaseScene {
                 y: point.y - (this.tileSide * 0.42),
                 fill: colors.UI.Danger,
                 seconds: 0,
-                duration: 0.7
+                duration: Number(this.data.ANIMATION.DAMAGE_TEXT_SECONDS)
             });
             this.screenShakeSeconds = Math.max(
                 this.screenShakeSeconds,
                 Number(this.data.ANIMATION.SHAKE_SECONDS) || 0.18
             );
-            this.flashSeconds = Math.max(this.flashSeconds, 0.2);
+            this.flashSeconds = Math.max(
+                this.flashSeconds,
+                Number(this.data.ANIMATION.HIT_FLASH_SECONDS)
+            );
         } else if (heal > 0) {
             this.floatingTexts.push({
                 text: '+' + String(heal),
@@ -4653,12 +5032,15 @@ export class TutorialScene extends BaseScene {
                 y: point.y - (this.tileSide * 0.42),
                 fill: colors.UI.Success,
                 seconds: 0,
-                duration: 0.8
+                duration: Number(this.data.ANIMATION.HEAL_TEXT_SECONDS)
             });
         }
         if (event.type === 'instability-changed'
             && Number(event.change ?? event.delta ?? event.amount) < 0) {
-            this.stabilizeSeconds = Math.max(this.stabilizeSeconds, 0.9);
+            this.stabilizeSeconds = Math.max(
+                this.stabilizeSeconds,
+                Number(this.data.ANIMATION.STABILIZE_SECONDS)
+            );
         }
     }
 
