@@ -10,5 +10,7 @@
 !project/engine/**
 !project/license
 !project/license/**
+!test/
+!test/tutorial_battle_model.test.mjs
 !package.json
 !README.md

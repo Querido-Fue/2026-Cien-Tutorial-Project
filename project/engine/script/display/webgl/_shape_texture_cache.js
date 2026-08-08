@@ -9,6 +9,7 @@ const WEBGL_CONSTANTS = getData('WEBGL_CONSTANTS');
 const BASE_SHAPE_ATLAS_ORDER = Object.freeze([
     'rect',
     'square',
+    'diamond',
     'circle',
     'triangle',
     'pentagon',

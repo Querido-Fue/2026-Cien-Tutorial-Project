@@ -29,7 +29,6 @@ import { TutorialBattleModel } from './_tutorial_battle_model.js';
 import { TutorialCutsceneController } from './_tutorial_cutscene_controller.js';
 import {
     createDefaultTutorialMeta,
-    discoverTutorialTrap,
     identifyTutorialItem,
     loadTutorialMeta,
     markTutorialOpeningWatched,
@@ -63,15 +62,15 @@ const COMMANDS = Object.freeze({
     CUTSCENE_NEXT: 'tutorial/cutscene-next',
     CUTSCENE_CLOSE: 'tutorial/cutscene-close',
     PLAN_STEP: 'tutorial/plan-step',
-    MOVE_TO: 'tutorial/move-to',
+    PLAN_BACK: 'tutorial/plan-back',
     COMMIT_PATH: 'tutorial/commit-path',
     SELECT_ATTACK: 'tutorial/select-attack',
     ATTACK: 'tutorial/attack',
-    DEFEND: 'tutorial/defend',
+    HEAL: 'tutorial/heal',
     IDLE: 'tutorial/idle',
     USE_ITEM: 'tutorial/use-item',
-    END_TURN: 'tutorial/end-turn',
-    ESCAPE: 'tutorial/escape',
+    SELECT_CLEANSE: 'tutorial/select-cleanse',
+    CLEANSE_EVENT_TILE: 'tutorial/cleanse-event-tile',
     PERFORM_LORA: 'tutorial/perform-lora',
     COMPLETE_LORA: 'tutorial/complete-lora'
 });
@@ -90,8 +89,8 @@ const WATCHED_KEY_CODES = Object.freeze([
     'Digit1',
     'Digit2',
     'Digit3',
-    'KeyE',
-    'KeyG',
+    'Digit4',
+    'Backspace',
     'KeyR',
     'KeyZ',
     'ControlLeft',
@@ -111,7 +110,7 @@ const KEY_DIRECTIONS = Object.freeze([
 
 const PLAYER_ID = 'player';
 const LORA_ID = 'lora';
-const KNOWN_STARTER_IDS = new Set(['bow', 'bandage']);
+const KNOWN_STARTER_IDS = new Set(['bow', 'mascot-costume']);
 
 /**
  * 숫자를 지정한 범위 안으로 제한합니다.
@@ -259,9 +258,9 @@ export class TutorialScene extends BaseScene {
         this.galleryIndex = 0;
         this.starterIndex = Math.max(
             0,
-            this.data.STARTER_CHOICES.findIndex((choice) => choice.id === 'bandage')
+            this.data.STARTER_CHOICES.findIndex((choice) => choice.id === 'mascot-costume')
         );
-        this.starterItemId = this.data.STARTER_CHOICES[this.starterIndex]?.id || 'bandage';
+        this.starterItemId = this.data.STARTER_CHOICES[this.starterIndex]?.id || 'mascot-costume';
         this.resultData = null;
         this.resultRecorded = false;
         this.destroyed = false;
@@ -294,7 +293,11 @@ export class TutorialScene extends BaseScene {
         this.reachability = new Map();
         this.actionTargets = [];
         this.attackSelected = false;
+        this.attackWeapon = 'melee';
         this.targetIndex = 0;
+        this.cleanseSelected = false;
+        this.cleanseTargets = [];
+        this.cleanseTargetIndex = 0;
         this.inventoryPage = 0;
         this.loraTurnState = null;
         this.eventLog = [];
@@ -492,20 +495,20 @@ export class TutorialScene extends BaseScene {
                 case COMMANDS.PLAN_STEP:
                     this.#applyPlanStep(command.payload);
                     break;
-                case COMMANDS.MOVE_TO:
-                    this.#applyMoveTo(command.payload);
+                case COMMANDS.PLAN_BACK:
+                    this.#applyPlanBack();
                     break;
                 case COMMANDS.COMMIT_PATH:
                     this.#applyCommitPath();
                     break;
                 case COMMANDS.SELECT_ATTACK:
-                    this.#applySelectAttack();
+                    this.#applySelectAttack(command.payload);
                     break;
                 case COMMANDS.ATTACK:
                     this.#applyAttack(command.payload);
                     break;
-                case COMMANDS.DEFEND:
-                    this.#applyDefend();
+                case COMMANDS.HEAL:
+                    this.#applyHeal();
                     break;
                 case COMMANDS.IDLE:
                     this.#applyIdle();
@@ -513,11 +516,11 @@ export class TutorialScene extends BaseScene {
                 case COMMANDS.USE_ITEM:
                     this.#applyUseItem(command.payload);
                     break;
-                case COMMANDS.END_TURN:
-                    this.#applyEndTurn();
+                case COMMANDS.SELECT_CLEANSE:
+                    this.#applySelectCleanse();
                     break;
-                case COMMANDS.ESCAPE:
-                    this.#applyEscape();
+                case COMMANDS.CLEANSE_EVENT_TILE:
+                    this.#applyCleanseEventTile(command.payload);
                     break;
                 case COMMANDS.PERFORM_LORA:
                     this.#applyLoraAction(command.payload);
@@ -686,10 +689,6 @@ export class TutorialScene extends BaseScene {
         if (this.mode !== MODES.MENU) {
             return;
         }
-        if (this.meta.openingWatched !== true) {
-            this.#openCutscene('opening', MODES.STARTER, true);
-            return;
-        }
         this.mode = MODES.STARTER;
     }
 
@@ -698,7 +697,7 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #applyOpenGallery() {
-        if (this.mode !== MODES.MENU) {
+        if (this.mode !== MODES.MENU || this.data.FEATURES?.CUTSCENES !== true) {
             return;
         }
         this.galleryIndex = clampNumber(this.galleryIndex, 0, this.galleryEntries.length - 1);
@@ -727,6 +726,8 @@ export class TutorialScene extends BaseScene {
         this.resultData = null;
         this.loraTurnState = null;
         this.attackSelected = false;
+        this.cleanseSelected = false;
+        this.cleanseTargets = [];
         this.hoveredTile = null;
         this.reachability.clear();
         this.actionTargets = [];
@@ -811,7 +812,11 @@ export class TutorialScene extends BaseScene {
         this.pendingCutscenes = [];
         this.runCutsceneIds = new Set(this.#getSnapshot()?.unlockedCutscenes || []);
         this.attackSelected = false;
+        this.attackWeapon = 'melee';
         this.targetIndex = 0;
+        this.cleanseSelected = false;
+        this.cleanseTargets = [];
+        this.cleanseTargetIndex = 0;
         this.inventoryPage = 0;
         this.loraTurnState = null;
         this.eventLog = [];
@@ -839,7 +844,7 @@ export class TutorialScene extends BaseScene {
         this.hoveredTileKey = '';
         this.#resetPlannedPath();
         this.#refreshBattleCache();
-        this.#appendEvent('전투 시작 · 이동과 행동은 어느 쪽이든 먼저 할 수 있습니다.');
+        this.#appendEvent('전투 시작 · 이동 경로를 지정하고 확정한 뒤 행동하세요.');
     }
 
     /**
@@ -939,22 +944,20 @@ export class TutorialScene extends BaseScene {
         }
         const dx = Number(payload?.x) || 0;
         const dy = Number(payload?.y) || 0;
+        if (this.cleanseSelected) {
+            this.#shiftCleanseTarget(dx || dy);
+            this.#startSelectionAnimation('attack');
+            return;
+        }
         if (this.attackSelected) {
             this.#shiftAttackTarget(dx || dy);
             this.#startSelectionAnimation('attack');
             return;
         }
-        if (this.model.movementUsed) {
+        if (this.model.movementUsed || this.model.phase !== 'move') {
             return;
         }
-        const current = this.plannedPath[this.plannedPath.length - 1]
-            || cloneTile(this.model.player);
-        if (!current) {
-            return;
-        }
-        const x = current.x + dx;
-        const y = current.y + dy;
-        const path = this.#normalizePath(this.model.getPathTo(x, y));
+        const path = this.#normalizePath(this.model.extendPath(this.plannedPath, dx, dy));
         if (path.length === 0) {
             return;
         }
@@ -963,20 +966,26 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * 클릭한 도달 가능 타일까지 즉시 이동합니다.
-     * @param {object} payload - 목적지 좌표입니다.
+     * 직접 지정 경로의 마지막 이동 스텝을 취소합니다. 포탈 이동은 입구와 출구를 함께 제거합니다.
      * @private
      */
-    #applyMoveTo(payload) {
-        if (!this.#canAcceptBattleInput() || this.model.movementUsed) {
+    #applyPlanBack() {
+        if (!this.#canAcceptBattleInput()
+            || this.model.movementUsed
+            || this.model.phase !== 'move'
+            || this.plannedPath.length <= 1) {
             return;
         }
-        const tile = cloneTile(payload);
-        if (!tile || !this.reachability.has(toTileKey(tile.x, tile.y))) {
-            return;
+        const last = this.plannedPath[this.plannedPath.length - 1];
+        const previous = this.plannedPath[this.plannedPath.length - 2];
+        this.plannedPath.pop();
+        if (previous
+            && Math.abs(last.x - previous.x) + Math.abs(last.y - previous.y) > 1
+            && this.plannedPath.length > 1) {
+            this.plannedPath.pop();
         }
-        const path = this.#normalizePath(this.model.getPathTo(tile.x, tile.y));
-        this.#commitModelPath(path);
+        this.cleanseSelected = false;
+        this.#startSelectionAnimation('path');
     }
 
     /**
@@ -984,7 +993,9 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #applyCommitPath() {
-        if (!this.#canAcceptBattleInput() || this.model.movementUsed) {
+        if (!this.#canAcceptBattleInput()
+            || this.model.movementUsed
+            || this.model.phase !== 'move') {
             return;
         }
         this.#commitModelPath(this.plannedPath);
@@ -1014,6 +1025,8 @@ export class TutorialScene extends BaseScene {
                 }))
                 .filter((segment) => segment.from && segment.to);
             this.#spawnPathParticles(entry.resultPath);
+            this.cleanseSelected = false;
+            this.cleanseTargets = [];
             this.#resetPlannedPath();
         }
         this.#afterModelChange(result);
@@ -1029,11 +1042,22 @@ export class TutorialScene extends BaseScene {
      * 공격 선택 상태를 전환합니다.
      * @private
      */
-    #applySelectAttack() {
-        if (!this.#canAcceptBattleInput() || this.model.actionUsed) {
+    #applySelectAttack(payload = {}) {
+        if (!this.#canAcceptBattleInput()
+            || this.model.phase !== 'action'
+            || this.model.actionUsed) {
             return;
         }
-        this.attackSelected = !this.attackSelected;
+        const weapon = payload?.weapon === 'bow' ? 'bow' : 'melee';
+        const selectingSameWeapon = this.attackSelected && this.attackWeapon === weapon;
+        if (!selectingSameWeapon
+            && toList(this.model.getValidTargets({ weapon })).length === 0) {
+            return;
+        }
+        this.attackSelected = !selectingSameWeapon;
+        this.attackWeapon = weapon;
+        this.cleanseSelected = false;
+        this.cleanseTargets = [];
         this.targetIndex = 0;
         this.#refreshBattleCache();
         this.#startSelectionAnimation('attack');
@@ -1045,7 +1069,9 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #applyAttack(payload) {
-        if (!this.#canAcceptBattleInput() || this.model.actionUsed) {
+        if (!this.#canAcceptBattleInput()
+            || this.model.phase !== 'action'
+            || this.model.actionUsed) {
             return;
         }
         const targetId = payload?.targetId
@@ -1056,7 +1082,7 @@ export class TutorialScene extends BaseScene {
         }
         const { result } = this.#performUndoableModelCommand(
             'attack',
-            () => this.model.attack(targetId)
+            () => this.model.attack(targetId, { weapon: this.attackWeapon })
         );
         this.attackSelected = false;
         this.#afterModelChange(result);
@@ -1064,16 +1090,18 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * 플레이어 방어 행동을 적용합니다.
+     * 플레이어 회복 행동을 적용합니다.
      * @private
      */
-    #applyDefend() {
-        if (!this.#canAcceptBattleInput() || this.model.actionUsed) {
+    #applyHeal() {
+        if (!this.#canAcceptBattleInput()
+            || this.model.phase !== 'action'
+            || this.model.actionUsed) {
             return;
         }
         const { result } = this.#performUndoableModelCommand(
-            'defend',
-            () => this.model.defend()
+            'heal',
+            () => this.model.heal()
         );
         this.attackSelected = false;
         this.#afterModelChange(result);
@@ -1085,7 +1113,9 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #applyIdle() {
-        if (!this.#canAcceptBattleInput() || this.model.actionUsed) {
+        if (!this.#canAcceptBattleInput()
+            || this.model.phase !== 'action'
+            || this.model.actionUsed) {
             return;
         }
         const { result } = this.#performUndoableModelCommand(
@@ -1093,8 +1123,57 @@ export class TutorialScene extends BaseScene {
             () => this.model.wait()
         );
         this.attackSelected = false;
+        this.cleanseSelected = false;
         this.#afterModelChange(result);
         this.#startActionPresentation(result);
+    }
+
+    /**
+     * 이동 단계의 타일 정화 대상 선택을 전환합니다.
+     * @private
+     */
+    #applySelectCleanse() {
+        if (!this.#canAcceptBattleInput()
+            || this.model.phase !== 'move'
+            || this.model.movementUsed) {
+            return;
+        }
+        const targets = toList(this.model.getCleanseTargets?.());
+        if (targets.length === 0) {
+            this.cleanseSelected = false;
+            this.cleanseTargets = [];
+            return;
+        }
+        this.cleanseSelected = !this.cleanseSelected;
+        this.attackSelected = false;
+        this.cleanseTargetIndex = 0;
+        this.#refreshBattleCache();
+        this.#startSelectionAnimation('attack');
+    }
+
+    /**
+     * 선택한 negative 이벤트 타일에 정화제를 사용합니다.
+     * @param {object} payload - 이벤트 타일 ID 또는 좌표입니다.
+     * @private
+     */
+    #applyCleanseEventTile(payload) {
+        if (!this.#canAcceptBattleInput() || !this.cleanseSelected) {
+            return;
+        }
+        const target = payload?.id
+            ? payload
+            : this.cleanseTargets[this.cleanseTargetIndex];
+        if (!target) {
+            return;
+        }
+        const { result } = this.#performUndoableModelCommand(
+            'cleanse-event-tile',
+            () => this.model.cleanseEventTile(target)
+        );
+        this.cleanseSelected = false;
+        this.cleanseTargets = [];
+        this.#afterModelChange(result);
+        this.#startActionPresentation(result, this.data.ANIMATION.SELECTION_SECONDS);
     }
 
     /**
@@ -1103,7 +1182,9 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #applyUseItem(payload) {
-        if (!this.#canAcceptBattleInput() || this.model.actionUsed) {
+        if (!this.#canAcceptBattleInput()
+            || this.model.phase !== 'action'
+            || this.model.actionUsed) {
             return;
         }
         const itemId = payload?.itemId;
@@ -1115,52 +1196,6 @@ export class TutorialScene extends BaseScene {
             () => this.model.useItem(itemId)
         );
         this.attackSelected = false;
-        this.#afterModelChange(result);
-        this.#startActionPresentation(result);
-    }
-
-    /**
-     * 플레이어 턴을 끝내고 로라 행동 예약 상태로 전환합니다.
-     * @private
-     */
-    #applyEndTurn() {
-        if (!this.#canAcceptBattleInput()) {
-            return;
-        }
-        const endMethod = typeof this.model.endPlayerTurn === 'function'
-            ? this.model.endPlayerTurn
-            : this.model.endTurn;
-        if (typeof endMethod !== 'function') {
-            return;
-        }
-        const { result } = this.#performUndoableModelCommand(
-            'end-turn',
-            () => endMethod.call(this.model)
-        );
-        this.attackSelected = false;
-        this.#afterModelChange(result);
-        this.#startActionPresentation(result, this.data.ANIMATION.TURN_GATE_SECONDS);
-        if (this.mode === MODES.BATTLE && this.model?.turn === 'lora') {
-            this.loraTurnState = {
-                stage: 'before',
-                seconds: 0,
-                queued: false
-            };
-        }
-    }
-
-    /**
-     * 열린 게이트에서 탈출을 시도합니다.
-     * @private
-     */
-    #applyEscape() {
-        if (!this.#canAcceptBattleInput() || !this.#canEscape()) {
-            return;
-        }
-        const { result } = this.#performUndoableModelCommand(
-            'escape',
-            () => this.model.escape()
-        );
         this.#afterModelChange(result);
         this.#startActionPresentation(result);
     }
@@ -1219,7 +1254,11 @@ export class TutorialScene extends BaseScene {
             eventLog: [...this.eventLog],
             loraTurnState: cloneCheckpointValue(this.loraTurnState),
             attackSelected: this.attackSelected,
+            attackWeapon: this.attackWeapon,
             targetIndex: this.targetIndex,
+            cleanseSelected: this.cleanseSelected,
+            cleanseTargets: cloneCheckpointValue(this.cleanseTargets),
+            cleanseTargetIndex: this.cleanseTargetIndex,
             inventoryPage: this.inventoryPage,
             hoveredTile: cloneTile(this.hoveredTile),
             hoveredTileKey: this.hoveredTileKey,
@@ -1307,7 +1346,11 @@ export class TutorialScene extends BaseScene {
         this.eventLog = [...(checkpoint.eventLog || [])];
         this.loraTurnState = cloneCheckpointValue(checkpoint.loraTurnState);
         this.attackSelected = checkpoint.attackSelected === true;
+        this.attackWeapon = checkpoint.attackWeapon === 'bow' ? 'bow' : 'melee';
         this.targetIndex = Number(checkpoint.targetIndex) || 0;
+        this.cleanseSelected = checkpoint.cleanseSelected === true;
+        this.cleanseTargets = cloneCheckpointValue(checkpoint.cleanseTargets) || [];
+        this.cleanseTargetIndex = Number(checkpoint.cleanseTargetIndex) || 0;
         this.inventoryPage = Number(checkpoint.inventoryPage) || 0;
         this.hoveredTile = cloneTile(checkpoint.hoveredTile);
         this.hoveredTileKey = String(checkpoint.hoveredTileKey || '');
@@ -1401,6 +1444,7 @@ export class TutorialScene extends BaseScene {
         const result = this.model.completeLoraTurn();
         this.loraTurnState = null;
         this.attackSelected = false;
+        this.cleanseSelected = false;
         this.#resetPlannedPath();
         this.#afterModelChange(result);
     }
@@ -1418,7 +1462,6 @@ export class TutorialScene extends BaseScene {
         this.#syncMetaFromModel();
         this.#refreshBattleCache();
         this.#enterResultIfNeeded();
-        this.#collectRunCutscenes();
         this.#animateHudToModel();
         if (this.presentation.floorIndex !== (Number(this.model?.floorIndex) || 0)) {
             this.#startFloorTransitionPresentation();
@@ -1453,18 +1496,6 @@ export class TutorialScene extends BaseScene {
         for (const itemId of toList(snapshot?.knowledge?.identifiedItemIds)) {
             if (typeof itemId === 'string') {
                 nextMeta = identifyTutorialItem(nextMeta, itemId);
-            }
-        }
-        for (const trapId of toList(snapshot?.knowledge?.revealedTrapIds)) {
-            if (typeof trapId === 'string') {
-                nextMeta = discoverTutorialTrap(nextMeta, trapId);
-            }
-        }
-        for (const floor of toList(this.model.floorStates)) {
-            for (const trap of toList(floor?.traps)) {
-                if (trap?.triggered || trap?.revealed) {
-                    nextMeta = discoverTutorialTrap(nextMeta, trap.id);
-                }
             }
         }
         this.#replaceMeta(nextMeta);
@@ -1528,9 +1559,6 @@ export class TutorialScene extends BaseScene {
             score,
             endingId
         }));
-        if (endingId) {
-            this.#openCutscene(endingId, MODES.RESULT, true);
-        }
     }
 
     /**
@@ -1544,7 +1572,7 @@ export class TutorialScene extends BaseScene {
         const turnBonus = Math.max(
             0,
             (Number(this.model?.maxTurns) || this.data.RULES.MAX_TURNS)
-                - (Number(this.model?.turnNumber) || 0)
+                - (Number(this.model?.loraActionsCompleted) || 0)
         ) * 50;
         return Math.round((hp * 10) + ((100 - instability) * 12) + turnBonus);
     }
@@ -1603,7 +1631,7 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #openCutscene(id, returnMode, repeat) {
-        if (typeof id !== 'string') {
+        if (typeof id !== 'string' || this.data.FEATURES?.CUTSCENES !== true) {
             return;
         }
         const exists = this.galleryEntries.some((entry) => entry.id === id);
@@ -1649,7 +1677,7 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * 현재 논리 층의 인물과 게이트 상태를 표현용으로 방어 복제합니다.
+     * 현재 논리 층의 인물 상태를 표현용으로 방어 복제합니다.
      * @returns {object|null} 층 인물 표현 상태입니다.
      * @private
      */
@@ -1660,8 +1688,7 @@ export class TutorialScene extends BaseScene {
         return {
             floorIndex: Number(this.model.floorIndex) || 0,
             player: cloneCheckpointValue(this.model.player),
-            lora: cloneCheckpointValue(this.model.lora),
-            gateOpen: this.model.gateOpen === true
+            lora: cloneCheckpointValue(this.model.lora)
         };
     }
 
@@ -1686,11 +1713,13 @@ export class TutorialScene extends BaseScene {
             this.floorView = this.model.getCurrentFloorState();
             this.floorActorView = this.#captureFloorActorView();
         }
-        if (this.model.turn === 'player' && !this.model.movementUsed) {
+        if (this.model.phase === 'move') {
             this.reachability = this.#normalizeReachability(this.model.getReachability());
         }
-        if (this.model.turn === 'player' && !this.model.actionUsed && this.attackSelected) {
-            this.actionTargets = toList(this.model.getValidTargets()).map((target) => ({
+        if (this.model.phase === 'action' && !this.model.actionUsed && this.attackSelected) {
+            this.actionTargets = toList(this.model.getValidTargets({
+                weapon: this.attackWeapon
+            })).map((target) => ({
                 ...target,
                 x: Number(target.x),
                 y: Number(target.y)
@@ -1700,6 +1729,23 @@ export class TutorialScene extends BaseScene {
                 0,
                 Math.max(0, this.actionTargets.length - 1)
             );
+        }
+        if (this.model.phase === 'move' && this.cleanseSelected) {
+            this.cleanseTargets = toList(this.model.getCleanseTargets()).map((target) => ({
+                ...target,
+                x: Number(target.x),
+                y: Number(target.y)
+            }));
+            this.cleanseTargetIndex = clampNumber(
+                this.cleanseTargetIndex,
+                0,
+                Math.max(0, this.cleanseTargets.length - 1)
+            );
+            if (this.cleanseTargets.length === 0) {
+                this.cleanseSelected = false;
+            }
+        } else if (!this.cleanseSelected) {
+            this.cleanseTargets = [];
         }
         const player = cloneTile(this.model.player);
         if (!player) {
@@ -1784,6 +1830,21 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
+     * 정화 대상 선택 커서를 순환합니다.
+     * @param {number} delta - 이동량입니다.
+     * @private
+     */
+    #shiftCleanseTarget(delta) {
+        const count = this.cleanseTargets.length;
+        if (count <= 0 || delta === 0) {
+            return;
+        }
+        this.cleanseTargetIndex = (
+            this.cleanseTargetIndex + Math.sign(delta) + count
+        ) % count;
+    }
+
+    /**
      * 플레이어 전투 입력을 받을 수 있는지 확인합니다.
      * @returns {boolean} 입력 가능 여부입니다.
      * @private
@@ -1794,17 +1855,6 @@ export class TutorialScene extends BaseScene {
             && !this.presentationLocked
             && this.model?.turn === 'player'
             && !this.model?.result;
-    }
-
-    /**
-     * 현재 위치에서 게이트 탈출이 가능한지 확인합니다.
-     * @returns {boolean} 가능 여부입니다.
-     * @private
-     */
-    #canEscape() {
-        return Boolean(this.model
-            && typeof this.model.canEscape === 'function'
-            && this.model.canEscape());
     }
 
     /**
@@ -1868,8 +1918,6 @@ export class TutorialScene extends BaseScene {
         if (this.mode === MODES.MENU) {
             if (this.#wasKeyPressed('Enter')) {
                 enqueueSimulationCommand({ type: COMMANDS.START });
-            } else if (this.#wasKeyPressed('KeyG')) {
-                enqueueSimulationCommand({ type: COMMANDS.OPEN_GALLERY });
             }
             return;
         }
@@ -1936,6 +1984,11 @@ export class TutorialScene extends BaseScene {
             return;
         }
 
+        if (this.#wasKeyPressed('Backspace')) {
+            enqueueSimulationCommand({ type: COMMANDS.PLAN_BACK });
+            return;
+        }
+
         const direction = KEY_DIRECTIONS.find((entry) => this.#wasAnyKeyPressed(entry.codes));
         if (direction) {
             enqueueSimulationCommand({
@@ -1944,30 +1997,42 @@ export class TutorialScene extends BaseScene {
             });
             return;
         }
-        if (this.#wasKeyPressed('Tab') && this.attackSelected) {
+        if (this.#wasKeyPressed('Tab') && (this.attackSelected || this.cleanseSelected)) {
             enqueueSimulationCommand({
                 type: COMMANDS.PLAN_STEP,
                 payload: { x: 1, y: 0 }
             });
         } else if (this.#wasKeyPressed('Enter')) {
-            if (this.attackSelected) {
+            if (this.cleanseSelected) {
+                const target = this.cleanseTargets[this.cleanseTargetIndex];
+                enqueueSimulationCommand({
+                    type: COMMANDS.CLEANSE_EVENT_TILE,
+                    payload: target
+                });
+            } else if (this.attackSelected) {
                 enqueueSimulationCommand({
                     type: COMMANDS.ATTACK,
                     payload: { targetId: this.actionTargets[this.targetIndex]?.id }
                 });
-            } else {
+            } else if (this.model.phase === 'move') {
                 enqueueSimulationCommand({ type: COMMANDS.COMMIT_PATH });
             }
         } else if (this.#wasKeyPressed('Digit1')) {
-            enqueueSimulationCommand({ type: COMMANDS.SELECT_ATTACK });
+            enqueueSimulationCommand({
+                type: COMMANDS.SELECT_ATTACK,
+                payload: { weapon: 'melee' }
+            });
         } else if (this.#wasKeyPressed('Digit2')) {
-            enqueueSimulationCommand({ type: COMMANDS.DEFEND });
+            enqueueSimulationCommand({
+                type: COMMANDS.SELECT_ATTACK,
+                payload: { weapon: 'bow' }
+            });
         } else if (this.#wasKeyPressed('Digit3')) {
+            enqueueSimulationCommand({ type: COMMANDS.HEAL });
+        } else if (this.#wasKeyPressed('Digit4')) {
             enqueueSimulationCommand({ type: COMMANDS.IDLE });
         } else if (this.#wasKeyPressed('Space')) {
-            enqueueSimulationCommand({ type: COMMANDS.END_TURN });
-        } else if (this.#wasKeyPressed('KeyE')) {
-            enqueueSimulationCommand({ type: COMMANDS.ESCAPE });
+            enqueueSimulationCommand({ type: COMMANDS.IDLE });
         }
     }
 
@@ -2004,6 +2069,15 @@ export class TutorialScene extends BaseScene {
                 this.targetIndex = hoveredTargetIndex;
                 this.#startSelectionAnimation('attack');
             }
+        } else if (nextTile && this.cleanseSelected) {
+            const hoveredTargetIndex = this.cleanseTargets.findIndex((target) => (
+                target.x === nextTile.x && target.y === nextTile.y
+            ));
+            if (hoveredTargetIndex >= 0
+                && hoveredTargetIndex !== this.cleanseTargetIndex) {
+                this.cleanseTargetIndex = hoveredTargetIndex;
+                this.#startSelectionAnimation('attack');
+            }
         }
         this.hoveredTile = nextTile;
         this.hoveredTileKey = nextKey;
@@ -2027,6 +2101,18 @@ export class TutorialScene extends BaseScene {
         if (!this.#canAcceptBattleInput()) {
             return;
         }
+        if (this.cleanseSelected) {
+            const target = this.cleanseTargets.find((entry) => (
+                entry.x === this.hoveredTile.x && entry.y === this.hoveredTile.y
+            ));
+            if (target) {
+                enqueueSimulationCommand({
+                    type: COMMANDS.CLEANSE_EVENT_TILE,
+                    payload: target
+                });
+            }
+            return;
+        }
         if (this.attackSelected) {
             const target = this.actionTargets.find((entry) => (
                 entry.x === this.hoveredTile.x && entry.y === this.hoveredTile.y
@@ -2039,11 +2125,13 @@ export class TutorialScene extends BaseScene {
             }
             return;
         }
-        if (!this.model.movementUsed
-            && this.reachability.has(toTileKey(this.hoveredTile.x, this.hoveredTile.y))) {
+        const endpoint = this.plannedPath[this.plannedPath.length - 1];
+        const dx = this.hoveredTile.x - (endpoint?.x ?? this.model.player.x);
+        const dy = this.hoveredTile.y - (endpoint?.y ?? this.model.player.y);
+        if (this.model.phase === 'move' && Math.abs(dx) + Math.abs(dy) === 1) {
             enqueueSimulationCommand({
-                type: COMMANDS.MOVE_TO,
-                payload: this.hoveredTile
+                type: COMMANDS.PLAN_STEP,
+                payload: { x: dx, y: dy }
             });
         }
     }
@@ -2185,11 +2273,18 @@ export class TutorialScene extends BaseScene {
             String(this.starterIndex),
             String(this.galleryIndex),
             String(this.model?.turn),
+            String(this.model?.phase),
             String(this.model?.movementUsed),
             String(this.model?.actionUsed),
+            String(this.model?.actionsUsed),
+            String(this.model?.actionsPerTurn),
+            String(this.model?.loraActionsCompleted),
             String(this.attackSelected),
+            String(this.attackWeapon),
+            String(this.cleanseSelected),
+            String(this.cleanseTargetIndex),
+            this.plannedPath.map((point) => toTileKey(point.x, point.y)).join('>'),
             String(this.inventoryPage),
-            String(this.#canEscape()),
             String(this.#canUndo()),
             String(this.presentationLocked),
             inventory
@@ -2237,14 +2332,6 @@ export class TutorialScene extends BaseScene {
             h,
             label: '게임 시작  [Enter]',
             onClick: () => this.#queueUiCommand(COMMANDS.START)
-        });
-        this.#createButton('menu-gallery', {
-            x,
-            y: this.#uwh(66),
-            w,
-            h,
-            label: '컷씬 갤러리  [G]',
-            onClick: () => this.#queueUiCommand(COMMANDS.OPEN_GALLERY)
         });
     }
 
@@ -2342,33 +2429,44 @@ export class TutorialScene extends BaseScene {
         ) / columns;
         const actionH = Math.min(actionRect.h, clampNumber(this.#uwh(7), 48, 64));
         const actionY = actionRect.y + ((actionRect.h - actionH) * 0.5);
-        const hasAttackTarget = toList(this.model.getValidTargets()).length > 0;
+        const actionReady = ready
+            && this.model.phase === 'action'
+            && !this.model.actionUsed;
+        const meleeTargets = toList(this.model.getValidTargets({ weapon: 'melee' }));
+        const bowTargets = toList(this.model.getValidTargets({ weapon: 'bow' }));
+        const hasBow = this.#getInventoryEntries().some((entry) => entry.itemId === 'bow');
         const actionSpecs = [
             {
-                key: 'attack',
-                label: this.attackSelected ? '1 공격 취소' : '1 공격',
-                enabled: ready && !this.model.actionUsed && hasAttackTarget,
-                active: this.attackSelected,
-                type: COMMANDS.SELECT_ATTACK
+                key: 'melee',
+                label: this.attackSelected && this.attackWeapon === 'melee'
+                    ? '1 근접 취소'
+                    : '1 근접 공격',
+                enabled: actionReady && meleeTargets.length > 0,
+                active: this.attackSelected && this.attackWeapon === 'melee',
+                type: COMMANDS.SELECT_ATTACK,
+                payload: { weapon: 'melee' }
             },
             {
-                key: 'defend',
-                label: '2 방어',
-                enabled: ready && !this.model.actionUsed,
-                type: COMMANDS.DEFEND
+                key: 'ranged',
+                label: this.attackSelected && this.attackWeapon === 'bow'
+                    ? '2 원거리 취소'
+                    : '2 원거리 공격',
+                enabled: actionReady && hasBow && bowTargets.length > 0,
+                active: this.attackSelected && this.attackWeapon === 'bow',
+                type: COMMANDS.SELECT_ATTACK,
+                payload: { weapon: 'bow' }
+            },
+            {
+                key: 'heal',
+                label: '3 회복 +20',
+                enabled: actionReady,
+                type: COMMANDS.HEAL
             },
             {
                 key: 'idle',
-                label: '3 대기',
-                enabled: ready && !this.model.actionUsed,
+                label: '4 대기',
+                enabled: actionReady,
                 type: COMMANDS.IDLE
-            },
-            {
-                key: 'escape',
-                label: '게이트 탈출',
-                enabled: ready && this.#canEscape(),
-                active: this.#canEscape(),
-                type: COMMANDS.ESCAPE
             }
         ];
         actionSpecs.forEach((spec, index) => {
@@ -2380,24 +2478,47 @@ export class TutorialScene extends BaseScene {
                 label: spec.label,
                 enabled: spec.enabled,
                 active: spec.active,
-                onClick: () => this.#queueUiCommand(spec.type)
+                onClick: () => this.#queueUiCommand(spec.type, spec.payload)
             });
         });
         const primaryRect = this.hudRects.PRIMARY_ACTION;
         const primaryH = Math.min(primaryRect.h, clampNumber(this.#uwh(7), 48, 72));
+        const movePreview = this.model.phase === 'move'
+            ? this.model.previewPath(this.plannedPath)
+            : null;
+        const primaryIsMove = this.model.phase === 'move';
+        const primaryEnabled = ready && (primaryIsMove
+            ? movePreview?.ok === true
+            : this.model.phase === 'action' && !this.model.actionUsed);
+        const primaryLabel = primaryIsMove
+            ? '이동 확정 '
+                + String(movePreview?.stepsUsed || 0)
+                + '/'
+                + String(movePreview?.moveRange || this.data.ACTORS.PLAYER.MOVE_RANGE)
+                + ' · 남음 ' + String(movePreview?.remainingMoves ?? 0)
+                + '  [Enter]'
+            : this.model.phase === 'action'
+                ? '대기 · 행동 '
+                    + String((Number(this.model.actionsUsed) || 0) + 1)
+                    + '/'
+                    + String(Number(this.model.actionsPerTurn) || 1)
+                    + '  [Space]'
+                : '로라와 몹 행동 중';
         this.#createButton('battle-end', {
             x: primaryRect.x,
             y: primaryRect.y + ((primaryRect.h - primaryH) * 0.5),
             w: primaryRect.w,
             h: primaryH,
-            label: '턴 종료  [Space]',
-            enabled: ready,
+            label: primaryLabel,
+            enabled: primaryEnabled,
             idleColor: colors.UI.Primary,
             hoverColor: colors.UI.PrimaryHover,
             textColor: colors.UI.OnPrimary,
             radius: this.#uwh(1.35),
             shadow: { blur: 10, color: colors.UI.ButtonShadow },
-            onClick: () => this.#queueUiCommand(COMMANDS.END_TURN)
+            onClick: () => this.#queueUiCommand(
+                primaryIsMove ? COMMANDS.COMMIT_PATH : COMMANDS.IDLE
+            )
         });
         const menuRect = this.hudRects.MENU;
         const menuH = Math.min(menuRect.h, clampNumber(this.#uwh(4.2), 32, 48));
@@ -2454,12 +2575,17 @@ export class TutorialScene extends BaseScene {
             inventoryRect.y + inventoryRect.h - inventoryPad - inventoryY
             - (itemGapY * (inventoryRows - 1))
         ) / inventoryRows;
-        const itemH = clampNumber(availableItemH, 30, 56);
+        const itemH = clampNumber(availableItemH, 22, 56);
         const itemAtlasLayout = this.data.SPRITES.ITEM_ATLAS;
         paging.entries.forEach((entry, index) => {
             const column = index % inventoryColumns;
             const row = Math.floor(index / inventoryColumns);
-            const usable = ready && !this.model.actionUsed && this.#isItemUsable(entry.itemId);
+            const movementConsumable = entry.itemId === 'tile-cleanser';
+            const usable = movementConsumable
+                ? ready
+                    && this.model.phase === 'move'
+                    && toList(this.model.getCleanseTargets()).length > 0
+                : actionReady && this.#isItemUsable(entry.itemId);
             const known = this.#isItemKnown(entry.itemId);
             const item = this.data.ITEMS[entry.itemId];
             const itemIcon = known
@@ -2474,8 +2600,9 @@ export class TutorialScene extends BaseScene {
                 : 0;
             const countLabel = ' ×' + String(entry.count);
             const itemLabel = known ? item?.label || entry.itemId : '미확인';
+            const displayLabel = movementConsumable ? '[이동] ' + itemLabel : itemLabel;
             const label = this.#truncateText(
-                itemLabel,
+                displayLabel,
                 this.fonts.BUTTON,
                 inventoryColumnW
                     - this.#uww(1.2)
@@ -2494,11 +2621,13 @@ export class TutorialScene extends BaseScene {
                 icon: itemIcon,
                 itemSpacing: itemIconGap,
                 enabled: usable,
+                active: movementConsumable && this.cleanseSelected,
                 idleColor: colors.UI.CardHeader,
                 hoverColor: colors.UI.ButtonHover,
-                onClick: () => this.#queueUiCommand(COMMANDS.USE_ITEM, {
-                    itemId: entry.itemId
-                })
+                onClick: () => this.#queueUiCommand(
+                    movementConsumable ? COMMANDS.SELECT_CLEANSE : COMMANDS.USE_ITEM,
+                    { itemId: entry.itemId }
+                )
             });
         });
 
@@ -2812,7 +2941,7 @@ export class TutorialScene extends BaseScene {
      */
     #isItemKnown(itemId) {
         return KNOWN_STARTER_IDS.has(itemId)
-            || this.meta.identifiedItemIds.includes(itemId);
+            || Boolean(this.data.ITEMS[itemId]);
     }
 
     /**
@@ -2847,25 +2976,42 @@ export class TutorialScene extends BaseScene {
             boardW * 0.08,
             boardH * 0.08
         );
-        const gapRatio = Math.max(0, Number(boardLayout.TILE_GAP_RATIO) || 0);
         const mapWidth = this.data.MAP.WIDTH;
         const mapHeight = this.data.MAP.HEIGHT;
-        const widthUnits = mapWidth + ((mapWidth - 1) * gapRatio);
-        const heightUnits = mapHeight + ((mapHeight - 1) * gapRatio);
-        this.tileSide = Math.max(1, Math.floor(Math.min(
-            (boardW - (this.boardPadding * 2)) / widthUnits,
-            (boardH - (this.boardPadding * 2)) / heightUnits
+        const innerW = boardW - (this.boardPadding * 2);
+        const innerH = boardH - (this.boardPadding * 2);
+        const diagonalSpan = mapWidth + mapHeight;
+        const maxTileHeight = Math.max(
+            0,
+            ...this.data.FLOORS.flatMap((floor) => floor.heights.flat())
+        );
+        this.tileWidth = Math.max(2, Math.floor(Math.min(
+            (innerW * 2) / diagonalSpan,
+            innerH / ((diagonalSpan / 4) + (maxTileHeight * 0.14))
         )));
-        this.tileGap = this.tileSide * gapRatio;
-        this.tileStep = this.tileSide + this.tileGap;
-        const gridW = (mapWidth * this.tileSide) + ((mapWidth - 1) * this.tileGap);
-        const gridH = (mapHeight * this.tileSide) + ((mapHeight - 1) * this.tileGap);
+        this.tileHeight = this.tileWidth * 0.5;
+        this.tileElevation = this.tileHeight * 0.28;
+        this.tileSide = this.tileWidth * (
+            Number(boardLayout.ENTITY_SCALE_RATIO) || 0.64
+        );
+        this.tileGap = this.tileWidth * Math.max(
+            0,
+            Number(boardLayout.TILE_GAP_RATIO) || 0
+        );
+        const gridW = diagonalSpan * this.tileWidth * 0.5;
+        const gridH = (diagonalSpan * this.tileHeight * 0.5)
+            + (maxTileHeight * this.tileElevation);
         this.gridRect = {
             x: boardLeft + ((boardW - gridW) * 0.5),
             y: boardTop + ((boardH - gridH) * 0.5),
             w: gridW,
             h: gridH
         };
+        this.isoOriginX = boardLeft + (boardW * 0.5)
+            - ((mapWidth - mapHeight) * this.tileWidth * 0.25);
+        this.isoOriginY = this.gridRect.y
+            + (maxTileHeight * this.tileElevation)
+            + (this.tileHeight * 0.5);
 
         this.hudRects = Object.fromEntries(
             Object.entries(this.data.LAYOUT.HUD).map(([key, layout]) => ([key, {
@@ -3419,7 +3565,7 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * 타일 좌표를 축 정렬 정사각형 탑뷰 화면 좌표로 변환합니다.
+     * 타일 좌표를 쿼터뷰 다이아몬드 화면 좌표로 변환합니다.
      * @param {number} x - 타일 X입니다.
      * @param {number} y - 타일 Y입니다.
      * @returns {{x:number,y:number,height:number}} 화면 좌표입니다.
@@ -3430,16 +3576,17 @@ export class TutorialScene extends BaseScene {
             || 0;
         const shake = this.#getBoardShake();
         return {
-            x: this.gridRect.x + (this.tileSide * 0.5) + (x * this.tileStep)
-                + shake.x,
-            y: this.gridRect.y + (this.tileSide * 0.5) + (y * this.tileStep)
+            x: this.isoOriginX + ((x - y) * this.tileWidth * 0.5) + shake.x,
+            y: this.isoOriginY
+                + ((x + y) * this.tileHeight * 0.5)
+                - (height * this.tileElevation)
                 + shake.y,
             height
         };
     }
 
     /**
-     * 포인터 좌표를 축 정렬 탑뷰 타일로 역변환합니다.
+     * 포인터 좌표가 포함된 가장 앞쪽 쿼터뷰 다이아몬드를 찾습니다.
      * @param {number} px - 화면 X입니다.
      * @param {number} py - 화면 Y입니다.
      * @returns {{x:number,y:number}|null} 타일 좌표입니다.
@@ -3449,26 +3596,30 @@ export class TutorialScene extends BaseScene {
         if (!Number.isFinite(px) || !Number.isFinite(py)) {
             return null;
         }
-        const shake = this.#getBoardShake();
-        const localX = px - shake.x - this.gridRect.x;
-        const localY = py - shake.y - this.gridRect.y;
-        if (localX < 0 || localY < 0) {
-            return null;
+        const candidates = [];
+        const boardTiles = [];
+        for (let y = 0; y < this.data.MAP.HEIGHT; y++) {
+            for (let x = 0; x < this.data.MAP.WIDTH; x++) {
+                boardTiles.push({ x, y });
+            }
         }
-        const x = Math.floor(localX / this.tileStep);
-        const y = Math.floor(localY / this.tileStep);
-        if (x < 0
-            || y < 0
-            || x >= this.data.MAP.WIDTH
-            || y >= this.data.MAP.HEIGHT) {
-            return null;
+        boardTiles.sort((left, right) => (
+            (left.x + left.y) - (right.x + right.y) || left.x - right.x
+        ));
+        for (const tile of boardTiles) {
+                const { x, y } = tile;
+                const point = this.#projectTile(x, y);
+                const distance = Math.abs(px - point.x) / (this.tileWidth * 0.5)
+                    + Math.abs(py - point.y) / (this.tileHeight * 0.5);
+                if (distance <= 1) {
+                    candidates.push({ x, y, distance, depth: x + y });
+                }
         }
-        const cellX = localX - (x * this.tileStep);
-        const cellY = localY - (y * this.tileStep);
-        if (cellX > this.tileSide || cellY > this.tileSide) {
-            return null;
-        }
-        return { x, y };
+        candidates.sort((left, right) => (
+            right.depth - left.depth || left.distance - right.distance
+        ));
+        const hit = candidates[0];
+        return hit ? { x: hit.x, y: hit.y } : null;
     }
 
     /**
@@ -3541,15 +3692,14 @@ export class TutorialScene extends BaseScene {
         );
         this.#drawText(
             'ui',
-            '해금 컷씬 ' + String(this.meta.unlockedCutsceneIds.length)
-                + ' / ' + String(this.galleryEntries.length),
+            '이동 4칸 지정 → 행동 → 로라 → 몹 · 총 12회',
             centerX,
             this.#uwh(47),
             this.fonts.SMALL,
             colors.UI.Muted,
             'center'
         );
-        this.#drawText('ui', 'Enter 시작 · G 갤러리', centerX, this.#uwh(82), this.fonts.SMALL, colors.UI.Muted, 'center');
+        this.#drawText('ui', 'Enter 시작', centerX, this.#uwh(82), this.fonts.SMALL, colors.UI.Muted, 'center');
     }
 
     /**
@@ -3562,7 +3712,7 @@ export class TutorialScene extends BaseScene {
         this.#drawText('ui', '출발 장비 선택', centerX, this.#uwh(18), this.fonts.TITLE, colors.UI.Text, 'center');
         this.#drawText(
             'ui',
-            '이동과 행동은 독립적입니다. 이번 플레이의 첫 선택을 고르세요.',
+            '매 턴 이동 경로를 먼저 확정한 뒤 행동합니다. 출발 장비를 고르세요.',
             centerX,
             this.#uwh(25),
             this.fonts.BODY,
@@ -3685,7 +3835,7 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * 정사각형 탑뷰 보드와 전투 HUD를 그립니다.
+     * 쿼터뷰 전술 보드와 전투 HUD를 그립니다.
      * @private
      */
     #drawBattle() {
@@ -3702,66 +3852,100 @@ export class TutorialScene extends BaseScene {
             fill: colors.BoardFrame,
             alpha: 0.9
         });
-        this.#drawTopDownBoard();
+        this.#drawQuarterViewBoard();
         this.#drawWorldObjects();
         this.#drawWorldEffects();
         this.#drawBattleHud();
     }
 
     /**
-     * 층별 색, 이동 범위, 경로, 공격 표식을 그립니다.
+     * 층별 다이아몬드 타일, 이동 범위, 경로와 대상 표식을 그립니다.
      * @private
      */
-    #drawTopDownBoard() {
+    #drawQuarterViewBoard() {
         const colors = ColorSchemes.Tactics;
         const floorIndex = Number(this.presentation.floorIndex) || 0;
         const baseFill = floorIndex === 0 ? colors.Tile.Low : colors.Tile.High2;
+        const boardTiles = [];
         for (let y = 0; y < this.data.MAP.HEIGHT; y++) {
             for (let x = 0; x < this.data.MAP.WIDTH; x++) {
-                const point = this.#projectTile(x, y);
+                boardTiles.push({ x, y });
+            }
+        }
+        boardTiles.sort((left, right) => (
+            (left.x + left.y) - (right.x + right.y) || left.x - right.x
+        ));
+        for (const tile of boardTiles) {
+                const point = this.#projectTile(tile.x, tile.y);
+                const { x, y } = tile;
                 const alternate = (x + y) % 2 === 0;
                 renderGL('background', {
-                    shape: 'rect',
+                    shape: 'diamond',
                     x: point.x,
                     y: point.y,
-                    w: this.tileSide,
-                    h: this.tileSide,
+                    w: this.tileWidth - this.tileGap,
+                    h: this.tileHeight - (this.tileGap * 0.5),
                     fill: floorIndex === 0
                         ? (alternate ? baseFill : colors.Tile.High1)
                         : (alternate ? baseFill : colors.Tile.Side2),
                     alpha: 0.96
                 });
                 renderGL('background', {
-                    shape: 'rect',
+                    shape: 'diamond',
                     x: point.x,
                     y: point.y,
-                    w: this.tileSide * 0.92,
-                    h: this.tileSide * 0.92,
+                    w: (this.tileWidth - this.tileGap) * 0.9,
+                    h: (this.tileHeight - (this.tileGap * 0.5)) * 0.9,
                     fill: baseFill,
                     alpha: 0.9
                 });
-            }
         }
 
         if (floorIndex !== (Number(this.model.floorIndex) || 0)) {
             return;
         }
 
-        if (this.model.turn === 'player' && !this.model.movementUsed) {
-            for (const tile of this.reachability.values()) {
-                const point = this.#projectTile(tile.x, tile.y);
-                renderGL('background', {
-                    shape: 'rect',
-                    x: point.x,
-                    y: point.y,
-                    w: this.tileSide * 0.76,
-                    h: this.tileSide * 0.76,
-                    fill: colors.Tile.Reachable,
-                    alpha: 0.52
+        if (this.model.phase === 'move') {
+            for (const direction of KEY_DIRECTIONS) {
+                const extension = this.#normalizePath(this.model.extendPath(
+                    this.plannedPath,
+                    direction.x,
+                    direction.y
+                ));
+                extension.slice(this.plannedPath.length).forEach((tile, index) => {
+                    const point = this.#projectTile(tile.x, tile.y);
+                    renderGL('background', {
+                        shape: 'diamond',
+                        x: point.x,
+                        y: point.y,
+                        w: this.tileWidth * (index === 0 ? 0.76 : 0.58),
+                        h: this.tileHeight * (index === 0 ? 0.76 : 0.58),
+                        fill: index === 0 ? colors.Tile.Reachable : colors.Tile.Teleport,
+                        alpha: index === 0 ? 0.58 : 0.46
+                    });
                 });
             }
         }
         if (this.attackSelected) {
+            if (this.attackWeapon === 'melee') {
+                const range = Number(this.data.ACTORS.PLAYER.ATTACK_RANGE) || 2;
+                for (const tile of boardTiles) {
+                    const distance = Math.abs(tile.x - this.model.player.x)
+                        + Math.abs(tile.y - this.model.player.y);
+                    if (distance > 0 && distance <= range) {
+                        const point = this.#projectTile(tile.x, tile.y);
+                        renderGL('background', {
+                            shape: 'diamond',
+                            x: point.x,
+                            y: point.y,
+                            w: this.tileWidth * 0.7,
+                            h: this.tileHeight * 0.7,
+                            fill: colors.Tile.Attack,
+                            alpha: 0.16
+                        });
+                    }
+                }
+            }
             this.actionTargets.forEach((target, index) => {
                 const point = this.#projectTile(target.x, target.y);
                 const selected = index === this.targetIndex;
@@ -3770,15 +3954,33 @@ export class TutorialScene extends BaseScene {
                     ? minScale + ((1 - minScale) * this.presentation.attackProgress)
                     : 0.82;
                 renderGL('background', {
-                    shape: 'rect',
+                    shape: 'diamond',
                     x: point.x,
                     y: point.y,
-                    w: this.tileSide * scale,
-                    h: this.tileSide * scale,
+                    w: this.tileWidth * scale,
+                    h: this.tileHeight * scale,
                     fill: colors.Tile.Attack,
                     alpha: selected
                         ? 0.36 + (0.3 * this.presentation.attackProgress)
                         : 0.42
+                });
+            });
+        }
+        if (this.cleanseSelected) {
+            this.cleanseTargets.forEach((target, index) => {
+                const point = this.#projectTile(target.x, target.y);
+                const selected = index === this.cleanseTargetIndex;
+                const scale = selected
+                    ? 0.72 + (0.28 * this.presentation.attackProgress)
+                    : 0.82;
+                renderGL('background', {
+                    shape: 'diamond',
+                    x: point.x,
+                    y: point.y,
+                    w: this.tileWidth * scale,
+                    h: this.tileHeight * scale,
+                    fill: colors.UI.Success,
+                    alpha: selected ? 0.64 : 0.38
                 });
             });
         }
@@ -3788,16 +3990,23 @@ export class TutorialScene extends BaseScene {
             const scale = minScale
                 + ((0.88 - minScale) * this.presentation.hoverProgress);
             renderGL('background', {
-                shape: 'rect',
+                shape: 'diamond',
                 x: point.x,
                 y: point.y,
-                w: this.tileSide * scale,
-                h: this.tileSide * scale,
+                w: this.tileWidth * scale,
+                h: this.tileHeight * scale,
                 fill: colors.Tile.Hover,
                 alpha: 0.24 + (0.34 * this.presentation.hoverProgress)
             });
         }
+        let plannedStep = 0;
         this.plannedPath.slice(1).forEach((tile, index) => {
+            const previous = this.plannedPath[index];
+            const costsMove = Math.abs(tile.x - previous.x)
+                + Math.abs(tile.y - previous.y) === 1;
+            if (costsMove) {
+                plannedStep += 1;
+            }
             const point = this.#projectTile(tile.x, tile.y);
             renderGL('object', {
                 shape: 'circle',
@@ -3811,7 +4020,7 @@ export class TutorialScene extends BaseScene {
             });
             this.#drawText(
                 'texteffect',
-                String(index + 1),
+                costsMove ? String(plannedStep) : '↔',
                 point.x,
                 point.y,
                 this.fonts.SMALL,
@@ -3850,25 +4059,16 @@ export class TutorialScene extends BaseScene {
                 entries.push({ type: 'item', value: item });
             }
         }
-        for (const trap of toList(floor.traps)) {
-            if (trap.revealed
-                || trap.triggered
-                || this.meta.discoveredTrapIds.includes(trap.id)) {
-                entries.push({ type: 'trap', value: trap });
-            }
+        for (const eventTile of toList(floor.eventTiles)) {
+            entries.push({ type: 'event-tile', value: eventTile });
         }
         for (const teleport of toList(floor.teleports)) {
-            if (!teleport.used) {
-                entries.push({ type: 'teleport', value: teleport });
-            }
+            entries.push({ type: 'teleport', value: teleport });
         }
         for (const mob of toList(floor.mobs)) {
             if (mob.alive !== false && Number(mob.hp) > 0) {
                 entries.push({ type: 'mob', value: mob });
             }
-        }
-        if (floor.gate) {
-            entries.push({ type: 'gate', value: floor.gate });
         }
         if (lora) {
             entries.push({ type: 'lora', value: lora });
@@ -3877,16 +4077,16 @@ export class TutorialScene extends BaseScene {
             entries.push({ type: 'player', value: player });
         }
         entries.sort((left, right) => (
-            Number(left.value.y) - Number(right.value.y)
+            (Number(left.value.x) + Number(left.value.y))
+                - (Number(right.value.x) + Number(right.value.y))
             || Number(left.value.x) - Number(right.value.x)
         ));
         for (const entry of entries) {
             if (entry.type === 'wall') this.#drawWall(entry.value);
             else if (entry.type === 'item') this.#drawWorldItem(entry.value);
-            else if (entry.type === 'trap') this.#drawTrap(entry.value);
+            else if (entry.type === 'event-tile') this.#drawEventTile(entry.value);
             else if (entry.type === 'teleport') this.#drawTeleport(entry.value);
             else if (entry.type === 'mob') this.#drawMob(entry.value);
-            else if (entry.type === 'gate') this.#drawGate(entry.value);
             else if (entry.type === 'lora') this.#drawLora(entry.value);
             else this.#drawPlayer(entry.value);
         }
@@ -3964,23 +4164,38 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * 발견된 함정을 그립니다.
-     * @param {object} trap - 함정 상태입니다.
+     * 공개 이벤트 타일의 효과와 극성을 그립니다.
+     * @param {object} eventTile - 이벤트 타일 상태입니다.
      * @private
      */
-    #drawTrap(trap) {
+    #drawEventTile(eventTile) {
         const colors = ColorSchemes.Tactics;
-        const point = this.#projectTile(trap.x, trap.y);
+        const point = this.#projectTile(eventTile.x, eventTile.y);
+        const positive = eventTile.type === 'instability-down';
+        const glyphs = {
+            damage: '-20',
+            'move-penalty': '-2',
+            'instability-up': '+10',
+            'instability-down': '-10'
+        };
         renderGL('object', {
-            shape: 'rect',
+            shape: 'diamond',
             x: point.x,
             y: point.y,
-            w: this.tileSide * 0.52,
-            h: this.tileSide * 0.52,
-            fill: colors.Tile.Trap,
-            alpha: trap.triggered ? 0.38 : 0.78
+            w: this.tileWidth * 0.58,
+            h: this.tileHeight * 0.58,
+            fill: positive ? colors.UI.Success : colors.Tile.Trap,
+            alpha: 0.78
         });
-        this.#drawWorldGlyph('!', point.x, point.y, colors.UI.Text);
+        this.#drawText(
+            'texteffect',
+            glyphs[eventTile.type] || '!',
+            point.x,
+            point.y,
+            this.fonts.SMALL,
+            colors.UI.Text,
+            'center'
+        );
     }
 
     /**
@@ -3999,7 +4214,7 @@ export class TutorialScene extends BaseScene {
             w: this.tileSide * 0.6 * pulse,
             h: this.tileSide * 0.6 * pulse,
             fill: colors.Entity.Teleport,
-            alpha: teleport.used ? 0.32 : 0.68
+            alpha: 0.68
         });
         renderGL('object', {
             shape: 'circle',
@@ -4039,42 +4254,7 @@ export class TutorialScene extends BaseScene {
             fill: colors.Entity.Mob
         });
         this.#drawWorldGlyph('M', point.x, point.y, colors.UI.Text);
-        this.#drawWorldHp(point.x, point.y - (size * 0.62), mob.hp, mob.maxHp || 50, size);
-    }
-
-    /**
-     * 지하 게이트를 그립니다.
-     * @param {object} gate - 게이트 좌표입니다.
-     * @private
-     */
-    #drawGate(gate) {
-        const colors = ColorSchemes.Tactics;
-        const point = this.#projectTile(gate.x, gate.y);
-        const presentationMatchesModel = Number(this.presentation.floorIndex) === (
-            Number(this.model.floorIndex) || 0
-        );
-        const open = this.floorActorView
-            ? this.floorActorView.gateOpen === true
-            : (presentationMatchesModel && this.model.gateOpen === true);
-        const size = this.tileSide * 0.72;
-        renderGL('object', {
-            shape: 'rect',
-            x: point.x,
-            y: point.y,
-            w: size,
-            h: size,
-            fill: open ? colors.UI.Success : colors.Entity.Wall,
-            alpha: open ? 0.58 : 1
-        });
-        renderGL('object', {
-            shape: 'rect',
-            x: point.x,
-            y: point.y,
-            w: size * 0.5,
-            h: size * 0.8,
-            fill: colors.Tile.Gate
-        });
-        this.#drawWorldGlyph(open ? '열' : '문', point.x, point.y, colors.UI.Text);
+        this.#drawWorldHp(point.x, point.y - (size * 0.62), mob.hp, mob.maxHp || 100, size);
     }
 
     /**
@@ -4301,17 +4481,17 @@ export class TutorialScene extends BaseScene {
     #getItemGlyph(itemId) {
         const glyphs = {
             bow: '활',
-            bandage: '+',
+            'mascot-costume': '탈',
             'old-teddy': '곰',
             'music-box': '음',
             eyeliner: '선',
             'diamond-pickaxe': '곡',
-            'glitch-item': 'G',
             mirror: '경',
             mushroom: '버',
-            'speed-boots': '속',
-            'shield-core': '실',
-            'memory-photo': '사'
+            ocarina: '오',
+            haste: 'H',
+            'memory-photo': '사',
+            'tile-cleanser': '정'
         };
         return glyphs[itemId] || 'I';
     }
@@ -4338,8 +4518,8 @@ export class TutorialScene extends BaseScene {
         const floor = this.#getCurrentFloor();
         const rawStageTitle = Number(this.presentation.floorIndex) === 0
             ? (floor?.label || '1층') + ' · 로라의 방'
-            : (floor?.label || '지하층') + ' · 게이트 전실';
-        const titleMaxWidth = rect.w * 0.58;
+            : (floor?.label || '지하층') + ' · 붕괴 지대';
+        const titleMaxWidth = rect.w;
         const stageTitle = this.#truncateText(
             rawStageTitle,
             this.fonts.HEADING,
@@ -4347,38 +4527,69 @@ export class TutorialScene extends BaseScene {
         );
         const titleY = rect.y + clampNumber(rect.h * 0.2, 18, 30);
         this.#drawText('ui', stageTitle, rect.x, titleY, this.fonts.HEADING, colors.UI.Text);
-        const rawTurnLabel = (this.model.turn === 'player' ? '내 턴' : '로라의 턴')
-            + '  ·  ' + String(this.model.turnNumber) + '/' + String(this.model.maxTurns);
-        const turnLabel = this.#truncateText(
-            rawTurnLabel,
-            this.fonts.SMALL,
-            rect.w - titleMaxWidth - this.#uww(0.8)
+        const actionsUsed = Number(this.model.actionsUsed) || 0;
+        const actionsPerTurn = Number(this.model.actionsPerTurn) || 1;
+        const phaseLabels = {
+            move: '이동 계획',
+            action: '행동 ' + String(Math.min(actionsUsed + 1, actionsPerTurn))
+                + '/' + String(actionsPerTurn),
+            lora: '로라 → 몹',
+            result: '종료'
+        };
+        const completed = clampNumber(
+            Number(this.model.loraActionsCompleted) || 0,
+            0,
+            Number(this.model.maxTurns) || 12
         );
+        const rawTurnLabel = '로라 행동 ' + String(completed)
+            + '/' + String(this.model.maxTurns)
+            + '  ·  ' + (phaseLabels[this.model.phase] || '진행 중');
+        const turnLabel = this.#truncateText(rawTurnLabel, this.fonts.SMALL, rect.w);
         this.#drawText(
             'ui',
             turnLabel,
-            rect.x + rect.w,
-            titleY,
+            rect.x,
+            rect.y + (rect.h * 0.52),
             this.fonts.SMALL,
-            this.model.turn === 'player' ? colors.UI.Primary : colors.UI.Muted,
-            'right'
+            this.model.phase === 'move' || this.model.phase === 'action'
+                ? colors.UI.Primary
+                : colors.UI.Muted
         );
 
-        const dotSize = clampNumber(this.#uwh(2.3), 16, 24);
-        const dotGap = this.#uww(0.45);
+        const maxTurns = Number(this.model.maxTurns) || 12;
+        const transitionAfter = Number(this.data.RULES.FLOOR_TRANSITION_AFTER_TURN) || 6;
+        const dotGap = this.#uww(0.18);
+        const dividerGap = this.#uww(0.75);
+        const dotSize = clampNumber(
+            (rect.w - (dotGap * (maxTurns - 1)) - dividerGap) / maxTurns,
+            10,
+            18
+        );
         const dotY = rect.y + rect.h - (dotSize * 0.6);
-        const floorTurn = ((Math.max(1, Number(this.model.turnNumber)) - 1) % 4) + 1;
-        for (let index = 0; index < 4; index++) {
-            const active = index < floorTurn;
-            const dotX = rect.x + (dotSize * 0.5) + (index * (dotSize + dotGap));
+        let dotX = rect.x + (dotSize * 0.5);
+        for (let index = 0; index < maxTurns; index++) {
+            if (index === transitionAfter) {
+                const dividerX = dotX - (dotGap * 0.5) + (dividerGap * 0.5);
+                render('ui', {
+                    shape: 'rect',
+                    x: dividerX,
+                    y: dotY - (dotSize * 0.7),
+                    w: 1,
+                    h: dotSize * 1.4,
+                    fill: colors.UI.Border
+                });
+                dotX += dividerGap;
+            }
+            const done = index < completed;
+            const upcoming = index === completed && this.model.phase !== 'result';
             render('ui', {
                 shape: 'circle',
                 x: dotX,
                 y: dotY,
                 radius: dotSize * 0.5,
-                fill: active ? colors.UI.Primary : colors.UI.CardHeader,
-                stroke: colors.UI.Border,
-                lineWidth: 1
+                fill: done ? colors.UI.Primary : colors.UI.CardHeader,
+                stroke: upcoming ? colors.UI.Accent : colors.UI.Border,
+                lineWidth: upcoming ? 2 : 1
             });
             this.#drawText(
                 'ui',
@@ -4386,9 +4597,10 @@ export class TutorialScene extends BaseScene {
                 dotX,
                 dotY,
                 this.fonts.SMALL,
-                active ? colors.UI.OnPrimary : colors.UI.Muted,
+                done ? colors.UI.OnPrimary : colors.UI.Muted,
                 'center'
             );
+            dotX += dotSize + dotGap;
         }
     }
 
@@ -4456,7 +4668,7 @@ export class TutorialScene extends BaseScene {
         const stateLabel = state?.label || state?.id || '상태 확인 중';
         this.#drawText(
             'ui',
-            'Rora',
+            '로라',
             contentX,
             rect.y + (headerH * 0.52),
             this.fonts.HEADING,
@@ -4530,7 +4742,7 @@ export class TutorialScene extends BaseScene {
             'MISSION  ·  ' + this.data.TEXT.CORE_LOOP,
             rect.x + pad,
             y,
-            this.fonts.BODY,
+            this.fonts.SMALL,
             colors.UI.Primary
         );
         y += lineH * 1.4;
@@ -4567,9 +4779,20 @@ export class TutorialScene extends BaseScene {
             y += lineH;
         });
 
-        const statusLine = this.data.TEXT.TURN_SUMMARY + '  ·  이동 '
-            + (this.model.movementUsed ? '사용' : '가능')
-            + '  ·  행동 ' + (this.model.actionUsed ? '사용' : '가능');
+        const preview = this.model.phase === 'move'
+            ? this.model.previewPath(this.plannedPath)
+            : null;
+        const statusLine = this.model.phase === 'move'
+            ? '이동 ' + String(preview?.stepsUsed || 0)
+                + '/' + String(preview?.moveRange || this.data.ACTORS.PLAYER.MOVE_RANGE)
+                + ' · 남음 ' + String(preview?.remainingMoves ?? 0)
+                + '  →  행동 0/' + String(this.model.actionsPerTurn || 1)
+            : this.model.phase === 'action'
+                ? '이동 완료  →  행동 ' + String(this.model.actionsUsed || 0)
+                    + '/' + String(this.model.actionsPerTurn || 1)
+                : this.model.phase === 'lora'
+                    ? '로라 행동  →  몹 행동'
+                    : '작전 종료';
         this.#drawText(
             'ui',
             this.#truncateText(
@@ -4635,7 +4858,7 @@ export class TutorialScene extends BaseScene {
         this.#drawHudCard(rect);
         this.#drawText(
             'ui',
-            'ITEMS  ' + String(paging.page + 1) + '/' + String(paging.pageCount),
+            'ITEMS · 3×5  ' + String(paging.page + 1) + '/' + String(paging.pageCount),
             rect.x + pad,
             rect.y + (headerH * 0.5),
             this.fonts.BODY,
@@ -4746,7 +4969,7 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * 결과 화면을 엔딩, 점수, 불안정도와 함께 그립니다.
+     * 결과 화면을 종료 사유, 무력화 여부, 점수와 불안정도와 함께 그립니다.
      * @private
      */
     #drawResult() {
@@ -4779,29 +5002,46 @@ export class TutorialScene extends BaseScene {
         );
         this.#drawText(
             'ui',
-            '점수  ' + String(this.resultData?.score || 0),
+            this.resultData?.neutralized ? '로라 무력화 성공' : '로라 무력화 실패',
             centerX,
-            rect.y + this.#uwh(29),
-            this.fonts.TITLE,
+            rect.y + this.#uwh(26),
+            this.fonts.BODY,
+            this.resultData?.neutralized ? colors.UI.Success : colors.UI.Danger,
+            'center'
+        );
+        const reasonLabels = {
+            'lora-neutralized': '종료 사유 · 로라 HP 0',
+            'player-defeated': '종료 사유 · 플레이어 HP 0',
+            'turn-limit': '종료 사유 · 로라 행동 12회 완료'
+        };
+        this.#drawText(
+            'ui',
+            reasonLabels[this.resultData?.reason] || '종료 사유 · 작전 판정',
+            centerX,
+            rect.y + this.#uwh(32),
+            this.fonts.BODY,
+            colors.UI.Muted,
+            'center'
+        );
+        this.#drawText(
+            'ui',
+            '로라 행동  ' + String(this.resultData?.loraActionsCompleted || 0)
+                + '/12  ·  최종 불안정도  '
+                + String(this.resultData?.instability || 0),
+            centerX,
+            rect.y + this.#uwh(38),
+            this.fonts.BODY,
+            colors.UI.Muted,
+            'center'
+        );
+        this.#drawText(
+            'ui',
+            '점수  ' + String(this.resultData?.score || 0)
+                + '  ·  최고 ' + String(this.meta.bestScore),
+            centerX,
+            rect.y + this.#uwh(46),
+            this.fonts.HEADING,
             colors.UI.Text,
-            'center'
-        );
-        this.#drawText(
-            'ui',
-            '최종 불안정도  ' + String(this.resultData?.instability || 0),
-            centerX,
-            rect.y + this.#uwh(37),
-            this.fonts.BODY,
-            colors.UI.Muted,
-            'center'
-        );
-        this.#drawText(
-            'ui',
-            '최고 점수  ' + String(this.meta.bestScore),
-            centerX,
-            rect.y + this.#uwh(43),
-            this.fonts.BODY,
-            colors.UI.Muted,
             'center'
         );
     }
@@ -4898,9 +5138,6 @@ export class TutorialScene extends BaseScene {
             if (message) {
                 this.#appendEvent(message);
             }
-            if (event?.type === 'trap-triggered' && event.trapId) {
-                this.#replaceMeta(discoverTutorialTrap(this.meta, event.trapId));
-            }
             if (event?.type === 'item-used' && event.itemId) {
                 this.#replaceMeta(identifyTutorialItem(this.meta, event.itemId));
             }
@@ -4923,29 +5160,40 @@ export class TutorialScene extends BaseScene {
             0,
             Math.round(Number(event.damage ?? event.amount) || 0)
         );
+        if (event.type === 'event-tile-triggered') {
+            const labels = {
+                damage: '피해 -20 이벤트 타일 발동',
+                'move-penalty': '이동력 -2 이벤트 타일 발동',
+                'instability-up': '불안정도 +10 이벤트 타일 발동',
+                'instability-down': '불안정도 -10 이벤트 타일 발동'
+            };
+            return labels[event.eventType] || '이벤트 타일 발동';
+        }
+        if (event.type === 'instability-changed') {
+            const change = Math.round(Number(event.change) || 0);
+            return '로라 불안정도 ' + (change >= 0 ? '+' : '') + String(change);
+        }
         const values = {
             'item-picked': itemLabel + ' 획득',
             'item-dropped': itemLabel + ' 드롭',
             'wall-destroyed': '벽 파괴',
-            'trap-triggered': '함정 발동',
-            'item-lost': itemLabel + ' 분실',
             teleported: '텔레포트 작동',
             'mob-damaged': '몹에게 ' + String(damage) + ' 피해',
             'mob-defeated': '몹 격파',
             'lora-damaged': '로라에게 ' + String(damage) + ' 피해',
-            'instability-changed': '로라 불안정도 변화',
             'player-healed': '플레이어 HP 회복',
-            'lora-healed': '로라 HP 회복',
             'player-damaged': '플레이어가 ' + String(damage) + ' 피해',
             'item-used': itemLabel + ' 사용',
-            'player-defended': '플레이어 방어',
             'player-waited': '플레이어 대기',
-            'lora-defended': '로라 방어',
-            'lora-restrained': '로라 행동 봉쇄',
+            'event-tile-cleansed': '이벤트 타일을 positive로 정화',
+            'extra-player-turn': '거울 효과 · 플레이어 추가 턴 예약',
+            'mob-attack': '몹 공격 ' + String(damage) + ' 피해',
+            'mob-waited': '몹 대기',
+            'mushroom-activated': '버섯 효과 · 이동과 공격 2배',
+            'mushroom-ended': '피해를 받아 버섯 효과 종료',
             peace: '로라가 공격하지 않았습니다.',
             'lora-attack': '로라 공격',
-            'floor-transition': '지하층으로 이동',
-            'gate-opened': '탈출 게이트 개방',
+            'floor-transition': '6번째 로라 행동 종료 · 지하층 붕괴',
             'battle-finished': '작전 판정 완료'
         };
         return values[event.type] || '';
@@ -4965,6 +5213,10 @@ export class TutorialScene extends BaseScene {
             'action-unavailable': '이번 턴 행동을 사용할 수 없습니다.',
             'unreachable-destination': '그 타일까지 도달할 수 없습니다.',
             'invalid-path': '그 경로로 이동할 수 없습니다.',
+            'path-cost-exceeded': '남은 이동력이 부족합니다.',
+            'blocked-by-wall': '벽이 경로를 막고 있습니다.',
+            'blocked-by-lora': '로라가 그 타일을 점유하고 있습니다.',
+            'blocked-by-mob': '몹이 그 타일을 점유하고 있습니다.',
             'out-of-range': '대상이 범위 밖에 있습니다.',
             'invalid-target': '선택할 수 없는 대상입니다.',
             'item-missing': '해당 아이템이 없습니다.',
@@ -4972,9 +5224,7 @@ export class TutorialScene extends BaseScene {
             'passive-item': '자동 적용 아이템은 직접 사용할 수 없습니다.',
             'item-already-used': '이번 플레이에서 이미 사용한 아이템입니다.',
             'peace-active': '평화 효과 중에는 공격할 수 없습니다.',
-            'gate-closed': '게이트가 아직 닫혀 있습니다.',
-            'not-at-gate': '게이트 타일로 이동해야 합니다.',
-            'escape-conditions-not-met': '로라를 무력화한 뒤 지하 게이트 위에서 탈출하세요.'
+            'invalid-event-tile': '정화 가능한 negative 이벤트 타일을 선택하세요.'
         };
         return values[reason] || '지금은 그 선택을 적용할 수 없습니다.';
     }
@@ -4988,7 +5238,7 @@ export class TutorialScene extends BaseScene {
         if (!event || !this.model) {
             return;
         }
-        if (event.type === 'lora-attack') {
+        if (event.type === 'lora-attack' || event.type === 'mob-attack') {
             return;
         }
         const colors = ColorSchemes.Tactics;

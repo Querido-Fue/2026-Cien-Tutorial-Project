@@ -45,6 +45,7 @@ const LORA_INSTABILITY_STATES = [
  * 9×8 두 층으로 구성된 턴제 전투 프로토타입의 정적 데이터를 제공합니다.
  */
 export const TUTORIAL_GAME_DATA = deepFreeze({
+    FEATURES: { CUTSCENES: false },
     ASSETS: {
         LORA_PORTRAIT: '../asset/ui/tutorial/lora-portrait.png',
         ITEM_ICON_ATLAS: '../asset/ui/tutorial/item-icons-atlas.png',
@@ -60,7 +61,6 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
                 mirror: { COLUMN: 2, ROW: 0 },
                 eyeliner: { COLUMN: 3, ROW: 0 },
                 bow: { COLUMN: 0, ROW: 1 },
-                bandage: { COLUMN: 1, ROW: 1 },
                 'diamond-pickaxe': { COLUMN: 2, ROW: 1 },
                 mushroom: { COLUMN: 3, ROW: 1 }
             },
@@ -87,7 +87,6 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
             label: '1층',
             playerStart: { x: 4, y: 4 },
             loraStart: { x: 4, y: 0 },
-            gate: null,
             heights: FLAT_HEIGHTS,
             walls: [
                 { id: 'f1-wall-1', x: 7, y: 1 },
@@ -98,59 +97,66 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
                 { id: 'f1-wall-6', x: 6, y: 7 }
             ],
             items: [
-                { id: 'f1-teddy', itemId: 'old-teddy', x: 0, y: 2 },
+                { id: 'f1-ocarina', itemId: 'ocarina', x: 8, y: 0 },
                 { id: 'f1-music-box', itemId: 'music-box', x: 8, y: 2 },
+                { id: 'f1-teddy', itemId: 'old-teddy', x: 0, y: 3 },
                 { id: 'f1-eyeliner', itemId: 'eyeliner', x: 4, y: 6 },
-                { id: 'f1-pickaxe', itemId: 'diamond-pickaxe', x: 7, y: 6, hidden: true },
-                { id: 'f1-glitch-item', itemId: 'glitch-item', x: 8, y: 0, hidden: true }
+                { id: 'f1-pickaxe', itemId: 'diamond-pickaxe', x: 7, y: 6 }
             ],
-            traps: [
-                { id: 'f1-slip', type: 'slip', x: 2, y: 4 },
-                { id: 'f1-item-loss', type: 'item-loss', x: 3, y: 6 },
-                { id: 'f1-slow', type: 'slow', x: 7, y: 3 }
+            eventTiles: [
+                { id: 'f1-event-1', type: 'damage', x: 0, y: 2 },
+                { id: 'f1-event-3-a', type: 'instability-up', x: 6, y: 2 },
+                { id: 'f1-event-3-b', type: 'instability-up', x: 6, y: 3 },
+                { id: 'f1-event-2', type: 'move-penalty', x: 2, y: 5 },
+                { id: 'f1-event-3-c', type: 'instability-up', x: 1, y: 7 }
             ],
             teleports: [
-                { id: 'f1-teleport', x: 8, y: 7 }
+                { id: 'f1-teleport-a', pairId: 'f1-teleport', x: 0, y: 0 },
+                { id: 'f1-teleport-b', pairId: 'f1-teleport', x: 8, y: 7 }
             ],
             mobs: [
-                { id: 'f1-mob-item', x: 1, y: 5, hp: 50, dropItemId: 'bandage' }
+                { id: 'f1-mob', x: 0, y: 7, hp: 100, dropItemId: 'tile-cleanser' }
             ]
         },
         {
             id: 'basement',
             label: '지하층',
-            playerStart: { x: 4, y: 7 },
-            loraStart: { x: 4, y: 1 },
-            gate: { x: 4, y: 0 },
+            playerStart: { x: 4, y: 4 },
+            loraStart: { x: 4, y: 0 },
             heights: FLAT_HEIGHTS,
             walls: [
-                { id: 'b1-wall-1', x: 2, y: 1 },
-                { id: 'b1-wall-2', x: 6, y: 1 },
-                { id: 'b1-wall-3', x: 2, y: 2 },
-                { id: 'b1-wall-4', x: 6, y: 2 },
-                { id: 'b1-wall-5', x: 2, y: 5 },
-                { id: 'b1-wall-6', x: 6, y: 5 },
-                { id: 'b1-wall-7', x: 2, y: 6 },
-                { id: 'b1-wall-8', x: 6, y: 6 }
+                { id: 'b1-wall-1', x: 2, y: 2 },
+                { id: 'b1-wall-2', x: 3, y: 2 },
+                { id: 'b1-wall-3', x: 4, y: 2 },
+                { id: 'b1-wall-4', x: 5, y: 2 },
+                { id: 'b1-wall-5', x: 6, y: 2 },
+                { id: 'b1-wall-6', x: 0, y: 5 },
+                { id: 'b1-wall-7', x: 1, y: 5 },
+                { id: 'b1-wall-8', x: 6, y: 5 },
+                { id: 'b1-wall-9', x: 7, y: 5 },
+                { id: 'b1-wall-10', x: 6, y: 6 },
+                { id: 'b1-wall-11', x: 6, y: 7 }
             ],
             items: [
+                { id: 'b1-mushroom', itemId: 'mushroom', x: 0, y: 2 },
+                { id: 'b1-memory-photo', itemId: 'memory-photo', x: 8, y: 3 },
                 { id: 'b1-mirror', itemId: 'mirror', x: 4, y: 5 },
-                { id: 'b1-mushroom', itemId: 'mushroom', x: 8, y: 1, hidden: true },
-                { id: 'b1-speed-boots', itemId: 'speed-boots', x: 0, y: 4, hidden: true },
-                { id: 'b1-shield-core', itemId: 'shield-core', x: 8, y: 4, hidden: true },
-                { id: 'b1-memory-photo', itemId: 'memory-photo', x: 0, y: 1 }
+                { id: 'b1-haste', itemId: 'haste', x: 7, y: 7 }
             ],
-            traps: [
-                { id: 'b1-slip', type: 'slip', x: 3, y: 4 },
-                { id: 'b1-item-loss', type: 'item-loss', x: 5, y: 4 },
-                { id: 'b1-slow', type: 'slow', x: 4, y: 6 }
+            eventTiles: [
+                { id: 'b1-event-4-a', type: 'instability-down', x: 2, y: 0 },
+                { id: 'b1-event-4-b', type: 'instability-down', x: 6, y: 0 },
+                { id: 'b1-event-4-c', type: 'instability-down', x: 2, y: 1 },
+                { id: 'b1-event-4-d', type: 'instability-down', x: 6, y: 1 }
             ],
             teleports: [
-                { id: 'b1-teleport', x: 0, y: 7 }
+                { id: 'b1-teleport-a', pairId: 'b1-teleport', x: 7, y: 3 },
+                { id: 'b1-teleport-b', pairId: 'b1-teleport', x: 0, y: 7 }
             ],
             mobs: [
-                { id: 'b1-mob-left', x: 1, y: 3, hp: 50 },
-                { id: 'b1-mob-right', x: 7, y: 3, hp: 50 }
+                { id: 'b1-mob-top', x: 0, y: 0, hp: 100, dropItemId: 'tile-cleanser' },
+                { id: 'b1-mob-left', x: 2, y: 6, hp: 100, dropItemId: 'tile-cleanser' },
+                { id: 'b1-mob-right', x: 7, y: 6, hp: 100, dropItemId: 'tile-cleanser' }
             ]
         }
     ],
@@ -162,36 +168,34 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
             ATTACK_RANGE: 2,
             ATTACK_INSTABILITY: 10,
             CONSECUTIVE_ATTACK_INSTABILITY: 4,
-            DEFEND_DAMAGE_REDUCTION: 0.3,
             HEAL_AMOUNT: 20
         },
         LORA: {
             MAX_HP: 100,
             START_INSTABILITY: 70,
             MAX_INSTABILITY: 100,
-            MELEE_RANGE: 1,
-            DEFEND_DAMAGE_REDUCTION: 0.5,
-            LOW_HP_THRESHOLD: 50,
-            LOW_HP_STABILIZE_MULTIPLIER: 1.5,
+            MELEE_RANGE: 2,
             INSTABILITY_STATES: LORA_INSTABILITY_STATES
         },
         MOB: {
-            DEFAULT_HP: 50
+            DEFAULT_HP: 100,
+            ATTACK_DAMAGE: 20,
+            ATTACK_RANGE: 2
         }
     },
     RULES: {
-        MAX_TURNS: 8,
-        FLOOR_TRANSITION_AFTER_TURN: 4,
+        MAX_TURNS: 12,
+        FLOOR_TRANSITION_AFTER_TURN: 6,
         EVENT_LOG_LIMIT: 80,
-        BOW_INSTABILITY_PER_TURN: 5,
+        BOW_INSTABILITY_PER_TURN: 3,
         BOW_LORA_DAMAGE_BONUS: 5,
-        SLOW_TRAP_MOVE_PENALTY: 2,
+        EVENT_MOVE_PENALTY: 2,
         TRUE_ENDING_MAX_INSTABILITY: 10,
         SPECIAL_ENDING_MAX_INSTABILITY: 40
     },
     STARTER_CHOICES: [
-        { id: 'bow', label: '활과 화살', description: '전장 어디서든 30 피해를 주지만 매 턴 위험이 커집니다.' },
-        { id: 'bandage', label: '붕대', description: '플레이어를 20 회복하고 로라를 조금 안정시킵니다.' }
+        { id: 'bow', label: '활과 화살', description: '전장 어디서든 원거리 공격이 가능하지만 로라가 더 위험해집니다.' },
+        { id: 'mascot-costume', label: '인형탈', description: '받는 피해를 10 줄이고 매 플레이어 턴 종료 시 로라를 안정시킵니다.' }
     ],
     ITEMS: {
         bow: {
@@ -201,12 +205,12 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
             passive: true,
             effect: { type: 'bow', rangedDamage: 30 }
         },
-        bandage: {
-            id: 'bandage',
-            label: '붕대',
+        'mascot-costume': {
+            id: 'mascot-costume',
+            label: '인형탈',
             category: 'starter',
-            consumable: true,
-            effect: { type: 'bandage', playerHeal: 20, loraHeal: 10, instabilityReduction: 15 }
+            passive: true,
+            effect: { type: 'mascot-costume', damageReduction: 10, turnEndInstabilityReduction: 5 }
         },
         'old-teddy': {
             id: 'old-teddy',
@@ -217,8 +221,8 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
             effect: {
                 type: 'old-teddy',
                 instabilityReduction: 30,
-                playerDamageMultiplier: 0.7,
-                playerDamageReduction: 0.2
+                attackDamagePenalty: 20,
+                damageReduction: 10
             }
         },
         'music-box': {
@@ -226,14 +230,14 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
             label: '오르골',
             category: 'interaction',
             consumable: true,
-            effect: { type: 'music-box', durationLoraTurns: 2, instabilityReductionPerTurn: 10 }
+            effect: { type: 'music-box', durationLoraTurns: 2, instabilityReductionPerTurn: 20 }
         },
         eyeliner: {
             id: 'eyeliner',
             label: '아이라인',
             category: 'interaction',
             consumable: true,
-            effect: { type: 'eyeliner', instabilityReduction: 15, afterMirrorBonusReduction: 20 }
+            effect: { type: 'eyeliner', instabilityReduction: 15 }
         },
         'diamond-pickaxe': {
             id: 'diamond-pickaxe',
@@ -242,47 +246,48 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
             passive: true,
             effect: { type: 'diamond-pickaxe' }
         },
-        'glitch-item': {
-            id: 'glitch-item',
-            label: '글리치 코어',
-            category: 'compatible',
-            consumable: true,
-            effect: { type: 'glitch-item', mobDamage: 50, instabilityReduction: 20 }
-        },
         mirror: {
             id: 'mirror',
             label: '거울',
             category: 'interaction',
             consumable: true,
-            effect: { type: 'mirror', restrainedLoraTurns: 1, afterEyelinerInstabilityIncrease: 35 }
+            effect: { type: 'mirror', extraPlayerTurns: 1 }
         },
         mushroom: {
             id: 'mushroom',
             label: '마리오의 버섯',
             category: 'compatible',
             consumable: true,
-            effect: { type: 'mushroom', moveRange: 8, nextAttackMultiplier: 2 }
+            effect: { type: 'mushroom', moveMultiplier: 2, attackMultiplier: 2 }
         },
-        'speed-boots': {
-            id: 'speed-boots',
-            label: '스피드 부츠',
+        ocarina: {
+            id: 'ocarina',
+            label: '링크의 오카리나',
             category: 'compatible',
             passive: true,
-            effect: { type: 'speed-boots', moveRangeBonus: 2 }
+            effect: { type: 'ocarina' }
         },
-        'shield-core': {
-            id: 'shield-core',
-            label: '실드 코어',
+        haste: {
+            id: 'haste',
+            label: '메이플스토리의 헤이스트',
             category: 'compatible',
-            consumable: true,
-            effect: { type: 'shield-core', damageReduction: 0.5, loraTurns: 1 }
+            passive: true,
+            effect: { type: 'haste', actionCountBonus: 1 }
         },
         'memory-photo': {
             id: 'memory-photo',
-            label: '빛바랜 사진',
+            label: '알파와 같이 찍은 사진',
             category: 'interaction',
             consumable: true,
-            effect: { type: 'memory-photo', instabilityReduction: 25 }
+            effect: { type: 'memory-photo', instabilityRatio: 0.5 }
+        },
+        'tile-cleanser': {
+            id: 'tile-cleanser',
+            label: '타일 정화제',
+            category: 'compatible',
+            consumable: true,
+            movementConsumable: true,
+            effect: { type: 'tile-cleanser', cleansedType: 'instability-down' }
         }
     },
     CUTSCENES: {
@@ -346,10 +351,10 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
     },
     LAYOUT: {
         BOARD: {
-            X_UIWW: 35.5,
-            Y_WH: 26.5,
-            MAX_WIDTH_UIWW: 38,
-            MAX_HEIGHT_WH: 58,
+            X_UIWW: 32.5,
+            Y_WH: 20,
+            MAX_WIDTH_UIWW: 43,
+            MAX_HEIGHT_WH: 64,
             FRAME_PADDING_RATIO: 0.025,
             TILE_GAP_RATIO: 0.045,
             ENTITY_SCALE_RATIO: 0.64,
@@ -362,16 +367,16 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
             GAP_X_UIWW: 0.6,
             BUTTON_RADIUS_WH: 1
         },
-        INVENTORY: { PAGE_SIZE: 6, COLUMNS: 3, ROWS: 2 },
+        INVENTORY: { PAGE_SIZE: 15, COLUMNS: 3, ROWS: 5 },
         HUD: {
             STAGE_HEADER: { X_UIWW: 4.5, Y_WH: 4.8, WIDTH_UIWW: 21.5, HEIGHT_WH: 12 },
             MENU: { X_UIWW: 27, Y_WH: 3.6, WIDTH_UIWW: 7, HEIGHT_WH: 4.8 },
             UNDO: { X_UIWW: 27, Y_WH: 9.2, WIDTH_UIWW: 7, HEIGHT_WH: 4.8 },
             LORA_CARD: { X_UIWW: 69.5, Y_WH: 4.5, WIDTH_UIWW: 27.5, HEIGHT_WH: 21 },
             MISSION_CARD: { X_UIWW: 76, Y_WH: 30, WIDTH_UIWW: 21, HEIGHT_WH: 36 },
-            PLAYER_STATUS: { X_UIWW: 4, Y_WH: 67.5, WIDTH_UIWW: 27, HEIGHT_WH: 5 },
-            INVENTORY_CARD: { X_UIWW: 4, Y_WH: 74, WIDTH_UIWW: 27, HEIGHT_WH: 22 },
-            SECONDARY_ACTIONS: { X_UIWW: 35.5, Y_WH: 87, WIDTH_UIWW: 38, HEIGHT_WH: 9 },
+            PLAYER_STATUS: { X_UIWW: 4, Y_WH: 59.5, WIDTH_UIWW: 27, HEIGHT_WH: 5 },
+            INVENTORY_CARD: { X_UIWW: 4, Y_WH: 66, WIDTH_UIWW: 27, HEIGHT_WH: 30 },
+            SECONDARY_ACTIONS: { X_UIWW: 32.5, Y_WH: 87, WIDTH_UIWW: 43, HEIGHT_WH: 9 },
             PRIMARY_ACTION: { X_UIWW: 78, Y_WH: 87, WIDTH_UIWW: 19, HEIGHT_WH: 9 }
         },
         MODAL: { WIDTH_UIWW: 38, HEIGHT_WH: 34, RADIUS_WH: 2 }
@@ -416,18 +421,17 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
     TEXT: {
         TITLE: 'N번째 플레이어',
         SUBTITLE: '두 층 최종 보스전 프로토타입',
-        OBJECTIVE: '로라를 안정된 상태로 무력화한 뒤 지하 게이트로 탈출하세요.',
-        CORE_LOOP: '탐색 · 조합 · 탈출',
-        TURN_SUMMARY: '두 개의 맵 · 총 8턴',
-        CONTROLS: '클릭 · 방향키/WASD · Enter · Ctrl+Z 되돌리기 · R 재시작',
+        OBJECTIVE: '로라 행동 12회가 끝나기 전에 불안정도를 낮추며 로라의 HP를 0으로 만드세요.',
+        CORE_LOOP: '이동 → 행동 → 로라 → 몹',
+        TURN_SUMMARY: '두 개의 맵 · 로라 행동 최대 12회',
+        CONTROLS: '인접 타일/방향키 경로 추가 · Backspace 취소 · Enter 이동 확정 · Ctrl+Z 되돌리기',
         ACTIONS: {
             MOVE_CONFIRM: '이동 확정',
             ATTACK: '공격',
-            DEFEND: '방어',
+            HEAL: '회복',
             WAIT: '대기',
             USE_ITEM: '아이템 사용',
-            END_TURN: '턴 종료',
-            ESCAPE: '탈출',
+            CLEANSE: '타일 정화',
             STAY: '제자리 이동',
             RESTART: '다시 시작',
             UNDO: '되돌리기',

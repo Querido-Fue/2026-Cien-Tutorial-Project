@@ -33,6 +33,9 @@ export class ShapeDrawer {
             case 'square':
                 ctx.fillRect(ox, oy, size, size);
                 break;
+            case 'diamond':
+                this.#drawDiamond(ctx, cx, cy, half);
+                break;
             case 'circle':
                 ctx.beginPath();
                 ctx.arc(cx, cy, radius, 0, FULL_CIRCLE_RADIANS);
@@ -81,6 +84,24 @@ export class ShapeDrawer {
                 ctx.lineTo(px, py);
             }
         }
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    /**
+     * 쿼터뷰 타일에 재사용할 마름모 텍스처를 그립니다.
+     * @param {CanvasRenderingContext2D} ctx - 렌더링 컨텍스트입니다.
+     * @param {number} x - 중심 x좌표입니다.
+     * @param {number} y - 중심 y좌표입니다.
+     * @param {number} radius - 셀 절반 크기입니다.
+     * @private
+     */
+    #drawDiamond(ctx, x, y, radius) {
+        ctx.beginPath();
+        ctx.moveTo(x, y - radius);
+        ctx.lineTo(x + radius, y);
+        ctx.lineTo(x, y + radius);
+        ctx.lineTo(x - radius, y);
         ctx.closePath();
         ctx.fill();
     }
