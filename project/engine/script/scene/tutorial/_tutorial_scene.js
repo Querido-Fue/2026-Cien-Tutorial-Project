@@ -2067,8 +2067,8 @@ export class TutorialScene extends BaseScene {
                 known: this.#isItemKnown(itemId),
                 hasIcon: this.assetLoader.hasAtlasCell('item-icons', itemId),
                 usable: this.#isItemUsable(itemId),
-                movementConsumable: itemId === 'tile-cleanser',
-                statusLabel: itemId === 'tile-cleanser'
+                movementConsumable: item.movementConsumable === true,
+                statusLabel: item.movementConsumable === true
                     ? '이동'
                     : item.passive === true && item.useOnce !== true
                         ? '자동'

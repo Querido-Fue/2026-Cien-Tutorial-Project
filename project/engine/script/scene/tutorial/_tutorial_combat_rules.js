@@ -1,12 +1,9 @@
-const LORA_ID = 'lora';
+import {
+    TUTORIAL_EFFECT_OPERATIONS as EFFECT_OPERATIONS,
+    TUTORIAL_EFFECT_TRIGGERS as EFFECT_TRIGGERS
+} from './_tutorial_effect_contract.js';
 
-const PASSIVE_ITEM_TYPES = new Set([
-    'bow',
-    'mascot-costume',
-    'diamond-pickaxe',
-    'ocarina',
-    'haste'
-]);
+const LORA_ID = 'lora';
 
 /** @param {*} value @param {number} [fallback=0] @returns {number} 유한 숫자입니다. */
 function toFiniteNumber(value, fallback = 0) {
@@ -21,6 +18,31 @@ function cloneTile(value) {
     return Number.isInteger(x) && Number.isInteger(y) ? { x, y } : null;
 }
 
+const LEGACY_EFFECT_RESULT_BUILDERS = Object.freeze({
+    [EFFECT_OPERATIONS.CHANGE_INSTABILITY_FLAT]: (operation) => ({
+        type: 'stabilize',
+        instabilityChange: operation.instabilityCalculation?.change ?? 0
+    }),
+    [EFFECT_OPERATIONS.SCALE_INSTABILITY_CURRENT]: (operation) => ({
+        type: 'stabilize',
+        instabilityChange: operation.instabilityCalculation?.change ?? 0
+    }),
+    [EFFECT_OPERATIONS.SET_PEACE_TURNS_MIN]: (operation) => ({
+        type: 'peace',
+        durationLoraTurns: operation.peaceTurnsAfter ?? 0
+    }),
+    [EFFECT_OPERATIONS.ADD_EXTRA_PLAYER_TURNS]: (operation) => ({
+        type: 'extra-player-turn',
+        count: operation.extraPlayerTurnsAdded ?? 0
+    }),
+    [EFFECT_OPERATIONS.SET_MUSHROOM_ACTIVE]: () => ({ type: 'mushroom' }),
+    [EFFECT_OPERATIONS.REPLACE_EVENT_TILE_TYPE]: (operation) => ({
+        type: 'event-tile-replaced',
+        beforeType: operation.beforeType,
+        afterType: operation.afterType
+    })
+});
+
 /**
  * @class TutorialCombatRules
  * @description 플레이어 전투 행동에 공통으로 쓰는 검증과 원자적 수치 계산을 제공합니다.
@@ -28,16 +50,21 @@ function cloneTile(value) {
 export class TutorialCombatRules {
     #items;
     #player;
+    #effects;
 
     /** @param {object} config - 모델이 검증한 아이템·플레이어 설정입니다. */
     constructor(config = {}) {
         this.#items = Object.freeze({ ...(config.items || {}) });
         this.#player = Object.freeze({ ...(config.player || {}) });
+        this.#effects = config.effectExecutor;
+        if (!this.#effects) {
+            throw new TypeError('TutorialCombatRules: effectExecutor가 필요합니다.');
+        }
     }
 
     /** @param {string} itemId @returns {boolean} 자동 적용 아이템 여부입니다. */
     isPassiveItem(itemId) {
-        return PASSIVE_ITEM_TYPES.has(this.#items[itemId]?.effect?.type);
+        return this.#effects.isAutomaticItem(itemId);
     }
 
     /**
@@ -126,9 +153,69 @@ export class TutorialCombatRules {
 
     /** @param {object} state @returns {number} 현재 패시브 기준 행동 수입니다. */
     getActionsPerTurn(state) {
-        return 1 + (this.hasItem(state, 'haste')
-            ? toFiniteNumber(this.#items.haste?.effect?.actionCountBonus)
-            : 0);
+        const draft = this.createDraft(state);
+        const execution = this.#effects.executeOwned(
+            this.#getOwnedItemIds(draft),
+            EFFECT_TRIGGERS.TURN_START,
+            {
+                actor: 'player',
+                baseActionsPerTurn: 1,
+                mushroomActive: draft.player.mushroomActive,
+                peaceTurns: draft.lora.peaceTurns
+            },
+            { mode: 'preview' }
+        );
+        return Math.max(1, Math.floor(execution.state.actionsPerTurn));
+    }
+
+    /**
+     * 현재 지속 효과를 반영한 이동 범위를 반환합니다.
+     * @param {object} state - 읽기 전용 전투 상태입니다.
+     * @param {number} baseMoveRange - 기본 이동 범위입니다.
+     * @returns {number} 최종 이동 범위입니다.
+     */
+    getMoveRange(state, baseMoveRange) {
+        const draft = this.createDraft(state);
+        const execution = this.#effects.executeOwned(
+            this.#getOwnedItemIds(draft),
+            EFFECT_TRIGGERS.MOVE_ENTER,
+            {
+                actor: 'player',
+                baseMoveRange: Math.max(0, toFiniteNumber(baseMoveRange)),
+                mushroomActive: draft.player.mushroomActive,
+                peaceTurns: draft.lora.peaceTurns
+            },
+            { mode: 'preview' }
+        );
+        return Math.max(0, execution.state.moveRange);
+    }
+
+    /** @param {object} state @returns {boolean} 벽 통과 효과 보유 여부입니다. */
+    canTraverseWalls(state) {
+        const draft = this.createDraft(state);
+        return this.#effects.executeOwned(
+            this.#getOwnedItemIds(draft),
+            EFFECT_TRIGGERS.MOVE_ENTER,
+            {
+                actor: 'player',
+                mushroomActive: draft.player.mushroomActive,
+                peaceTurns: draft.lora.peaceTurns
+            },
+            { mode: 'preview' }
+        ).state.wallTraversal;
+    }
+
+    /**
+     * 바닥에서 즉시 획득할 아이템이 벽 통과를 제공하는지 확인합니다.
+     * @param {string} itemId - 아이템 ID입니다.
+     * @returns {boolean} 벽 통과 operation 보유 여부입니다.
+     */
+    grantsWallTraversal(itemId) {
+        return this.#effects.itemHasOperation(
+            itemId,
+            EFFECT_TRIGGERS.MOVE_ENTER,
+            EFFECT_OPERATIONS.GRANT_WALL_TRAVERSAL
+        );
     }
 
     /**
@@ -143,7 +230,7 @@ export class TutorialCombatRules {
             return [];
         }
         const requestedWeapon = options.weapon ?? 'auto';
-        if (requestedWeapon === 'bow' && !this.hasItem(draft, 'bow')) {
+        if (requestedWeapon === 'bow' && !this.#hasRangedAttack(draft)) {
             return [];
         }
         const candidates = [];
@@ -175,7 +262,7 @@ export class TutorialCombatRules {
             if (distance <= this.#player.attackRange) {
                 return [{ ...target, distance, weapon: 'melee' }];
             }
-            return this.hasItem(draft, 'bow')
+            return this.#hasRangedAttack(draft)
                 ? [{ ...target, distance, weapon: 'bow' }]
                 : [];
         });
@@ -201,31 +288,39 @@ export class TutorialCombatRules {
         if (!target) {
             return this.#failure('attack', 'invalid-target');
         }
-        const rawDamage = target.weapon === 'bow'
-            ? toFiniteNumber(this.#items.bow?.effect?.rangedDamage)
-            : toFiniteNumber(this.#player.attackDamage);
-        const attackDamagePenalty = this.hasItem(draft, 'old-teddy')
-            ? toFiniteNumber(this.#items['old-teddy']?.effect?.attackDamagePenalty)
-            : 0;
-        const attackMultiplier = draft.player.mushroomActive
-            ? toFiniteNumber(this.#items.mushroom?.effect?.attackMultiplier, 1)
-            : 1;
-        const calculatedDamage = Math.max(
-            0,
-            Math.round((rawDamage - attackDamagePenalty) * attackMultiplier)
+        const attackExecution = this.#effects.executeOwned(
+            this.#getOwnedItemIds(draft),
+            EFFECT_TRIGGERS.ATTACK,
+            {
+                actor: 'player',
+                target: target.type,
+                weapon: target.weapon,
+                baseDamage: target.weapon === 'bow'
+                    ? 0
+                    : toFiniteNumber(this.#player.attackDamage),
+                mushroomActive: draft.player.mushroomActive,
+                peaceTurns: draft.lora.peaceTurns
+            },
+            { mode: options.mode ?? 'preview' }
         );
+        const rawDamage = attackExecution.state.rawDamage;
+        const attackDamagePenalty = Math.max(
+            0,
+            -attackExecution.state.flatDamageModifier
+        );
+        const attackMultiplier = attackExecution.state.damageMultiplier;
+        const calculatedDamage = attackExecution.state.calculatedDamage;
         const targetHpBefore = Math.max(0, toFiniteNumber(target.hp));
         const finalDamage = Math.min(targetHpBefore, calculatedDamage);
         const targetHpAfter = Math.max(0, targetHpBefore - calculatedDamage);
         const instabilityCalculation = target.type === 'lora'
-            ? this.calculateInstabilityChange({
+            ? this.calculateInstabilityChange(draft, {
                 instability: draft.lora.instability,
                 maxInstability: draft.lora.maxInstability,
                 requestedChange: toFiniteNumber(this.#player.attackInstability)
                     + (draft.consecutiveAttackCount
-                        * toFiniteNumber(this.#player.consecutiveAttackInstability)),
-                hasOcarina: this.hasItem(draft, 'ocarina')
-            })
+                        * toFiniteNumber(this.#player.consecutiveAttackInstability))
+            }, { mode: options.mode ?? 'preview' })
             : null;
         return {
             ok: true,
@@ -238,6 +333,7 @@ export class TutorialCombatRules {
             rawDamage,
             attackDamagePenalty,
             attackMultiplier,
+            effectOperations: attackExecution.operations,
             calculatedDamage,
             finalDamage,
             targetHpBefore,
@@ -281,9 +377,10 @@ export class TutorialCombatRules {
      * 아이템 사용 가능 여부와 순수 효과 계산을 만듭니다.
      * @param {object} state - 읽기 전용 전투 상태입니다.
      * @param {string} itemId - 아이템 ID입니다.
+     * @param {{mode?:'preview'|'apply'}} [options={}] - 실행 목적입니다.
      * @returns {object} 아이템 사용 계획입니다.
      */
-    getItemUsePlan(state, itemId) {
+    getItemUsePlan(state, itemId, options = {}) {
         const draft = this.createDraft(state);
         if (!this.canUseAction(draft)) {
             return this.#failure('use-item', 'action-unavailable', { itemId });
@@ -292,147 +389,356 @@ export class TutorialCombatRules {
         if (!item || !this.hasItem(draft, itemId)) {
             return this.#failure('use-item', 'item-not-owned', { itemId });
         }
-        if (this.isPassiveItem(itemId)) {
+        if (this.isPassiveItem(itemId) || !this.#effects.isUsableItem(itemId)) {
             return this.#failure('use-item', 'passive-item', { itemId });
         }
-        if (item.effect.type === 'tile-cleanser') {
+        if (item.movementConsumable === true) {
             return this.#failure('use-item', 'movement-item', { itemId });
         }
         if (item.useOnce && draft.usedItems.has(itemId)) {
             return this.#failure('use-item', 'item-already-used', { itemId });
         }
 
-        const plan = {
+        const execution = this.#effects.executeItem(
+            itemId,
+            EFFECT_TRIGGERS.USE,
+            {
+                itemIds: this.#getOwnedItemIds(draft),
+                instability: draft.lora.instability,
+                maxInstability: draft.lora.maxInstability,
+                peaceTurns: draft.lora.peaceTurns,
+                extraPlayerTurns: draft.extraPlayerTurns,
+                mushroomActive: draft.player.mushroomActive
+            },
+            { mode: options.mode ?? 'preview' }
+        );
+        if (execution.operations.length === 0) {
+            return this.#failure('use-item', 'unsupported-item-effect', { itemId });
+        }
+        const instabilityOperation = execution.operations.find(
+            ({ instabilityCalculation }) => instabilityCalculation
+        );
+        const hasPeaceChange = execution.operations.some(({ operation }) => (
+            operation === EFFECT_OPERATIONS.SET_PEACE_TURNS_MIN
+        ));
+        const hasMushroomChange = execution.operations.some(({ operation }) => (
+            operation === EFFECT_OPERATIONS.SET_MUSHROOM_ACTIVE
+        ));
+        const consumesItem = item.consumable === true || item.useOnce === true;
+        return {
             ok: true,
             reason: 'action-available',
             action: 'use-item',
             itemId,
-            effectType: item.effect.type,
-            consumesItem: item.consumable === true || item.useOnce === true,
-            consumeCount: item.consumable === true || item.useOnce === true ? 1 : 0,
-            instabilityCalculation: null,
-            peaceTurnsAfter: null,
-            extraPlayerTurnsAdded: 0,
-            mushroomActiveAfter: null,
-            effects: []
+            effectType: itemId,
+            consumesItem,
+            consumeCount: consumesItem ? 1 : 0,
+            instabilityCalculation: instabilityOperation?.instabilityCalculation ?? null,
+            peaceTurnsAfter: hasPeaceChange ? execution.state.peaceTurns : null,
+            extraPlayerTurnsAdded: Math.max(
+                0,
+                execution.state.extraPlayerTurns - draft.extraPlayerTurns
+            ),
+            mushroomActiveAfter: hasMushroomChange
+                ? execution.state.mushroomActive
+                : null,
+            effects: this.#createLegacyEffectResults(itemId, execution.operations),
+            effectExecution: execution
         };
-        const effect = item.effect;
-        if (effect.type === 'old-teddy' || effect.type === 'eyeliner') {
-            plan.instabilityCalculation = this.calculateInstabilityChange({
-                instability: draft.lora.instability,
-                maxInstability: draft.lora.maxInstability,
-                requestedChange: -toFiniteNumber(effect.instabilityReduction),
-                hasOcarina: this.hasItem(draft, 'ocarina')
-            });
-            plan.effects.push({
-                type: 'stabilize',
-                instabilityChange: plan.instabilityCalculation.change
-            });
-        } else if (effect.type === 'music-box') {
-            plan.peaceTurnsAfter = Math.max(
-                draft.lora.peaceTurns,
-                toFiniteNumber(effect.durationLoraTurns)
-            );
-            plan.effects.push({
-                type: 'peace',
-                durationLoraTurns: plan.peaceTurnsAfter
-            });
-        } else if (effect.type === 'mirror') {
-            plan.extraPlayerTurnsAdded = Math.max(0, toFiniteNumber(effect.extraPlayerTurns));
-            plan.effects.push({
-                type: 'extra-player-turn',
-                count: plan.extraPlayerTurnsAdded
-            });
-        } else if (effect.type === 'mushroom') {
-            plan.mushroomActiveAfter = true;
-            plan.effects.push({
-                type: 'mushroom',
-                moveMultiplier: toFiniteNumber(effect.moveMultiplier, 1),
-                attackMultiplier: toFiniteNumber(effect.attackMultiplier, 1)
-            });
-        } else if (effect.type === 'memory-photo') {
-            plan.instabilityCalculation = this.calculateInstabilityChange({
-                instability: draft.lora.instability,
-                maxInstability: draft.lora.maxInstability,
-                requestedChange: -(draft.lora.instability
-                    * toFiniteNumber(effect.instabilityRatio)),
-                hasOcarina: this.hasItem(draft, 'ocarina')
-            });
-            plan.effects.push({
-                type: 'stabilize',
-                instabilityChange: plan.instabilityCalculation.change
-            });
-        } else {
-            return this.#failure('use-item', 'unsupported-item-effect', { itemId });
+    }
+
+    /**
+     * 이동 단계 전용 아이템의 이벤트 타일 변경 계획을 계산합니다.
+     * @param {object} state - 읽기 전용 전투 상태입니다.
+     * @param {string} itemId - 이동 아이템 ID입니다.
+     * @param {object} eventTile - 대상 이벤트 타일입니다.
+     * @param {{mode?:'preview'|'apply'}} [options={}] - 실행 목적입니다.
+     * @returns {object} 타일 변경과 소모 계획입니다.
+     */
+    getMovementItemUsePlan(state, itemId, eventTile, options = {}) {
+        const draft = this.createDraft(state);
+        if (draft.turn !== 'player'
+            || draft.phase !== 'move'
+            || draft.movementUsed
+            || draft.result
+            || !draft.player.alive) {
+            return this.#failure('cleanse-event-tile', 'movement-unavailable', { itemId });
         }
-        return plan;
+        const item = this.#items[itemId];
+        if (!item || !this.hasItem(draft, itemId)) {
+            return this.#failure('cleanse-event-tile', 'item-not-owned', { itemId });
+        }
+        if (item.movementConsumable !== true || !this.#effects.isUsableItem(itemId)) {
+            return this.#failure('cleanse-event-tile', 'movement-item', { itemId });
+        }
+        if (!eventTile || !this.#effects.isNegativeEventTile(eventTile.type)) {
+            return this.#failure('cleanse-event-tile', 'invalid-event-tile', { itemId });
+        }
+        const execution = this.#effects.executeItem(
+            itemId,
+            EFFECT_TRIGGERS.USE,
+            {
+                itemIds: this.#getOwnedItemIds(draft),
+                eventTileType: eventTile.type
+            },
+            { mode: options.mode ?? 'preview' }
+        );
+        const replacement = execution.operations.find(({ operation }) => (
+            operation === EFFECT_OPERATIONS.REPLACE_EVENT_TILE_TYPE
+        ));
+        if (!replacement) {
+            return this.#failure('cleanse-event-tile', 'invalid-event-tile', { itemId });
+        }
+        return {
+            ok: true,
+            reason: 'action-available',
+            action: 'cleanse-event-tile',
+            itemId,
+            consumesItem: true,
+            consumeCount: 1,
+            eventTileTypeBefore: eventTile.type,
+            eventTileTypeAfter: execution.state.eventTileType,
+            effects: this.#createLegacyEffectResults(itemId, execution.operations),
+            effectExecution: execution
+        };
+    }
+
+    /** @param {string} eventType @returns {boolean} 페널티 이벤트 타일 여부입니다. */
+    isNegativeEventTile(eventType) {
+        return this.#effects.isNegativeEventTile(eventType);
+    }
+
+    /**
+     * 이벤트 타일의 이동·피해·불안정도 결과를 공통 executor로 계산합니다.
+     * @param {object} state - 읽기 전용 전투 상태입니다.
+     * @param {string} eventType - 이벤트 타일 유형입니다.
+     * @param {{remainingMoves?:number,mode?:'preview'|'apply'}} [options={}] - 이동력과 실행 목적입니다.
+     * @returns {object} 타일 효과 계획입니다.
+     */
+    getEventTilePlan(state, eventType, options = {}) {
+        const draft = this.createDraft(state);
+        const execution = this.#effects.executeEventTile(
+            eventType,
+            EFFECT_TRIGGERS.MOVE_ENTER,
+            {
+                itemIds: this.#getOwnedItemIds(draft),
+                actor: 'player',
+                target: 'player',
+                playerHp: draft.player.hp,
+                instability: draft.lora.instability,
+                maxInstability: draft.lora.maxInstability,
+                mushroomActive: draft.player.mushroomActive,
+                peaceTurns: draft.lora.peaceTurns,
+                remainingMoves: Math.max(0, toFiniteNumber(options.remainingMoves))
+            },
+            { mode: options.mode ?? 'preview' }
+        );
+        return {
+            eventType,
+            remainingMovesAfter: execution.state.remainingMoves,
+            damageCalculation: execution.operations.find(
+                ({ damageCalculation }) => damageCalculation
+            )?.damageCalculation ?? null,
+            instabilityCalculations: execution.operations
+                .filter(({ instabilityCalculation }) => instabilityCalculation)
+                .map(({ source, instabilityCalculation }) => ({
+                    ...instabilityCalculation,
+                    source
+                })),
+            effectExecution: execution
+        };
+    }
+
+    /**
+     * 플레이어 턴 종료 패시브를 계산합니다.
+     * @param {object} state - 읽기 전용 전투 상태입니다.
+     * @param {{mode?:'preview'|'apply'}} [options={}] - 실행 목적입니다.
+     * @returns {object} 순서가 보존된 불안정도 변경입니다.
+     */
+    getPlayerTurnEndPlan(state, options = {}) {
+        const draft = this.createDraft(state);
+        const execution = this.#effects.executeOwned(
+            this.#getOwnedItemIds(draft),
+            EFFECT_TRIGGERS.TURN_END,
+            {
+                actor: 'player',
+                instability: draft.lora.instability,
+                maxInstability: draft.lora.maxInstability,
+                mushroomActive: draft.player.mushroomActive,
+                peaceTurns: draft.lora.peaceTurns
+            },
+            { mode: options.mode ?? 'preview' }
+        );
+        return {
+            instabilityCalculations: execution.operations
+                .filter(({ instabilityCalculation }) => instabilityCalculation)
+                .map(({ source, instabilityCalculation }) => ({
+                    ...instabilityCalculation,
+                    source
+                })),
+            effectExecution: execution
+        };
+    }
+
+    /**
+     * 로라 턴 시작 패시브를 순서대로 계산합니다.
+     * @param {object} state - 읽기 전용 전투 상태입니다.
+     * @param {{mode?:'preview'|'apply'}} [options={}] - 실행 목적입니다.
+     * @returns {object} 최종 불안정도와 개별 변경입니다.
+     */
+    getLoraTurnStartPlan(state, options = {}) {
+        const draft = this.createDraft(state);
+        const execution = this.#effects.executeOwned(
+            this.#getOwnedItemIds(draft),
+            EFFECT_TRIGGERS.TURN_START,
+            {
+                actor: 'lora',
+                instability: draft.lora.instability,
+                maxInstability: draft.lora.maxInstability,
+                mushroomActive: draft.player.mushroomActive,
+                peaceTurns: draft.lora.peaceTurns,
+                peaceActive: draft.lora.peaceTurns > 0
+            },
+            { mode: options.mode ?? 'preview' }
+        );
+        return {
+            expectedInstability: execution.state.instability,
+            instabilityCalculations: execution.operations
+                .filter(({ instabilityCalculation }) => instabilityCalculation)
+                .map(({ source, instabilityCalculation }) => ({
+                    ...instabilityCalculation,
+                    source
+                })),
+            effectExecution: execution
+        };
+    }
+
+    /**
+     * 로라 공격에 적용되는 아이템 피해 변경을 계산합니다.
+     * @param {object} state - 읽기 전용 전투 상태입니다.
+     * @param {number} baseDamage - 상태 단계의 원시 피해입니다.
+     * @param {{mode?:'preview'|'apply'}} [options={}] - 실행 목적입니다.
+     * @returns {object} 원시·보정 피해와 operation입니다.
+     */
+    getLoraAttackDamagePlan(state, baseDamage, options = {}) {
+        const draft = this.createDraft(state);
+        const rawDamage = Math.max(0, toFiniteNumber(baseDamage));
+        const execution = this.#effects.executeOwned(
+            this.#getOwnedItemIds(draft),
+            EFFECT_TRIGGERS.ATTACK,
+            {
+                actor: 'lora',
+                target: 'player',
+                baseDamage: rawDamage,
+                mushroomActive: draft.player.mushroomActive,
+                peaceTurns: draft.lora.peaceTurns
+            },
+            { mode: options.mode ?? 'preview' }
+        );
+        return {
+            rawDamage,
+            passiveDamageBonus: Math.max(0, execution.state.calculatedDamage - rawDamage),
+            passiveAdjustedDamage: execution.state.calculatedDamage,
+            effectExecution: execution
+        };
     }
 
     /**
      * 현재 방어 패시브와 HP 상한을 반영한 플레이어 피해를 계산합니다.
      * @param {object} state - 읽기 전용 전투 상태입니다.
      * @param {number} baseDamage - 패시브 적용 전 피해입니다.
+     * @param {{mode?:'preview'|'apply'}} [options={}] - 실행 목적입니다.
      * @returns {object} 피해 감소와 최종 적용 피해입니다.
      */
-    calculatePlayerDamage(state, baseDamage) {
+    calculatePlayerDamage(state, baseDamage, options = {}) {
         const draft = this.createDraft(state);
-        let reduction = 0;
-        if (this.hasItem(draft, 'mascot-costume')) {
-            reduction += toFiniteNumber(this.#items['mascot-costume']?.effect?.damageReduction);
-        }
-        if (this.hasItem(draft, 'old-teddy')) {
-            reduction += toFiniteNumber(this.#items['old-teddy']?.effect?.damageReduction);
-        }
-        const rawDamage = Math.max(0, toFiniteNumber(baseDamage));
-        const calculatedDamage = Math.max(0, Math.round(rawDamage - reduction));
-        const finalDamage = Math.min(draft.player.hp, calculatedDamage);
-        return {
-            rawDamage,
-            reduction,
-            calculatedDamage,
-            finalDamage,
-            playerHpBefore: draft.player.hp,
-            playerHpAfter: Math.max(0, draft.player.hp - calculatedDamage),
-            mushroomEnds: finalDamage > 0 && draft.player.mushroomActive
-        };
+        return this.#effects.calculatePlayerDamage(
+            this.#getOwnedItemIds(draft),
+            {
+                baseDamage,
+                playerHp: draft.player.hp,
+                mushroomActive: draft.player.mushroomActive,
+                peaceTurns: draft.lora.peaceTurns
+            },
+            { mode: options.mode ?? 'preview' }
+        );
     }
 
     /**
      * 오카리나 억제와 상하한을 반영한 불안정도 변경을 계산합니다.
-     * @param {object} values - 현재값, 최대값, 요청 변화와 오카리나 여부입니다.
+     * @param {object} state - 보유 효과를 확인할 읽기 전용 전투 상태입니다.
+     * @param {object} values - 현재값, 최대값과 요청 변화입니다.
+     * @param {{mode?:'preview'|'apply'}} [options={}] - 실행 목적입니다.
      * @returns {object} 적용 전후와 억제 여부입니다.
      */
-    calculateInstabilityChange({
-        instability,
-        maxInstability,
-        requestedChange,
-        hasOcarina = false
-    } = {}) {
-        const before = this.#clamp(
-            toFiniteNumber(instability),
-            0,
-            Math.max(0, toFiniteNumber(maxInstability, 100))
+    calculateInstabilityChange(state, values = {}, options = {}) {
+        const draft = this.createDraft(state);
+        return this.#effects.calculateInstabilityChange(
+            this.#getOwnedItemIds(draft),
+            values,
+            { mode: options.mode ?? 'preview' }
         );
-        const requested = toFiniteNumber(requestedChange);
-        const suppressed = requested > 0 && hasOcarina === true;
-        const appliedRequest = suppressed ? 0 : requested;
-        const after = this.#clamp(
-            before + appliedRequest,
-            0,
-            Math.max(0, toFiniteNumber(maxInstability, 100))
-        );
-        return {
-            before,
-            after,
-            change: after - before,
-            requestedChange: requested,
-            suppressed
-        };
     }
 
     /** @param {object} left @param {object} right @returns {number} 맨해튼 거리입니다. */
     getDistance(left, right) {
         return Math.abs(left.x - right.x) + Math.abs(left.y - right.y);
+    }
+
+    /** @param {object} state @returns {boolean} 데이터 효과로 원거리 공격이 열렸는지 여부입니다. @private */
+    #hasRangedAttack(state) {
+        return this.#effects.executeOwned(
+            this.#getOwnedItemIds(state),
+            EFFECT_TRIGGERS.ATTACK,
+            {
+                actor: 'player',
+                weapon: 'bow',
+                baseDamage: 0,
+                mushroomActive: state.player.mushroomActive,
+                peaceTurns: state.lora.peaceTurns
+            },
+            { mode: 'preview' }
+        ).state.rangedAttackGranted;
+    }
+
+    /** @param {object} state @returns {Array<string>} 수량이 남은 아이템 ID입니다. @private */
+    #getOwnedItemIds(state) {
+        return [...state.inventory.entries()]
+            .filter(([, count]) => toFiniteNumber(count) > 0)
+            .map(([itemId]) => itemId);
+    }
+
+    /**
+     * 기존 공개 사용 결과 형식을 operation 결과에서 구성합니다.
+     * @param {string} itemId - 효과 원본 아이템입니다.
+     * @param {ReadonlyArray<object>} operations - 실행된 operation입니다.
+     * @returns {Array<object>} 호환 표시 결과입니다.
+     * @private
+     */
+    #createLegacyEffectResults(itemId, operations) {
+        return operations.flatMap((operation) => {
+            const builder = LEGACY_EFFECT_RESULT_BUILDERS[operation.operation];
+            if (!builder) {
+                return [];
+            }
+            const result = builder(operation);
+            if (operation.operation !== EFFECT_OPERATIONS.SET_MUSHROOM_ACTIVE) {
+                return [result];
+            }
+            const moveMultiplier = this.#effects.getItemEffects(
+                itemId,
+                EFFECT_TRIGGERS.MOVE_ENTER
+            ).find(({ operation: operationId }) => (
+                operationId === EFFECT_OPERATIONS.MULTIPLY_MOVE_RANGE
+            ))?.value ?? 1;
+            const attackMultiplier = this.#effects.getItemEffects(
+                itemId,
+                EFFECT_TRIGGERS.ATTACK
+            ).find(({ operation: operationId }) => (
+                operationId === EFFECT_OPERATIONS.MULTIPLY_DAMAGE
+            ))?.value ?? 1;
+            return [{ ...result, moveMultiplier, attackMultiplier }];
+        });
     }
 
     /** @param {string} action @param {string} reason @param {object} [extra={}] @returns {object} 실패 계획입니다. @private */

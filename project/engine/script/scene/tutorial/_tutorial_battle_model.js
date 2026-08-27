@@ -1,4 +1,5 @@
 import { TutorialCombatRules } from './_tutorial_combat_rules.js';
+import { TutorialEffectExecutor } from './_tutorial_effect_executor.js';
 import { TutorialLoraIntentPlanner } from './_tutorial_lora_intent_planner.js';
 import { TutorialPlayerActionPreviewer } from './_tutorial_player_action_previewer.js';
 
@@ -7,17 +8,6 @@ const LORA_ID = 'lora';
 const DEFAULT_STARTER_ITEM_ID = 'mascot-costume';
 const CHECKPOINT_KIND = 'TutorialBattleModelCheckpoint';
 const CHECKPOINT_VERSION = 2;
-const EVENT_TILE_TYPES = new Set([
-    'damage',
-    'move-penalty',
-    'instability-up',
-    'instability-down'
-]);
-const NEGATIVE_EVENT_TILE_TYPES = new Set([
-    'damage',
-    'move-penalty',
-    'instability-up'
-]);
 const DIRECTIONS = Object.freeze([
     Object.freeze({ x: 0, y: -1 }),
     Object.freeze({ x: 1, y: 0 }),
@@ -31,6 +21,7 @@ const DIRECTIONS = Object.freeze([
 export class TutorialBattleModel {
     #config;
     #configSignature;
+    #effectExecutor;
     #combatRules;
     #loraIntentPlanner;
     #playerActionPreviewer;
@@ -44,20 +35,21 @@ export class TutorialBattleModel {
     constructor(config, options = {}) {
         this.#config = this.#normalizeConfig(config);
         this.#configSignature = this.#createConfigSignature();
+        this.#effectExecutor = new TutorialEffectExecutor({
+            items: this.#config.items,
+            eventTileEffects: this.#config.eventTileEffects
+        });
         this.#combatRules = new TutorialCombatRules({
             items: this.#config.items,
-            player: this.#config.player
+            player: this.#config.player,
+            effectExecutor: this.#effectExecutor
         });
         this.#loraIntentPlanner = new TutorialLoraIntentPlanner({
             rules: this.#combatRules,
-            items: this.#config.items,
-            lora: this.#config.lora,
-            bowInstabilityPerTurn: this.#config.bowInstabilityPerTurn,
-            bowLoraDamageBonus: this.#config.bowLoraDamageBonus
+            lora: this.#config.lora
         });
         this.#playerActionPreviewer = new TutorialPlayerActionPreviewer({
-            rules: this.#combatRules,
-            items: this.#config.items
+            rules: this.#combatRules
         });
         this.#knowledge = this.#normalizeKnowledge(options.knowledge);
         this.#loraTurnPerformed = false;
@@ -422,7 +414,7 @@ export class TutorialBattleModel {
         const plan = this.#combatRules.getPlayerAttackPlan(
             this.#createCombatPlanningState(),
             targetId,
-            options
+            { ...options, mode: 'apply' }
         );
         if (!plan.ok) {
             return this.#actionFailure('attack', plan.reason);
@@ -544,7 +536,8 @@ export class TutorialBattleModel {
     useItem(itemId) {
         const plan = this.#combatRules.getItemUsePlan(
             this.#createCombatPlanningState(),
-            itemId
+            itemId,
+            { mode: 'apply' }
         );
         if (!plan.ok) {
             return this.#actionFailure('use-item', plan.reason, { itemId });
@@ -606,7 +599,7 @@ export class TutorialBattleModel {
             return [];
         }
         return this.#getFloor().eventTiles
-            .filter((eventTile) => NEGATIVE_EVENT_TILE_TYPES.has(eventTile.type))
+            .filter((eventTile) => this.#combatRules.isNegativeEventTile(eventTile.type))
             .map((eventTile) => ({ ...eventTile }));
     }
 
@@ -631,20 +624,28 @@ export class TutorialBattleModel {
                 && Number.isInteger(target?.y)
                 && this.#isSamePosition(candidate, target.x, target.y))
         ));
-        if (!eventTile || !NEGATIVE_EVENT_TILE_TYPES.has(eventTile.type)) {
-            return this.#actionFailure('cleanse-event-tile', 'invalid-event-tile');
+        const plan = this.#combatRules.getMovementItemUsePlan(
+            this.#createCombatPlanningState(),
+            'tile-cleanser',
+            eventTile,
+            { mode: 'apply' }
+        );
+        if (!plan.ok) {
+            return this.#actionFailure('cleanse-event-tile', plan.reason, {
+                itemId: 'tile-cleanser'
+            });
         }
-        const beforeType = eventTile.type;
-        eventTile.type = this.#config.items['tile-cleanser'].effect.cleansedType;
+        const beforeType = plan.eventTileTypeBefore;
+        eventTile.type = plan.eventTileTypeAfter;
         eventTile.cleansed = true;
-        this.#removeInventory('tile-cleanser', 1);
-        this.usedItems.add('tile-cleanser');
-        this.#knowledge.discoveredItemIds.add('tile-cleanser');
-        this.#knowledge.identifiedItemIds.add('tile-cleanser');
+        this.#removeInventory(plan.itemId, plan.consumeCount);
+        this.usedItems.add(plan.itemId);
+        this.#knowledge.discoveredItemIds.add(plan.itemId);
+        this.#knowledge.identifiedItemIds.add(plan.itemId);
         const events = [
             this.#createEvent('item-used', {
-                itemId: 'tile-cleanser',
-                label: this.#config.items['tile-cleanser'].label
+                itemId: plan.itemId,
+                label: this.#config.items[plan.itemId].label
             }),
             this.#createEvent('event-tile-cleansed', {
                 eventTileId: eventTile.id,
@@ -1054,17 +1055,15 @@ export class TutorialBattleModel {
 
     /** 보유 패시브 기준 행동 충전량을 반환합니다. @private */
     #getActionsPerTurn() {
-        return 1 + (this.#hasItem('haste')
-            ? this.#config.items.haste.effect.actionCountBonus
-            : 0);
+        return this.#combatRules.getActionsPerTurn(this.#createCombatPlanningState());
     }
 
     /** 현재 이동 범위를 반환합니다. @private */
     #getMoveRange() {
-        const multiplier = this.player.mushroomActive
-            ? this.#config.items.mushroom.effect.moveMultiplier
-            : 1;
-        return this.#config.player.moveRange * multiplier;
+        return this.#combatRules.getMoveRange(
+            this.#createCombatPlanningState(),
+            this.#config.player.moveRange
+        );
     }
 
     /** 행동 하나를 소비하고 필요하면 플레이어 턴을 닫습니다. @private */
@@ -1078,10 +1077,14 @@ export class TutorialBattleModel {
 
     /** 플레이어 턴 종료 패시브와 추가 턴/로라 턴 분기를 처리합니다. @private */
     #completePlayerTurn(events) {
-        if (this.#hasItem('mascot-costume')) {
-            this.#changeInstability(
-                -this.#config.items['mascot-costume'].effect.turnEndInstabilityReduction,
-                'mascot-costume',
+        const turnEndPlan = this.#combatRules.getPlayerTurnEndPlan(
+            this.#createCombatPlanningState(),
+            { mode: 'apply' }
+        );
+        for (const calculation of turnEndPlan.instabilityCalculations) {
+            this.#applyInstabilityCalculation(
+                calculation,
+                calculation.source,
                 events
             );
         }
@@ -1161,7 +1164,9 @@ export class TutorialBattleModel {
         const moveRange = this.#getMoveRange();
         let remainingMoves = moveRange;
         let stepsUsed = 0;
-        let hasPickaxe = this.#hasItem('diamond-pickaxe');
+        let hasPickaxe = this.#combatRules.canTraverseWalls(
+            this.#createCombatPlanningState()
+        );
         let current = { x: this.player.x, y: this.player.y };
         const events = [];
         const actualPath = [{ ...current }];
@@ -1189,12 +1194,16 @@ export class TutorialBattleModel {
                 actualPath.push({ ...current });
 
                 const item = this.#findItemAt(point.x, point.y);
-                if (item?.itemId === 'diamond-pickaxe') {
+                if (item && this.#combatRules.grantsWallTraversal(item.itemId)) {
                     hasPickaxe = true;
                 }
                 const eventTile = this.#findEventTileAt(point.x, point.y);
-                if (eventTile?.type === 'move-penalty') {
-                    remainingMoves = Math.max(0, remainingMoves - this.#config.eventMovePenalty);
+                if (eventTile) {
+                    remainingMoves = this.#combatRules.getEventTilePlan(
+                        this.#createCombatPlanningState(),
+                        eventTile.type,
+                        { remainingMoves, mode: apply ? 'apply' : 'preview' }
+                    ).remainingMovesAfter;
                 }
                 if (apply) {
                     this.player.x = point.x;
@@ -1270,15 +1279,29 @@ export class TutorialBattleModel {
             y: eventTile.y,
             triggerCount: eventTile.triggerCount
         }));
-        if (eventTile.type === 'damage') {
-            this.#damagePlayer(20, 'event-tile', events);
-            if (!this.player.alive && !this.result) {
-                this.#finishBattle('failure', 'player-defeated', events);
+        const plan = this.#combatRules.getEventTilePlan(
+            this.#createCombatPlanningState(),
+            eventTile.type,
+            { mode: 'apply' }
+        );
+        for (const operation of plan.effectExecution.operations) {
+            if (operation.damageCalculation) {
+                this.#applyPlayerDamageCalculation(
+                    operation.damageCalculation,
+                    operation.source,
+                    events
+                );
             }
-        } else if (eventTile.type === 'instability-up') {
-            this.#changeInstability(10, 'event-tile', events);
-        } else if (eventTile.type === 'instability-down') {
-            this.#changeInstability(-10, 'event-tile', events);
+            if (operation.instabilityCalculation) {
+                this.#applyInstabilityCalculation(
+                    operation.instabilityCalculation,
+                    operation.source,
+                    events
+                );
+            }
+        }
+        if (!this.player.alive && !this.result) {
+            this.#finishBattle('failure', 'player-defeated', events);
         }
     }
 
@@ -1371,7 +1394,8 @@ export class TutorialBattleModel {
     #damagePlayer(baseDamage, source, events) {
         const calculation = this.#combatRules.calculatePlayerDamage(
             this.#createCombatPlanningState(),
-            baseDamage
+            baseDamage,
+            { mode: 'apply' }
         );
         return this.#applyPlayerDamageCalculation(calculation, source, events);
     }
@@ -1440,12 +1464,15 @@ export class TutorialBattleModel {
 
     /** 로라 불안정도를 변경하고 오카리나의 증가 무효화를 적용합니다. @private */
     #changeInstability(amount, source, events) {
-        const calculation = this.#combatRules.calculateInstabilityChange({
-            instability: this.lora.instability,
-            maxInstability: this.lora.maxInstability,
-            requestedChange: amount,
-            hasOcarina: this.#hasItem('ocarina')
-        });
+        const calculation = this.#combatRules.calculateInstabilityChange(
+            this.#createCombatPlanningState(),
+            {
+                instability: this.lora.instability,
+                maxInstability: this.lora.maxInstability,
+                requestedChange: amount
+            },
+            { mode: 'apply' }
+        );
         return this.#applyInstabilityCalculation(calculation, source, events);
     }
 
@@ -1684,15 +1711,13 @@ export class TutorialBattleModel {
             height: this.#config.height,
             floors: this.#config.floors,
             items: this.#config.items,
+            eventTileEffects: this.#config.eventTileEffects,
             starterChoiceIds: [...this.#config.starterChoiceIds].sort(),
             maxTurns: this.#config.maxTurns,
             floorTransitionAfterTurn: this.#config.floorTransitionAfterTurn,
             player: this.#config.player,
             lora: this.#config.lora,
-            mob: this.#config.mob,
-            bowInstabilityPerTurn: this.#config.bowInstabilityPerTurn,
-            bowLoraDamageBonus: this.#config.bowLoraDamageBonus,
-            eventMovePenalty: this.#config.eventMovePenalty
+            mob: this.#config.mob
         });
     }
 
@@ -1705,15 +1730,43 @@ export class TutorialBattleModel {
         const height = this.#requirePositiveInteger(config.MAP?.HEIGHT, 'MAP.HEIGHT');
         const items = {};
         for (const [itemId, item] of Object.entries(config.ITEMS ?? {})) {
-            if (!item || item.id !== itemId || typeof item.label !== 'string' || !item.effect?.type) {
+            if (!item
+                || item.id !== itemId
+                || typeof item.label !== 'string'
+                || !Array.isArray(item.effects)) {
                 throw new TypeError(`TutorialBattleModel: ITEMS.${itemId} 설정이 올바르지 않습니다.`);
             }
             items[itemId] = Object.freeze({
                 ...item,
-                effect: Object.freeze({ ...item.effect })
+                effects: Object.freeze(item.effects.map((effect) => Object.freeze({
+                    ...effect,
+                    conditions: Object.freeze([...(effect?.conditions ?? [])])
+                })))
             });
         }
-        const floors = this.#normalizeFloors(config.FLOORS, width, height, items);
+        const eventTileEffects = {};
+        for (const [eventType, entry] of Object.entries(config.EVENT_TILE_EFFECTS ?? {})) {
+            if (!entry || entry.id !== eventType || !Array.isArray(entry.effects)) {
+                throw new TypeError(
+                    `TutorialBattleModel: EVENT_TILE_EFFECTS.${eventType} 설정이 올바르지 않습니다.`
+                );
+            }
+            eventTileEffects[eventType] = Object.freeze({
+                ...entry,
+                effects: Object.freeze(entry.effects.map((effect) => Object.freeze({
+                    ...effect,
+                    conditions: Object.freeze([...(effect?.conditions ?? [])])
+                })))
+            });
+        }
+        const frozenEventTileEffects = Object.freeze(eventTileEffects);
+        const floors = this.#normalizeFloors(
+            config.FLOORS,
+            width,
+            height,
+            items,
+            frozenEventTileEffects
+        );
         const starterChoiceIds = new Set((config.STARTER_CHOICES ?? []).map((choice) => choice?.id));
         if (!starterChoiceIds.has('bow') || !starterChoiceIds.has('mascot-costume')) {
             throw new TypeError('TutorialBattleModel: 시작 선택에 bow와 mascot-costume이 필요합니다.');
@@ -1738,21 +1791,10 @@ export class TutorialBattleModel {
             height,
             floors: Object.freeze(floors),
             items: Object.freeze(items),
+            eventTileEffects: frozenEventTileEffects,
             starterChoiceIds,
             maxTurns,
             floorTransitionAfterTurn,
-            bowInstabilityPerTurn: this.#requireNonNegativeNumber(
-                config.RULES?.BOW_INSTABILITY_PER_TURN,
-                'RULES.BOW_INSTABILITY_PER_TURN'
-            ),
-            bowLoraDamageBonus: this.#requireNonNegativeNumber(
-                config.RULES?.BOW_LORA_DAMAGE_BONUS,
-                'RULES.BOW_LORA_DAMAGE_BONUS'
-            ),
-            eventMovePenalty: this.#requireNonNegativeNumber(
-                config.RULES?.EVENT_MOVE_PENALTY,
-                'RULES.EVENT_MOVE_PENALTY'
-            ),
             trueEndingMaxInstability: this.#requireNonNegativeNumber(
                 config.RULES?.TRUE_ENDING_MAX_INSTABILITY,
                 'RULES.TRUE_ENDING_MAX_INSTABILITY'
@@ -1798,7 +1840,7 @@ export class TutorialBattleModel {
     }
 
     /** 두 층의 위치 기반 데이터를 정규화합니다. @private */
-    #normalizeFloors(value, width, height, items) {
+    #normalizeFloors(value, width, height, items, eventTileEffects) {
         if (!Array.isArray(value) || value.length !== 2) {
             throw new TypeError('TutorialBattleModel: FLOORS는 두 층이어야 합니다.');
         }
@@ -1829,7 +1871,7 @@ export class TutorialBattleModel {
                 width,
                 height,
                 (entry, label) => {
-                    if (!EVENT_TILE_TYPES.has(entry.type)) {
+                    if (!eventTileEffects[entry.type]) {
                         throw new TypeError(`TutorialBattleModel: ${label}.type이 올바르지 않습니다.`);
                     }
                     return { type: entry.type };

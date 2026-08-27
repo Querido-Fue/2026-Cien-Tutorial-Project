@@ -1,23 +1,15 @@
 const LORA_ID = 'lora';
 
-/** @param {*} value @param {number} [fallback=0] @returns {number} 유한 숫자입니다. */
-function toFiniteNumber(value, fallback = 0) {
-    const number = Number(value);
-    return Number.isFinite(number) ? number : fallback;
-}
-
 /**
  * @class TutorialPlayerActionPreviewer
  * @description 공통 전투 계획을 독립 상태에 적용해 플레이어 행동 후 상태를 예측합니다.
  */
 export class TutorialPlayerActionPreviewer {
     #rules;
-    #items;
 
-    /** @param {object} config - 공통 규칙과 아이템 설정입니다. */
+    /** @param {object} config - 공통 규칙 설정입니다. */
     constructor(config = {}) {
         this.#rules = config.rules;
-        this.#items = Object.freeze({ ...(config.items || {}) });
     }
 
     /**
@@ -119,14 +111,18 @@ export class TutorialPlayerActionPreviewer {
             return this.#rules.getPlayerAttackPlan(
                 state,
                 options.targetId ?? LORA_ID,
-                options
+                { ...options, mode: 'preview' }
             );
         }
         if (action === 'heal') {
             return this.#rules.getHealPlan(state);
         }
         if (action === 'use-item') {
-            return this.#rules.getItemUsePlan(state, options.itemId);
+            return this.#rules.getItemUsePlan(
+                state,
+                options.itemId,
+                { mode: 'preview' }
+            );
         }
         if (action === 'wait') {
             return this.#rules.getWaitPlan(state);
@@ -196,17 +192,13 @@ export class TutorialPlayerActionPreviewer {
         if (draft.actionsUsed < draft.actionsPerTurn || draft.result) {
             return false;
         }
-        if (this.#rules.hasItem(draft, 'mascot-costume')) {
-            const calculation = this.#rules.calculateInstabilityChange({
-                instability: draft.lora.instability,
-                maxInstability: draft.lora.maxInstability,
-                requestedChange: -toFiniteNumber(
-                    this.#items['mascot-costume']?.effect?.turnEndInstabilityReduction
-                ),
-                hasOcarina: this.#rules.hasItem(draft, 'ocarina')
-            });
+        const turnEndPlan = this.#rules.getPlayerTurnEndPlan(
+            draft,
+            { mode: 'preview' }
+        );
+        for (const calculation of turnEndPlan.instabilityCalculations) {
             draft.lora.instability = calculation.after;
-            instabilityChanges.push({ ...calculation, source: 'mascot-costume' });
+            instabilityChanges.push({ ...calculation });
         }
         if (draft.extraPlayerTurns > 0) {
             draft.extraPlayerTurns -= 1;

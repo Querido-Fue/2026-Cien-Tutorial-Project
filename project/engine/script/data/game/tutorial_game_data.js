@@ -81,6 +81,64 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         WIDTH: 9,
         HEIGHT: 8
     },
+    EVENT_TILE_EFFECTS: {
+        damage: {
+            id: 'damage',
+            polarity: 'negative',
+            effects: [
+                {
+                    id: 'event-damage-player',
+                    trigger: 'onMoveEnter',
+                    operation: 'deal-player-damage',
+                    order: 100,
+                    value: 20,
+                    source: 'event-tile'
+                }
+            ]
+        },
+        'move-penalty': {
+            id: 'move-penalty',
+            polarity: 'negative',
+            effects: [
+                {
+                    id: 'event-reduce-remaining-moves',
+                    trigger: 'onMoveEnter',
+                    operation: 'reduce-remaining-moves',
+                    order: 100,
+                    value: 2,
+                    source: 'event-tile'
+                }
+            ]
+        },
+        'instability-up': {
+            id: 'instability-up',
+            polarity: 'negative',
+            effects: [
+                {
+                    id: 'event-increase-instability',
+                    trigger: 'onMoveEnter',
+                    operation: 'change-instability-flat',
+                    order: 100,
+                    value: 10,
+                    source: 'event-tile'
+                }
+            ]
+        },
+        'instability-down': {
+            id: 'instability-down',
+            polarity: 'positive',
+            effects: [
+                {
+                    id: 'event-reduce-instability',
+                    trigger: 'onMoveEnter',
+                    operation: 'change-instability-flat',
+                    order: 100,
+                    value: -10,
+                    source: 'event-tile'
+                }
+            ]
+        }
+    },
     FLOORS: [
         {
             id: 'first-floor',
@@ -187,9 +245,6 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         MAX_TURNS: 12,
         FLOOR_TRANSITION_AFTER_TURN: 6,
         EVENT_LOG_LIMIT: 80,
-        BOW_INSTABILITY_PER_TURN: 3,
-        BOW_LORA_DAMAGE_BONUS: 5,
-        EVENT_MOVE_PENALTY: 2,
         TRUE_ENDING_MAX_INSTABILITY: 10,
         SPECIAL_ENDING_MAX_INSTABILITY: 40
     },
@@ -204,7 +259,33 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
             description: '로라가 더 불안정해지고 공격이 강해지지만, 거리 제약 없이 공격할 수 있습니다.',
             category: 'starter',
             passive: true,
-            effect: { type: 'bow', rangedDamage: 30 }
+            effects: [
+                {
+                    id: 'bow-player-ranged-damage',
+                    trigger: 'onAttack',
+                    operation: 'set-ranged-damage',
+                    order: 100,
+                    conditions: ['actor-player', 'weapon-bow'],
+                    value: 30
+                },
+                {
+                    id: 'bow-lora-turn-instability',
+                    trigger: 'onTurnStart',
+                    operation: 'change-instability-flat',
+                    order: 100,
+                    conditions: ['actor-lora'],
+                    value: 3,
+                    source: 'bow-passive'
+                },
+                {
+                    id: 'bow-lora-attack-damage',
+                    trigger: 'onAttack',
+                    operation: 'change-damage-flat',
+                    order: 200,
+                    conditions: ['actor-lora', 'positive-base-damage'],
+                    value: 5
+                }
+            ]
         },
         'mascot-costume': {
             id: 'mascot-costume',
@@ -212,7 +293,25 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
             description: '받는 피해를 줄이고, 플레이어 턴 종료마다 로라를 안정시킵니다.',
             category: 'starter',
             passive: true,
-            effect: { type: 'mascot-costume', damageReduction: 10, turnEndInstabilityReduction: 5 }
+            effects: [
+                {
+                    id: 'mascot-reduce-player-damage',
+                    trigger: 'onBeforeDamage',
+                    operation: 'reduce-damage-flat',
+                    order: 100,
+                    conditions: ['target-player'],
+                    value: 10
+                },
+                {
+                    id: 'mascot-turn-end-instability',
+                    trigger: 'onTurnEnd',
+                    operation: 'change-instability-flat',
+                    order: 100,
+                    conditions: ['actor-player'],
+                    value: -5,
+                    source: 'mascot-costume'
+                }
+            ]
         },
         'old-teddy': {
             id: 'old-teddy',
@@ -221,12 +320,32 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
             category: 'interaction',
             passive: true,
             useOnce: true,
-            effect: {
-                type: 'old-teddy',
-                instabilityReduction: 30,
-                attackDamagePenalty: 20,
-                damageReduction: 10
-            }
+            effects: [
+                {
+                    id: 'old-teddy-player-attack-penalty',
+                    trigger: 'onAttack',
+                    operation: 'change-damage-flat',
+                    order: 200,
+                    conditions: ['actor-player'],
+                    value: -20
+                },
+                {
+                    id: 'old-teddy-reduce-player-damage',
+                    trigger: 'onBeforeDamage',
+                    operation: 'reduce-damage-flat',
+                    order: 110,
+                    conditions: ['target-player'],
+                    value: 10
+                },
+                {
+                    id: 'old-teddy-use-instability',
+                    trigger: 'onUse',
+                    operation: 'change-instability-flat',
+                    order: 100,
+                    value: -30,
+                    source: 'old-teddy'
+                }
+            ]
         },
         'music-box': {
             id: 'music-box',
@@ -234,7 +353,24 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
             description: '2턴 동안 모두 공격할 수 없는 평화 모드가 됩니다.',
             category: 'interaction',
             consumable: true,
-            effect: { type: 'music-box', durationLoraTurns: 2, instabilityReductionPerTurn: 20 }
+            effects: [
+                {
+                    id: 'music-box-use-peace',
+                    trigger: 'onUse',
+                    operation: 'set-peace-turns-min',
+                    order: 100,
+                    value: 2
+                },
+                {
+                    id: 'music-box-turn-start-instability',
+                    trigger: 'onTurnStart',
+                    operation: 'change-instability-flat',
+                    order: 200,
+                    conditions: ['actor-lora', 'peace-active'],
+                    value: -20,
+                    source: 'music-box'
+                }
+            ]
         },
         eyeliner: {
             id: 'eyeliner',
@@ -242,7 +378,16 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
             description: '사용하면 로라의 불안정 수치가 감소합니다.',
             category: 'interaction',
             consumable: true,
-            effect: { type: 'eyeliner', instabilityReduction: 15 }
+            effects: [
+                {
+                    id: 'eyeliner-use-instability',
+                    trigger: 'onUse',
+                    operation: 'change-instability-flat',
+                    order: 100,
+                    value: -15,
+                    source: 'eyeliner'
+                }
+            ]
         },
         'diamond-pickaxe': {
             id: 'diamond-pickaxe',
@@ -250,7 +395,15 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
             description: '벽을 넘어서 이동할 수 있습니다.',
             category: 'compatible',
             passive: true,
-            effect: { type: 'diamond-pickaxe' }
+            effects: [
+                {
+                    id: 'diamond-pickaxe-wall-traversal',
+                    trigger: 'onMoveEnter',
+                    operation: 'grant-wall-traversal',
+                    order: 100,
+                    value: true
+                }
+            ]
         },
         mirror: {
             id: 'mirror',
@@ -258,7 +411,15 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
             description: '사용하면 로라가 1턴 동안 아무 행동도 하지 않습니다.',
             category: 'interaction',
             consumable: true,
-            effect: { type: 'mirror', extraPlayerTurns: 1 }
+            effects: [
+                {
+                    id: 'mirror-use-extra-player-turn',
+                    trigger: 'onUse',
+                    operation: 'add-extra-player-turns',
+                    order: 100,
+                    value: 1
+                }
+            ]
         },
         mushroom: {
             id: 'mushroom',
@@ -266,7 +427,37 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
             description: '이동·공격이 2배가 되며 피해를 받으면 끝납니다.',
             category: 'compatible',
             consumable: true,
-            effect: { type: 'mushroom', moveMultiplier: 2, attackMultiplier: 2 }
+            effects: [
+                {
+                    id: 'mushroom-use-active',
+                    trigger: 'onUse',
+                    operation: 'set-mushroom-active',
+                    order: 100,
+                    value: true
+                },
+                {
+                    id: 'mushroom-move-range',
+                    trigger: 'onMoveEnter',
+                    operation: 'multiply-move-range',
+                    order: 100,
+                    value: 2
+                },
+                {
+                    id: 'mushroom-player-attack-damage',
+                    trigger: 'onAttack',
+                    operation: 'multiply-damage',
+                    order: 300,
+                    conditions: ['actor-player'],
+                    value: 2
+                },
+                {
+                    id: 'mushroom-end-on-damage',
+                    trigger: 'onBeforeDamage',
+                    operation: 'end-mushroom-on-damage',
+                    order: 900,
+                    conditions: ['target-player', 'positive-final-damage']
+                }
+            ]
         },
         ocarina: {
             id: 'ocarina',
@@ -274,7 +465,15 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
             description: '소지하면 로라의 불안정 수치가 증가하지 않습니다.',
             category: 'compatible',
             passive: true,
-            effect: { type: 'ocarina' }
+            effects: [
+                {
+                    id: 'ocarina-suppress-instability-increase',
+                    trigger: 'onBeforeInstabilityChange',
+                    operation: 'suppress-positive-instability',
+                    order: 100,
+                    conditions: ['positive-instability-change']
+                }
+            ]
         },
         haste: {
             id: 'haste',
@@ -282,7 +481,16 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
             description: '한 턴에 행동을 두 번 할 수 있습니다.',
             category: 'compatible',
             passive: true,
-            effect: { type: 'haste', actionCountBonus: 1 }
+            effects: [
+                {
+                    id: 'haste-player-actions',
+                    trigger: 'onTurnStart',
+                    operation: 'add-actions-per-turn',
+                    order: 100,
+                    conditions: ['actor-player'],
+                    value: 1
+                }
+            ]
         },
         'memory-photo': {
             id: 'memory-photo',
@@ -290,7 +498,16 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
             description: '사용하면 로라의 현재 불안정 수치가 절반으로 감소합니다.',
             category: 'interaction',
             consumable: true,
-            effect: { type: 'memory-photo', instabilityRatio: 0.5 }
+            effects: [
+                {
+                    id: 'memory-photo-use-instability',
+                    trigger: 'onUse',
+                    operation: 'scale-instability-current',
+                    order: 100,
+                    value: 0.5,
+                    source: 'memory-photo'
+                }
+            ]
         },
         'tile-cleanser': {
             id: 'tile-cleanser',
@@ -299,7 +516,16 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
             category: 'compatible',
             consumable: true,
             movementConsumable: true,
-            effect: { type: 'tile-cleanser', cleansedType: 'instability-down' }
+            effects: [
+                {
+                    id: 'tile-cleanser-replace-event',
+                    trigger: 'onUse',
+                    operation: 'replace-event-tile-type',
+                    order: 100,
+                    conditions: ['negative-event-tile'],
+                    value: 'instability-down'
+                }
+            ]
         }
     },
     CUTSCENES: {

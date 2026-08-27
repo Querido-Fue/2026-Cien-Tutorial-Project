@@ -6,14 +6,18 @@
 핵심 상태를 계산한다. 실제 행동과 미리보기는 같은 원자 규칙을 사용하며, 뷰는 피해나
 불안정도를 다시 계산하지 않는다.
 
-역할은 다음 세 클래스로 나눈다.
+역할은 다음 모듈과 클래스로 나눈다.
 
-- `TutorialCombatRules`: 행동 가능 여부, 대상, 피해, 불안정도, 아이템 효과의 원자 계산
+- `_tutorial_effect_contract.js`: 안정된 trigger·operation·condition·mode ID
+- `TutorialEffectRegistry`: 선언형 아이템·이벤트 효과의 검증·정규화·원본 순서
+- `TutorialEffectExecutor`: registry가 제공한 효과의 조건·순서·원자 계산
+- `TutorialCombatRules`: 행동 가능 여부와 executor 결과를 전투 행동 계획으로 구성
 - `TutorialLoraIntentPlanner`: 턴 시작 패시브와 불안정 상태를 반영한 로라 의도 결정
 - `TutorialPlayerActionPreviewer`: 플레이어 행동 계획을 독립 상태에 적용한 이후 상태 예측
 
-`TutorialBattleModel`은 세 클래스를 생성하고 공개 API 및 실제 상태 적용을 조정한다. 세
-계산 클래스는 모델을 import하지 않으므로 순환 의존성이 없다.
+`TutorialBattleModel`은 executor와 전투 계산 클래스를 생성하고 공개 API 및 실제 상태 적용을
+조정한다. executor가 registry를 조립하며, 이 하위 모듈은 모델을 import하지 않으므로 순환
+의존성이 없다. 세부 데이터 계약은 `docs/tutorial-effect-contract.md`를 따른다.
 
 ## 2. 공개 API
 
@@ -111,3 +115,7 @@ Turn 07에서는 사용자의 테스트 중단 요청에 따라 이 명세를 �
 
 Turn 08에서는 HUD가 이 API와 플레이어 행동 미리보기를 소비하도록 연결했다. 사용자 요청에
 따라 새 표시·포커스·메타 회귀 명세도 실행하지 않은 상태다.
+
+Turn 09에서는 아이템과 이벤트 타일 수치를 `effects[]`와 같은 executor로 이관했다.
+`test/tutorial_effect_contract.test.mjs`에 operation 검증과 preview/apply 동등성 명세를
+추가했지만 사용자 요청에 따라 실행하지 않았다.

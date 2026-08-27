@@ -19,24 +19,12 @@ function cloneTile(value) {
  */
 export class TutorialLoraIntentPlanner {
     #rules;
-    #items;
     #lora;
-    #bowInstabilityPerTurn;
-    #bowLoraDamageBonus;
 
-    /** @param {object} config - 공통 규칙과 로라·활 설정입니다. */
+    /** @param {object} config - 공통 규칙과 로라 설정입니다. */
     constructor(config = {}) {
         this.#rules = config.rules;
-        this.#items = Object.freeze({ ...(config.items || {}) });
         this.#lora = Object.freeze({ ...(config.lora || {}) });
-        this.#bowInstabilityPerTurn = Math.max(
-            0,
-            toFiniteNumber(config.bowInstabilityPerTurn)
-        );
-        this.#bowLoraDamageBonus = Math.max(
-            0,
-            toFiniteNumber(config.bowLoraDamageBonus)
-        );
     }
 
     /**
@@ -89,29 +77,12 @@ export class TutorialLoraIntentPlanner {
             return { ...base, reason: 'lora-turn-already-performed' };
         }
 
-        const passiveChanges = [];
-        let expectedInstability = draft.lora.instability;
-        if (this.#rules.hasItem(draft, 'bow')) {
-            const bowChange = this.#rules.calculateInstabilityChange({
-                instability: expectedInstability,
-                maxInstability: draft.lora.maxInstability,
-                requestedChange: this.#bowInstabilityPerTurn,
-                hasOcarina: this.#rules.hasItem(draft, 'ocarina')
-            });
-            passiveChanges.push({ ...bowChange, source: 'bow-passive' });
-            expectedInstability = bowChange.after;
-        }
+        const mode = forecast ? 'preview' : 'apply';
+        const turnStartPlan = this.#rules.getLoraTurnStartPlan(draft, { mode });
+        const passiveChanges = turnStartPlan.instabilityCalculations;
+        const expectedInstability = turnStartPlan.expectedInstability;
 
         if (draft.lora.peaceTurns > 0) {
-            const reduction = this.#getItemEffect('music-box')?.instabilityReductionPerTurn ?? 0;
-            const musicBoxChange = this.#rules.calculateInstabilityChange({
-                instability: expectedInstability,
-                maxInstability: draft.lora.maxInstability,
-                requestedChange: -reduction,
-                hasOcarina: this.#rules.hasItem(draft, 'ocarina')
-            });
-            passiveChanges.push({ ...musicBoxChange, source: 'music-box' });
-            expectedInstability = musicBoxChange.after;
             const resolvedState = this.#getInstabilityState(expectedInstability);
             return {
                 ...base,
@@ -131,10 +102,13 @@ export class TutorialLoraIntentPlanner {
         const rawDamage = adjacent
             ? toFiniteNumber(resolvedState?.meleeDamage)
             : toFiniteNumber(resolvedState?.areaDamage);
-        const passiveDamageBonus = rawDamage > 0 && this.#rules.hasItem(draft, 'bow')
-            ? this.#bowLoraDamageBonus
-            : 0;
-        const passiveAdjustedDamage = rawDamage + passiveDamageBonus;
+        const attackDamagePlan = this.#rules.getLoraAttackDamagePlan(
+            draft,
+            rawDamage,
+            { mode }
+        );
+        const passiveDamageBonus = attackDamagePlan.passiveDamageBonus;
+        const passiveAdjustedDamage = attackDamagePlan.passiveAdjustedDamage;
         if (passiveAdjustedDamage <= 0) {
             return {
                 ...base,
@@ -150,7 +124,8 @@ export class TutorialLoraIntentPlanner {
 
         const damageCalculation = this.#rules.calculatePlayerDamage(
             draft,
-            passiveAdjustedDamage
+            passiveAdjustedDamage,
+            { mode }
         );
         const targetTile = cloneTile(draft.player);
         return {
@@ -177,11 +152,6 @@ export class TutorialLoraIntentPlanner {
             passiveChanges,
             damageCalculation
         };
-    }
-
-    /** @param {string} itemId @returns {object|null} 데이터에 있는 아이템 효과입니다. @private */
-    #getItemEffect(itemId) {
-        return this.#items[itemId]?.effect ?? null;
     }
 
     /** @param {number} value @returns {object|null} 불안정 상태입니다. @private */
