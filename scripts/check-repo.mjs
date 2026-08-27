@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { TUTORIAL_GAME_DATA } from '../project/engine/script/data/game/tutorial_game_data.js';
 import { TUTORIAL_ASSET_MANIFEST } from '../project/engine/script/data/game/tutorial_asset_manifest.js';
 import { SOUND_CONSTANTS } from '../project/engine/script/data/sound/sound_constants.js';
+import { TUTORIAL_AUDIO_MANIFEST } from '../project/engine/script/data/sound/tutorial_audio_manifest.js';
 
 const SCRIPT_DIRECTORY = dirname(fileURLToPath(import.meta.url));
 const REPOSITORY_ROOT = resolve(SCRIPT_DIRECTORY, '..');
@@ -180,6 +181,12 @@ function checkDeclaredAssets() {
     for (const entry of TUTORIAL_ASSET_MANIFEST.ENTRIES) {
         if (entry.type === 'image/png') {
             checkAssetPath(`TUTORIAL_ASSET_MANIFEST.${entry.id}`, entry.runtimePath);
+        }
+    }
+
+    for (const entry of TUTORIAL_AUDIO_MANIFEST.ENTRIES) {
+        if (entry.type === 'audio/mpeg' && entry.available !== false) {
+            checkAssetPath(`TUTORIAL_AUDIO_MANIFEST.${entry.id}`, entry.runtimePath);
         }
     }
 

@@ -94,13 +94,13 @@ test('대표 모델 이벤트는 같은 입력에서 같은 직렬화 가능한 
         .filter(({ type }) => type === TUTORIAL_PRESENTATION_CUE_TYPES.AUDIO)
         .map(({ id }) => id);
     for (const expected of [
-        TUTORIAL_AUDIO_CUE_IDS.DAMAGE,
-        TUTORIAL_AUDIO_CUE_IDS.HEAL,
-        TUTORIAL_AUDIO_CUE_IDS.ITEM_PICKUP,
-        TUTORIAL_AUDIO_CUE_IDS.ITEM_USE,
+        TUTORIAL_AUDIO_CUE_IDS.PLAYER_HURT,
+        TUTORIAL_AUDIO_CUE_IDS.PLAYER_HEAL,
+        TUTORIAL_AUDIO_CUE_IDS.LORA_HURT,
+        TUTORIAL_AUDIO_CUE_IDS.ITEM_EQUIP,
+        TUTORIAL_AUDIO_CUE_IDS.ITEM_APPLY,
         TUTORIAL_AUDIO_CUE_IDS.TELEPORT,
-        TUTORIAL_AUDIO_CUE_IDS.FLOOR_TRANSITION,
-        TUTORIAL_AUDIO_CUE_IDS.BATTLE_RESULT
+        TUTORIAL_AUDIO_CUE_IDS.FLOOR_BREAK
     ]) {
         assert.equal(audioIds.includes(expected), true, `${expected} audio cue가 없습니다.`);
     }

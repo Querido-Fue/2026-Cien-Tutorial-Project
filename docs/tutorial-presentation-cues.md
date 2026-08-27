@@ -13,7 +13,8 @@
 2. `TutorialSpriteCueRouter.route()`가 배우 동작을 시작하고 피해 cue를 공격 impact까지 지연한다.
 3. `TutorialFeedbackQueue.enqueue()`가 순번과 화면 피드백 수명을 부여한다.
 4. `TutorialAnimationTimeline.applyCues()`가 HP·불안정도 표시값을 보간한다.
-5. 모델 snapshot과 캐시를 즉시 확정하고, 시각 연출 완료는 별도 시간축에서 기다린다.
+5. `TutorialAudioDirector`가 feedback queue에서 준비된 오디오 cue를 한 번 drain한다.
+6. 모델 snapshot과 캐시를 즉시 확정하고, 시각 연출 완료는 별도 시간축에서 기다린다.
 
 ## 2. cue 종류와 소비자
 
@@ -28,7 +29,7 @@
 | `flash` | `duration` | feedback queue/world view | 피격 플래시 남은 시간 |
 | `stabilize` | `duration`, `actorId` | feedback queue/world view | 불안정도 감소 표시 |
 | `path-particles` | `path`, `count`, `duration` | feedback queue/view | 결정론적 이동 경로 입자 |
-| `audio` | `id`, `sourceEventType` | feedback queue | 사운드 구독용 의미 ID; 실제 파일 연결은 Turn 14 범위 |
+| `audio` | `id`, `sourceEventType` | feedback queue → audio director | 매니페스트의 버스·파일 정책으로 재생할 안정 의미 ID |
 
 `actor-animation`은 모델 의미를 보존하는 실행 계약이다. `TutorialSpriteCueRouter`는
 `actorId`·`animationId`·`facing`만 재생기에 전달한다. 공격에 종속된 피격·사망 cue에는
@@ -43,18 +44,17 @@ tween은 계속 `TutorialAnimationTimeline`이 담당해 중복 이동을 만들
 
 | ID | 발생 의미 |
 | --- | --- |
-| `tutorial.footstep` | 플레이어 걷기 클립의 지정 프레임 통과 |
-| `tutorial.damage` | 플레이어·로라·몹의 양수 피해 |
-| `tutorial.heal` | 플레이어의 양수 회복 |
-| `tutorial.item.pickup` | 아이템 획득 |
-| `tutorial.item.use` | 아이템 사용 |
-| `tutorial.teleport` | 포탈 이동 |
-| `tutorial.event-tile` | 이벤트 타일 발동 |
-| `tutorial.floor-transition` | 지하층 전환 |
-| `tutorial.battle-result` | 전투 판정 완료 |
+| `sfx.player.footstep` | 플레이어 걷기 클립의 지정 프레임 통과 |
+| `sfx.player.melee`, `sfx.player.ranged` | 플레이어 공격 시작 |
+| `sfx.player.heal/hurt/death` | 플레이어 회복·피격·사망 |
+| `sfx.lora.melee`, `sfx.lora.area` | 로라 공격 시작 |
+| `sfx.lora.hurt/death` | 로라 피격·사망 impact |
+| `sfx.slime.hurt` | 슬라임 피격 impact |
+| `sfx.item.equip`, `sfx.item.apply` | 아이템 획득/장착·사용 |
+| `sfx.world.teleport`, `sfx.world.floor-break` | 포탈 이동·지하층 붕괴 |
 
-이 ID는 경로가 아니다. 실제 파일 선택, 볼륨, 중복 재생 정책과 AudioContext 연결은 향후
-사운드 어댑터가 결정한다.
+이 ID는 경로가 아니다. 실제 파일, 버스, 볼륨, cooldown/polyphony와 fallback은
+`TUTORIAL_AUDIO_MANIFEST`가 결정하고 세부 계약은 `tutorial-audio.md`에 둔다.
 
 ## 4. 모델 event 목록과 현재 cue
 
@@ -63,26 +63,26 @@ tween은 계속 `TutorialAnimationTimeline`이 담당해 중복 이동을 만들
 
 | 모델 event | 현재 생성 cue |
 | --- | --- |
-| `battle-finished` | log, actor-animation(`battle-result`), audio |
+| `battle-finished` | log, actor-animation(`battle-result`); 결과 BGM은 장면 상태가 선택 |
 | `event-tile-cleansed` | log |
-| `event-tile-triggered` | log, audio |
+| `event-tile-triggered` | log; 제공 전용 효과음이 없어 오디오 없음 |
 | `extra-player-turn` | log |
-| `floor-transition` | log, actor-animation(`floor-transition`), audio |
+| `floor-transition` | log, actor-animation(`floor-transition`), floor-break audio |
 | `instability-changed` | log, instability-transition, 감소 시 stabilize |
 | `item-dropped` | log |
-| `item-picked` | log, audio |
-| `item-used` | log, actor-animation(`item`), audio |
-| `lora-attack` | log, actor-animation(`melee`/`area`/`idle`) |
-| `lora-damaged` | log, health-transition, impact 지연 floating-text·actor-animation(`hit`/`death`)·shake·flash·audio |
+| `item-picked` | log, item-equip audio |
+| `item-used` | log, actor-animation(`item`), item-apply audio |
+| `lora-attack` | log, actor-animation(`melee`/`area`/`idle`), 비대기 시 공격 audio |
+| `lora-damaged` | log, health-transition, 플레이어 공격 audio, impact 지연 floating-text·actor-animation(`hit`/`death`)·shake·flash·hurt/death audio |
 | `mob-attack` | 피해 event와 결합해 공격 source actor-animation(`attack`) |
-| `mob-damaged` | log, health-transition, 플레이어 공격 시작, impact 지연 floating-text·actor-animation(`hit`/`death`)·shake·flash·audio |
+| `mob-damaged` | log, health-transition, 플레이어 공격 시작/audio, impact 지연 floating-text·actor-animation(`hit`/`death`)·shake·flash·slime-hurt audio |
 | `mob-defeated` | log |
 | `mob-waited` | log |
 | `movement-step` | 직접 cue 없음; 확정 경로의 `path-particles`와 timeline 이동이 표현 |
 | `mushroom-activated` | log |
 | `mushroom-ended` | log |
 | `peace` | log |
-| `player-damaged` | log, health-transition, 로라/몹 공격과 결합한 impact 지연 floating-text·actor-animation(`hit`/`death`)·shake·flash·audio |
+| `player-damaged` | log, health-transition, 로라/몹 공격과 결합한 impact 지연 floating-text·actor-animation(`hit`/`death`)·shake·flash·hurt/death audio |
 | `player-healed` | log, health-transition, floating-text, actor-animation(`heal`), audio |
 | `player-turn-complete` | 직접 cue 없음; 모델 phase가 HUD를 갱신 |
 | `player-turn-started` | 직접 cue 없음; 모델 turn/phase가 HUD를 갱신 |

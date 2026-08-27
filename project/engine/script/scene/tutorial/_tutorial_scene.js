@@ -67,6 +67,7 @@ import { TutorialAnimationTimeline } from './_tutorial_animation_timeline.js';
 import { TutorialAchievementBanner } from './_tutorial_achievement_banner.js';
 import { TutorialAssetLoader } from './_tutorial_asset_loader.js';
 import { TutorialAssetPort } from './_tutorial_asset_port.js';
+import { TutorialAudioDirector } from './_tutorial_audio_director.js';
 import { TutorialBattlePresenter } from './_tutorial_battle_presenter.js';
 import { TutorialFeedbackQueue } from './_tutorial_feedback_queue.js';
 import { TutorialSpriteAnimator } from './_tutorial_sprite_animator.js';
@@ -216,6 +217,12 @@ export class TutorialScene extends BaseScene {
             particleCount: this.data.ANIMATION.PARTICLE_COUNT,
             particleSeconds: this.data.ANIMATION.PARTICLE_SECONDS
         });
+        this.audioDirector = new TutorialAudioDirector({
+            soundPort: this.sceneSystem?.systemHandler?.soundSystem,
+            instabilityThreshold: this.data.ACTORS.LORA.INSTABILITY_STATES.find(
+                (state) => state.id === 'unstable'
+            )?.min ?? 61
+        });
         const spriteClipResolver = new TutorialSpriteClipResolver(TUTORIAL_SPRITE_CLIPS);
         this.spriteAnimator = new TutorialSpriteAnimator({
             resolver: spriteClipResolver
@@ -305,6 +312,8 @@ export class TutorialScene extends BaseScene {
         this.#enterResultIfNeeded();
         this.feedbackQueue.update(deltaSeconds);
         this.achievementBanner.update(deltaSeconds);
+        this.audioDirector.consume(this.feedbackQueue.drainAudioCues());
+        this.audioDirector.sync(this.#createAudioState());
         this.#captureKeyboardLatch();
     }
 
@@ -443,6 +452,8 @@ export class TutorialScene extends BaseScene {
                     break;
             }
 
+            this.audioDirector.playCommand(command.type);
+
             // 재시작이나 화면 전환으로 타임라인이 바뀌면 같은 drain의 남은 명령은 구식입니다.
             if (this.timelineRevision !== revisionBeforeCommand) {
                 break;
@@ -486,6 +497,7 @@ export class TutorialScene extends BaseScene {
         this.assetLoader.destroy();
         this.feedbackQueue.destroy();
         this.achievementBanner.destroy();
+        this.audioDirector.destroy();
         clearSimulationCommands();
         this.buttonHost.destroy();
         this.cutscenes.close();
@@ -605,6 +617,7 @@ export class TutorialScene extends BaseScene {
         this.timelineRevision += 1;
         this.presentationTimeline.cancel();
         this.spriteCueRouter.reset();
+        this.audioDirector.resetTransient();
         this.cutscenes.close();
         this.pendingCutscenes = [];
         this.runCutsceneIds.clear();
@@ -645,6 +658,7 @@ export class TutorialScene extends BaseScene {
         this.timelineRevision += 1;
         this.presentationTimeline.cancel();
         this.spriteCueRouter.reset();
+        this.audioDirector.resetTransient();
         this.metaStaging = true;
         this.starterItemId = starterItemId;
         const knowledge = {
@@ -1122,7 +1136,11 @@ export class TutorialScene extends BaseScene {
             }
         });
         this.presentationTimeline.applyCues(orderedCues);
-        this.achievementBanner.enqueueFromEvents(result?.events, this.data.ITEMS);
+        const achievementCount = this.achievementBanner.enqueueFromEvents(
+            result?.events,
+            this.data.ITEMS
+        );
+        this.audioDirector.notifyAchievements(achievementCount);
         this.lastPresentationSnapshot = cloneCheckpointValue(nextSnapshot);
         this.#syncMetaFromModel();
         this.#refreshBattleCache();
@@ -1339,6 +1357,23 @@ export class TutorialScene extends BaseScene {
             return null;
         }
         return this.model.getSnapshot();
+    }
+
+    /** @returns {Readonly<object>} 오디오 디렉터가 소비할 작은 장면 상태입니다. @private */
+    #createAudioState() {
+        const snapshot = this.#getSnapshot();
+        return Object.freeze({
+            mode: this.mode,
+            cutsceneOpen: this.cutscenes.isOpen(),
+            floorIndex: Number(snapshot?.floorIndex ?? this.model?.floorIndex) || 0,
+            result: this.resultData ? Object.freeze({ ...this.resultData }) : null,
+            lora: Object.freeze({
+                hp: Number(snapshot?.lora?.hp ?? this.model?.lora?.hp) || 0,
+                instability: Number(
+                    snapshot?.lora?.instability ?? this.model?.lora?.instability
+                ) || 0
+            })
+        });
     }
 
     /**

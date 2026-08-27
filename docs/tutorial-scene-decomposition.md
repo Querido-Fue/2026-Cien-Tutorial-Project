@@ -26,7 +26,9 @@ Turn 04에서 비전투 렌더링과 버튼 풀 수명주기를 이동했고, Tu
 남은 큰 책임은 입력 변환, 모델 명령 조율, 메타 저장, view model 조립이다. Turn 12에서는
 개별 PNG 매니페스트와 논리 에셋 포트를 도입하고 더 이상 사용하지 않는 atlas 책임을
 로더에서 제거했다. Turn 13에서는 월드 뷰의 배우 렌더를 `TutorialBattleActorView`로 옮기고,
-스프라이트 clip 해석·재생·roster·cue 연결을 각각 한 책임의 클래스로 분리했다. 다음 불변
+스프라이트 clip 해석·재생·roster·cue 연결을 각각 한 책임의 클래스로 분리했다.
+Turn 14에서는 장면의 지속 BGM·호흡 loop·UI/cue 변환을 `TutorialAudioDirector`로 옮기고,
+전역 사운드 구현을 resolver와 음악/SFX/UI 버스로 분리했다. 다음 불변
 조건은 모든 분리 단계에서 유지한다.
 
 - 전투 판정은 `TutorialBattleModel`과 `TUTORIAL_GAME_DATA`만 결정한다.
@@ -66,6 +68,7 @@ import하지 않고, 모드 정책만 모드 상수를 참조한다.
 | 저장·메타 | `meta`, 모델 snapshot, 결과 | `meta`, `committedMeta`, `metaStaging`, `saveSequence` | `_tutorial_meta_progress.js` |
 | 프레젠테이션 | 모델 결과·전후 snapshot, cue, floor view | 장면은 floor snapshot 교체만 조율 | presenter, feedback queue, animation timeline |
 | 배우 스프라이트 | 표시 층 배우·actor-animation cue·clip 데이터 | 장면은 roster 동기화와 snapshot 전달만 조율 | clip resolver, sprite animator, cue router, actor view |
+| 오디오 조율 | 화면 모드·층·결과·불안정 상태·drain audio cue | 장면은 작은 상태 snapshot과 명령 타입만 전달 | audio director, global sound port |
 | 렌더·레이아웃 | 읽기 전용 모델/표현 상태, viewport, 데이터 | viewport 파생값과 렌더 명령만 | display, theme, font util |
 | 에셋 | 데이터의 asset 경로 | 장면은 loader 생성·조회·정리만 조율 | `TutorialAssetLoader`, asset port |
 | 버튼 | 모드·모델·선택·인벤토리, viewport | 풀 소유 목록, 서명, page, UI 소비 플래그 | `UIPool`, `releaseUIItem` |
@@ -128,13 +131,15 @@ import하지 않고, 모드 정책만 모드 상수를 참조한다.
 - cue→배우 클립·impact 예약: `TutorialSpriteCueRouter`
 - 표시 층 actor 투영·델타 재생: `TutorialSpriteRoster`, `TutorialSpriteAnimator`
 - cue 순서·수명·오디오 대기열: `TutorialFeedbackQueue`
+- 준비된 audio cue·지속 BGM·호흡 loop 소비: `TutorialAudioDirector`
 - 표시 상태·animation slot·입력 잠금: `TutorialAnimationTimeline`
 
 장면은 모델 결과와 전후 snapshot을 프레젠터에 전달하고, 생성된 cue를 스프라이트 라우터,
 피드백 큐와 타임라인에 순서대로 전달한다. 이벤트 문구·피해/회복·불안정도 해석, 일시적
 피드백 배열, clip 프레임, 애니메이션 ID와 잠금 토큰은 장면이 소유하지 않는다. 층 전환의
 `floorView`/`floorActorView` 교체만 모델 캐시와 연결되는 작은 callback으로 남긴다. cue 계약은
-`tutorial-presentation-cues.md`, clip 계약은 `tutorial-sprite-animation.md`에 둔다.
+`tutorial-presentation-cues.md`, clip 계약은 `tutorial-sprite-animation.md`, 오디오 정책은
+`tutorial-audio.md`에 둔다.
 
 ### 3.6 렌더·레이아웃 메서드
 
@@ -204,6 +209,11 @@ import하지 않고, 모드 정책만 모드 상수를 참조한다.
 | Turn 13 | `TutorialSpriteRoster` | 표시 층 배우를 animator 입력으로 투영 | animator |
 | Turn 13 | `TutorialSpriteCueRouter` | actor cue 실행, impact 예약, 발걸음 cue 파생 | animator, cue callback |
 | Turn 13 | `TutorialBattleActorView` | 배우 스프라이트와 도형 폴백 렌더 | battle view model, render/asset port |
+| Turn 14 | `TutorialAudioDirector` | 화면 BGM·호흡 loop·UI 명령·drain cue 변환 | 작은 장면 snapshot, sound port |
+| Turn 14 | `AudioManifestResolver` | cue ID와 비순환 fallback 해석 | audio manifest |
+| Turn 14 | `MusicBus` | BGM 중복 방지·crossfade·pause/resume | resolver, Audio factory |
+| Turn 14 | `AudioBus` | SFX/UI cooldown·polyphony·loop·수명 | resolver, Audio factory, clock |
+| Turn 14 | `AudioUnlockGate` | 최초 사용자 입력 재시도 리스너 수명 | window-like event target |
 
 `TutorialScene`은 위 모듈을 조립하되 모듈 전체가 다시 장면을 받는 God context는 만들지
 않는다. 각 생성자/메서드에는 필요한 작은 포트와 읽기 전용 값만 전달한다.
@@ -362,3 +372,31 @@ TutorialBattlePresenter cues
   nearest-neighbor, 발 앵커와 다중 레이어 합성을 적용하고 이미지 실패 때만 기존 도형을 그린다.
 - 전체 74개 테스트, PNG 39개 감사와 저장소 검사가 통과했다. 저장소 검사의 미연결 오디오
   경고 2개는 Turn 14 사운드 통합 범위로 남긴다.
+
+## 11. Turn 14 오디오 버스·큐 결과
+
+```text
+TutorialScene ── small state/cues ──> TutorialAudioDirector
+                                         │ sound port
+                                         v
+                                    SoundSystem facade
+                      ┌──────────────────┼──────────────────┐
+                      v                  v                  v
+                  MusicBus          AudioBus(SFX)      AudioBus(UI)
+                      └──────────────────┬──────────────────┘
+                                         v
+                              AudioManifestResolver
+                                         ^
+                                         │
+                            TUTORIAL_AUDIO_MANIFEST
+```
+
+- 장면은 실제 경로, Audio 객체, 볼륨·동시 재생 수치 또는 자동재생 리스너를 소유하지 않는다.
+  `#createAudioState()`가 모드·층·결과·로라 HP/불안정도만 방어 snapshot으로 전달하고,
+  feedback queue의 준비 cue를 한 번 drain한다.
+- `SoundSystem`은 기존 공개 함수를 보존하는 파사드로 축소했다. resolver, 음악 버스, SFX/UI
+  버스와 unlock gate는 파일당 한 클래스이며 장면을 역참조하지 않는다.
+- 원본 26개 MP3는 PNG와 같은 원본 보존·ASCII 안전 복사 정책을 공유한다. 지하층 BGM은
+  누락을 숨기지 않는 manifest fallback이고, `check:assets`가 MP3 헤더와 해시까지 검사한다.
+- Fake Audio 회귀는 crossfade·중복·cooldown/polyphony·loop·pause/resume·실패·설정 이관을
+  검사한다. 세부 ID, 기획 추론과 초기 믹싱값은 `tutorial-audio.md`에 기록했다.

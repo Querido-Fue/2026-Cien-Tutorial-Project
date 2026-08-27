@@ -18,6 +18,7 @@ import { TOOLTIP_CONSTANTS } from 'data/ui/tooltip/tooltip_constants.js';
 import { SIMULATION_RUNTIME_DEFAULTS } from 'data/simulation/simulation_runtime_defaults.js';
 import { DEBUG_CONSTANTS } from 'data/debug/debug_constants.js';
 import { SOUND_CONSTANTS } from 'data/sound/sound_constants.js';
+import { TUTORIAL_AUDIO_MANIFEST } from 'data/sound/tutorial_audio_manifest.js';
 import {
     DEFAULT_OVERLAY_ANIMATION_PRESET,
     OVERLAY_ANIMATION_PRESETS,
@@ -53,6 +54,7 @@ const DATA_REGISTRY = Object.freeze({
     SIMULATION_RUNTIME_DEFAULTS,
     DEBUG_CONSTANTS,
     SOUND_CONSTANTS,
+    TUTORIAL_AUDIO_MANIFEST,
     DEFAULT_OVERLAY_ANIMATION_PRESET,
     OVERLAY_ANIMATION_PRESETS,
     getOverlayAnimationPreset,

@@ -3,6 +3,10 @@ import { setTheme } from 'display/_theme_handler.js';
 import { MathUtil } from 'util/math_util.js';
 import { getData } from 'data/data_handler.js';
 import { LANGUAGE_REGISTRY } from 'ui/lang/_language_registry.js';
+import {
+    createAudioSettingSchema,
+    migrateAudioSettings
+} from 'data/sound/audio_setting_contract.js';
 import { ensureSaveDirectory, pathExists } from './_save_file_helper.js';
 
 const THEME_KEYS = getData('THEME_KEYS');
@@ -47,8 +51,7 @@ export class SettingHandler {
             renderScale: { type: 'int', value: 100, min: 75, max: 100, hidden: false },
             uiScale: { type: 'int', value: 100, min: 75, max: 150, hidden: false },
             tooltipDelaySeconds: { type: 'float', value: 0.7, min: 0, max: 2, hidden: false },
-            bgmVolume: { type: 'int', value: 100, min: 0, max: 100, hidden: false },
-            sfxVolume: { type: 'int', value: 100, min: 0, max: 100, hidden: false },
+            ...createAudioSettingSchema(),
             screenModeChanged: { type: 'bool', value: false, min: -1, max: -1, hidden: true },
             debugMode: { type: 'bool', value: false, min: -1, max: -1, hidden: true },
         };
@@ -153,6 +156,10 @@ export class SettingHandler {
         }
 
         let needsSave = false;
+
+        const audioMigration = migrateAudioSettings(fileData);
+        fileData = { ...fileData, ...audioMigration.values };
+        needsSave = audioMigration.changed;
 
         if (fileData.physicsAccuracy !== undefined || fileData.physicsFps !== undefined) {
             delete fileData.physicsAccuracy;

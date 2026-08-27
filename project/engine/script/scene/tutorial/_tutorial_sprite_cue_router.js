@@ -82,7 +82,7 @@ export class TutorialSpriteCueRouter {
             if (event.id === 'footstep') {
                 this.#onCue(Object.freeze({
                     type: CUE_TYPES.AUDIO,
-                    id: AUDIO_IDS.FOOTSTEP,
+                    id: AUDIO_IDS.PLAYER_FOOTSTEP,
                     actorId: event.actorId,
                     sourceEventType: 'sprite-footstep'
                 }));

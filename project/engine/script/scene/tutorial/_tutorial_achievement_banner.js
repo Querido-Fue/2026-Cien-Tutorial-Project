@@ -22,8 +22,10 @@ export class TutorialAchievementBanner {
      * 모델 이벤트에서 세션 한정 발견 알림을 구성합니다.
      * @param {readonly object[]} events - 모델 결과 이벤트입니다.
      * @param {object} items - 아이템 메타데이터입니다.
+     * @returns {number} 새로 대기열에 추가된 알림 수입니다.
      */
     enqueueFromEvents(events, items = {}) {
+        let addedCount = 0;
         for (const event of Array.isArray(events) ? events : []) {
             if (event?.type !== 'item-picked' || typeof event.itemId !== 'string') {
                 continue;
@@ -38,8 +40,10 @@ export class TutorialAchievementBanner {
                 title: '발견 업적',
                 detail: (items[event.itemId]?.label || event.itemId) + ' 발견'
             }));
+            addedCount += 1;
         }
         this.#showNextIfIdle();
+        return addedCount;
     }
 
     /** @param {number} deltaSeconds - 경과 초입니다. */

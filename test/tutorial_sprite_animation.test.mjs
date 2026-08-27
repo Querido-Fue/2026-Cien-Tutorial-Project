@@ -151,7 +151,7 @@ test('cue 라우터는 피해 연출을 공격 impact까지 지연하고 발걸�
     router.update(0.13);
     assert.equal(derived.some((cue) => (
         cue.type === TUTORIAL_PRESENTATION_CUE_TYPES.AUDIO
-        && cue.id === TUTORIAL_AUDIO_CUE_IDS.FOOTSTEP
+        && cue.id === TUTORIAL_AUDIO_CUE_IDS.PLAYER_FOOTSTEP
     )), true);
     router.destroy();
 });

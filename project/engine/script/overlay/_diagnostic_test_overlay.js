@@ -628,7 +628,7 @@ export class DiagnosticTestOverlay extends BaseOverlay {
         const labelW = this.#uww(6.8);
 
         this.#drawSectionLabel(rect.x, rect.y, 'PLAYBACK');
-        this.#drawInfoLine(rect.x, rect.y + this.#uwh(3.4), 'Sample', state.path || '../asset/audio/기다려줘.mp3', labelW, rect.w - labelW);
+        this.#drawInfoLine(rect.x, rect.y + this.#uwh(3.4), 'Sample', state.path || 'unavailable', labelW, rect.w - labelW);
         this.#drawInfoLine(rect.x, rect.y + this.#uwh(6.5), 'State', state.paused ? 'paused' : 'playing', labelW, rect.w - labelW);
         this.#drawInfoLine(rect.x, rect.y + this.#uwh(9.6), 'Status', this.soundStatus, labelW, rect.w - labelW);
         this.#drawInfoLine(rect.x, rect.y + this.#uwh(12.7), 'Time', `${currentTime.toFixed(2)} / ${duration.toFixed(2)} sec`, labelW, rect.w - labelW);

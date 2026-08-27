@@ -228,7 +228,7 @@ export class TutorialBattlePresenter {
         case 'item-picked':
             cues.push(freezeCue({
                 type: CUE_TYPES.AUDIO,
-                id: AUDIO_IDS.ITEM_PICKUP,
+                id: AUDIO_IDS.ITEM_EQUIP,
                 sourceEventType: event.type
             }));
             break;
@@ -241,7 +241,7 @@ export class TutorialBattlePresenter {
             }));
             cues.push(freezeCue({
                 type: CUE_TYPES.AUDIO,
-                id: AUDIO_IDS.ITEM_USE,
+                id: AUDIO_IDS.ITEM_APPLY,
                 sourceEventType: event.type
             }));
             break;
@@ -261,12 +261,6 @@ export class TutorialBattlePresenter {
             }));
             break;
         case 'event-tile-triggered':
-            cues.push(freezeCue({
-                type: CUE_TYPES.AUDIO,
-                id: AUDIO_IDS.EVENT_TILE,
-                tile: event,
-                sourceEventType: event.type
-            }));
             break;
         case 'floor-transition':
             cues.push(freezeCue({
@@ -278,7 +272,7 @@ export class TutorialBattlePresenter {
             }));
             cues.push(freezeCue({
                 type: CUE_TYPES.AUDIO,
-                id: AUDIO_IDS.FLOOR_TRANSITION,
+                id: AUDIO_IDS.FLOOR_BREAK,
                 sourceEventType: event.type
             }));
             break;
@@ -287,11 +281,6 @@ export class TutorialBattlePresenter {
                 type: CUE_TYPES.ACTOR_ANIMATION,
                 animationId: 'battle-result',
                 outcome: event.outcome,
-                sourceEventType: event.type
-            }));
-            cues.push(freezeCue({
-                type: CUE_TYPES.AUDIO,
-                id: AUDIO_IDS.BATTLE_RESULT,
                 sourceEventType: event.type
             }));
             break;
@@ -305,6 +294,15 @@ export class TutorialBattlePresenter {
                 facing: getCueFacing(previous.lora, previous.player),
                 sourceEventType: event.type
             }));
+            if (event.action !== 'idle') {
+                cues.push(freezeCue({
+                    type: CUE_TYPES.AUDIO,
+                    id: event.action === 'area'
+                        ? AUDIO_IDS.LORA_AREA
+                        : AUDIO_IDS.LORA_MELEE,
+                    sourceEventType: event.type
+                }));
+            }
             break;
         case 'mob-attack':
             break;
@@ -346,6 +344,18 @@ export class TutorialBattlePresenter {
                     facing: impact.facing,
                     sourceEventType: event.type
                 }));
+                const attackAudioId = impact.actorId === 'player'
+                    ? impact.animationId === 'ranged'
+                        ? AUDIO_IDS.PLAYER_RANGED
+                        : AUDIO_IDS.PLAYER_MELEE
+                    : null;
+                if (attackAudioId) {
+                    cues.push(freezeCue({
+                        type: CUE_TYPES.AUDIO,
+                        id: attackAudioId,
+                        sourceEventType: event.type
+                    }));
+                }
             }
         }
         cues.push(freezeCue({
@@ -398,7 +408,11 @@ export class TutorialBattlePresenter {
         }));
         cues.push(freezeCue({
             type: CUE_TYPES.AUDIO,
-            id: AUDIO_IDS.DAMAGE,
+            id: actorId === 'player'
+                ? to <= 0 ? AUDIO_IDS.PLAYER_DEATH : AUDIO_IDS.PLAYER_HURT
+                : actorId === 'lora'
+                    ? to <= 0 ? AUDIO_IDS.LORA_DEATH : AUDIO_IDS.LORA_HURT
+                    : AUDIO_IDS.SLIME_HURT,
             ...impactFields,
             sourceEventType: event.type
         }));
@@ -483,7 +497,7 @@ export class TutorialBattlePresenter {
         }));
         cues.push(freezeCue({
             type: CUE_TYPES.AUDIO,
-            id: AUDIO_IDS.HEAL,
+            id: AUDIO_IDS.PLAYER_HEAL,
             sourceEventType: event.type
         }));
     }

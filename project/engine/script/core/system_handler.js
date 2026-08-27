@@ -368,6 +368,18 @@ export class SystemHandler {
             this.soundSystem.setBgmVolume(changedSettings.bgmVolume);
         }
 
+        if (changedSettings.sfxVolume !== undefined
+            && this.soundSystem
+            && typeof this.soundSystem.setSfxVolume === 'function') {
+            this.soundSystem.setSfxVolume(changedSettings.sfxVolume);
+        }
+
+        if (changedSettings.uiVolume !== undefined
+            && this.soundSystem
+            && typeof this.soundSystem.setUiVolume === 'function') {
+            this.soundSystem.setUiVolume(changedSettings.uiVolume);
+        }
+
         if (this.overlayManager && typeof this.overlayManager.applyRuntimeSettings === 'function') {
             this.overlayManager.applyRuntimeSettings(changedSettings);
         }
@@ -397,7 +409,7 @@ export class SystemHandler {
         }
         if (executionPolicy.runSoundUpdate) {
             measurePerformanceSection('frame.update.sound', () => {
-                this.soundSystem.update();
+                this.soundSystem.update(frameDeltaSeconds);
             });
         }
         if (executionPolicy.runAnimationUpdate) {

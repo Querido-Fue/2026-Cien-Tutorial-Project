@@ -65,7 +65,8 @@ Google Drive의 UI 폴더에 있는 `ingame_item_*.png` 파일명과 `시스템 
   `TutorialAchievementBanner` 정책만 교체해야 한다.
 - 메인 타이틀처럼 글자가 포함된 완성 로고는 그대로 쓰되, 버튼·턴·상태·아이템 설명·튜토리얼·업적의 빈 프레임에는 현재 상태에서 계산한 한글 텍스트를 얹는다.
 - 캐릭터 시트의 프레임 해석과 누락 동작 폴백은 `docs/tutorial-sprite-animation.md`를 단일 기준으로 삼는다. 기존 정적 로라 이미지는 초상화·호환 폴백 외에는 전투 배우 렌더에 사용하지 않는다.
-- 사운드는 14턴 범위이므로 이번 매니페스트와 로더가 오디오 파일을 읽지 않는다.
+- 사운드는 독립 `TUTORIAL_AUDIO_MANIFEST`와 전용 MP3 감사 경로로 통합했다. 이미지 로더는
+  계속 PNG만 소유하며 오디오 버스·cue·폴백 정책은 `docs/tutorial-audio.md`를 따른다.
 
 ## 6. 검증 명령
 
@@ -73,6 +74,7 @@ Google Drive의 UI 폴더에 있는 `ingame_item_*.png` 파일명과 `시스템 
 npm run import:assets
 npm run check:assets
 npm run test:assets
+npm run test:audio
 npm test
 ```
 

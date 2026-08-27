@@ -1,332 +1,281 @@
 import { getSetting } from 'save/save_system.js';
 import { getData } from 'data/data_handler.js';
-import { clampFiniteNumber } from 'util/number_util.js';
+import { AudioBus } from './_audio_bus.js';
+import { AudioManifestResolver } from './_audio_manifest_resolver.js';
+import { AudioUnlockGate } from './_audio_unlock_gate.js';
+import { MusicBus } from './_music_bus.js';
+import { normalizeAudioVolume, sanitizeAudioVolume } from './_audio_volume.js';
 
 const SOUND_CONSTANTS = getData('SOUND_CONSTANTS');
+const DEFAULT_AUDIO_MANIFEST = getData('TUTORIAL_AUDIO_MANIFEST');
 
 let soundSystemInstance = null;
 
 /**
  * @class SoundSystem
- * @description 배경음(BGM) 리소스 초기화, 재생, 볼륨 반영을 담당합니다.
+ * @description 음악·효과·UI 버스와 저장 설정을 조립하는 호환 사운드 파사드입니다.
  */
 export class SoundSystem {
-    #lastBgmVolume;
-    #pendingAutoplay;
-    #unlockEvents;
-    #unlockAndPlayHandler;
-    #isUnlockListenerAttached;
+    #getSettingValue;
+    #resolver;
+    #musicBus;
+    #sfxBus;
+    #uiBus;
+    #unlockGate;
+    #lastVolumes;
     #runtimeSuspended;
-    #resumePlaybackAfterRuntimeSuspend;
+    #diagnosticVolume;
+    #destroyed;
 
-    constructor() {
+    constructor(options = {}) {
         soundSystemInstance = this;
-        this.bgmAudio = null;
-        this.diagnosticSampleAudio = null;
-        this.#lastBgmVolume = null;
-        this.#pendingAutoplay = false;
-        this.#unlockEvents = [...SOUND_CONSTANTS.BGM.UNLOCK_EVENTS];
-        this.#unlockAndPlayHandler = this.#unlockAndPlay.bind(this);
-        this.#isUnlockListenerAttached = false;
+        const audioFactory = options.audioFactory || ((source) => new Audio(source));
+        const now = options.now || (() => (
+            typeof performance !== 'undefined' ? performance.now() / 1000 : Date.now() / 1000
+        ));
+        const windowTarget = options.windowTarget
+            ?? (typeof window !== 'undefined' ? window : null);
+        this.#getSettingValue = options.getSettingValue || getSetting;
+        this.#resolver = new AudioManifestResolver(
+            options.manifest || DEFAULT_AUDIO_MANIFEST
+        );
+        const onPlayBlocked = () => this.#unlockGate?.arm();
+        this.#musicBus = new MusicBus({
+            resolver: this.#resolver,
+            audioFactory,
+            onPlayBlocked,
+            crossfadeSeconds: SOUND_CONSTANTS.BGM.CROSSFADE_SECONDS
+        });
+        this.#sfxBus = new AudioBus({
+            name: 'sfx', resolver: this.#resolver, audioFactory, now, onPlayBlocked
+        });
+        this.#uiBus = new AudioBus({
+            name: 'ui', resolver: this.#resolver, audioFactory, now, onPlayBlocked
+        });
+        this.#unlockGate = new AudioUnlockGate({
+            target: windowTarget,
+            events: SOUND_CONSTANTS.BGM.UNLOCK_EVENTS,
+            onUnlock: () => this.#retryBlockedPlayback()
+        });
+        this.#lastVolumes = { bgm: null, sfx: null, ui: null };
         this.#runtimeSuspended = false;
-        this.#resumePlaybackAfterRuntimeSuspend = false;
+        this.#diagnosticVolume = SOUND_CONSTANTS.DIAGNOSTIC_SAMPLE.DEFAULT_VOLUME;
+        this.#destroyed = false;
     }
 
-    /**
-     * 사운드 시스템을 초기화하고 BGM 재생을 시작합니다.
-     */
+    /** 저장된 세 버스 볼륨을 반영하고 선택적 기본 BGM을 시작합니다. */
     async init() {
-        this.bgmAudio = new Audio(SOUND_CONSTANTS.BGM.PATH);
-        this.bgmAudio.loop = true;
-        this.bgmAudio.preload = 'auto';
-        this.#syncBgmVolume();
-        this.diagnosticSampleAudio = new Audio(SOUND_CONSTANTS.DIAGNOSTIC_SAMPLE.PATH);
-        this.diagnosticSampleAudio.loop = false;
-        this.diagnosticSampleAudio.preload = 'auto';
-        this.setDiagnosticSampleVolume(SOUND_CONSTANTS.DIAGNOSTIC_SAMPLE.DEFAULT_VOLUME);
-
+        this.#syncVolumes();
         if (SOUND_CONSTANTS.BGM.AUTO_PLAY !== false) {
             await this.playBgm();
         }
     }
 
-    /**
-     * 설정값 변경 시 BGM 볼륨을 동기화합니다.
-     */
-    update() {
-        this.#syncBgmVolume();
+    /** @param {number} deltaSeconds - crossfade 경과 초입니다. */
+    update(deltaSeconds) {
+        if (this.#destroyed) {
+            return;
+        }
+        this.#syncVolumes();
+        this.#musicBus.update(deltaSeconds);
+        this.#sfxBus.update();
+        this.#uiBus.update();
     }
 
-    /**
-     * 사운드 정보를 그립니다.
-     */
     draw() {
     }
 
-    /**
-     * BGM 재생을 시도합니다.
-     */
-    async playBgm() {
-        if (!this.bgmAudio) return;
-        if (this.#runtimeSuspended) {
-            this.#pendingAutoplay = true;
-            this.#resumePlaybackAfterRuntimeSuspend = true;
-            return;
-        }
-
-        try {
-            await this.bgmAudio.play();
-            this.#pendingAutoplay = false;
-            this.#detachUnlockListeners();
-        } catch (e) {
-            this.#pendingAutoplay = true;
-            this.#attachUnlockListeners();
-        }
+    /** @param {string} cueId @param {object} options @returns {Promise<object>} */
+    playBgm(cueId = SOUND_CONSTANTS.BGM.DEFAULT_CUE_ID, options = {}) {
+        return this.#musicBus.play(cueId, options);
     }
 
-    /**
-     * BGM을 일시정지합니다.
-     */
     pauseBgm() {
-        if (!this.bgmAudio) return;
-        this.bgmAudio.pause();
+        this.#musicBus.pause();
     }
 
-    /**
-     * BGM을 정지하고 재생 위치를 처음으로 되돌립니다.
-     */
     stopBgm() {
-        if (!this.bgmAudio) return;
-        this.#pendingAutoplay = false;
-        this.#resumePlaybackAfterRuntimeSuspend = false;
-        this.bgmAudio.pause();
-        this.bgmAudio.currentTime = 0;
+        this.#musicBus.stop();
     }
 
-    /**
-     * 런타임 일시정지 상태를 반영하여 BGM 재생을 멈추거나 재개합니다.
-     * 창 비활성화와 향후 일시정지 메뉴가 공통으로 사용할 수 있습니다.
-     * @param {boolean} isSuspended - 런타임 정지 여부입니다.
-     */
+    /** 의미 ID에 선언된 버스로 one-shot 또는 BGM을 재생합니다. */
+    playCue(cueId, options = {}) {
+        const entry = this.#resolver.getEntry(cueId);
+        if (entry?.bus === 'bgm') {
+            return this.playBgm(cueId, options);
+        }
+        if (entry?.bus === 'ui') {
+            return this.#uiBus.play(cueId, options);
+        }
+        if (entry?.bus === 'sfx') {
+            return this.#sfxBus.play(cueId, options);
+        }
+        return Promise.resolve(Object.freeze({ ok: false, reason: 'missing-cue', cueId }));
+    }
+
+    /** loop cue를 중복 없이 시작합니다. */
+    startLoop(cueId, options = {}) {
+        return this.playCue(cueId, { ...options, loop: true });
+    }
+
+    /** 의미 ID에 대응하는 SFX/UI loop 또는 음성을 정지합니다. */
+    stopCue(cueId) {
+        const entry = this.#resolver.getEntry(cueId);
+        if (entry?.bus === 'bgm') {
+            this.stopBgm();
+        } else if (entry?.bus === 'ui') {
+            this.#uiBus.stop(cueId);
+        } else {
+            this.#sfxBus.stop(cueId);
+        }
+    }
+
+    /** @param {boolean} isSuspended - blur/일시정지 상태입니다. */
     setRuntimeSuspended(isSuspended) {
-        const nextSuspended = isSuspended === true;
-        if (this.#runtimeSuspended === nextSuspended) {
+        const next = isSuspended === true;
+        if (next === this.#runtimeSuspended) {
             return;
         }
-
-        this.#runtimeSuspended = nextSuspended;
-        if (nextSuspended) {
-            this.#resumePlaybackAfterRuntimeSuspend = this.#pendingAutoplay
-                || Boolean(this.bgmAudio && this.bgmAudio.paused === false);
-            this.pauseBgm();
-            return;
-        }
-
-        const shouldResumePlayback = this.#resumePlaybackAfterRuntimeSuspend;
-        this.#resumePlaybackAfterRuntimeSuspend = false;
-        if (shouldResumePlayback) {
-            void this.playBgm();
-        }
+        this.#runtimeSuspended = next;
+        this.#musicBus.setSuspended(next);
+        this.#sfxBus.setSuspended(next);
+        this.#uiBus.setSuspended(next);
     }
 
-    /**
-     * BGM 볼륨(0~100)을 즉시 반영합니다.
-     * @param {number} volume
-     */
     setBgmVolume(volume) {
-        if (!this.bgmAudio) return;
-        const normalized = this.#normalizeVolume(volume);
-        this.#lastBgmVolume = this.#sanitizeVolume(volume);
-        this.bgmAudio.volume = normalized;
+        this.#setBusVolume('bgm', volume);
     }
 
-    /**
-     * 진단용 샘플 사운드를 재생합니다.
-     * @param {{restart?: boolean, volume?: number}} [options={}] - 재생 옵션입니다.
-     * @returns {Promise<void>}
-     */
-    async playDiagnosticSample(options = {}) {
-        if (!this.diagnosticSampleAudio) return;
+    setSfxVolume(volume) {
+        this.#setBusVolume('sfx', volume);
+    }
 
+    setUiVolume(volume) {
+        this.#setBusVolume('ui', volume);
+    }
+
+    /** 기존 진단 샘플 API를 의미 cue 위에 보존합니다. */
+    async playDiagnosticSample(options = {}) {
         if (options.volume !== undefined) {
             this.setDiagnosticSampleVolume(options.volume);
         }
-
-        if (options.restart !== false) {
-            this.diagnosticSampleAudio.currentTime = 0;
-        }
-
-        await this.diagnosticSampleAudio.play();
+        return this.#sfxBus.play(SOUND_CONSTANTS.DIAGNOSTIC_SAMPLE.CUE_ID, {
+            restart: options.restart !== false,
+            volumeScale: normalizeAudioVolume(this.#diagnosticVolume)
+        });
     }
 
-    /**
-     * 진단용 샘플 사운드를 일시정지합니다.
-     */
     pauseDiagnosticSample() {
-        if (!this.diagnosticSampleAudio) return;
-        this.diagnosticSampleAudio.pause();
+        this.#sfxBus.getAudio(SOUND_CONSTANTS.DIAGNOSTIC_SAMPLE.CUE_ID)?.pause?.();
     }
 
-    /**
-     * 진단용 샘플 사운드를 정지하고 처음으로 되돌립니다.
-     */
     stopDiagnosticSample() {
-        if (!this.diagnosticSampleAudio) return;
-        this.diagnosticSampleAudio.pause();
-        this.diagnosticSampleAudio.currentTime = 0;
+        this.#sfxBus.stop(SOUND_CONSTANTS.DIAGNOSTIC_SAMPLE.CUE_ID);
     }
 
-    /**
-     * 진단용 샘플 사운드 볼륨을 즉시 반영합니다.
-     * @param {number} volume - 0~100 볼륨입니다.
-     */
     setDiagnosticSampleVolume(volume) {
-        if (!this.diagnosticSampleAudio) return;
-        this.diagnosticSampleAudio.volume = this.#normalizeVolume(volume);
+        this.#diagnosticVolume = sanitizeAudioVolume(
+            volume,
+            SOUND_CONSTANTS.DIAGNOSTIC_SAMPLE.DEFAULT_VOLUME
+        );
+        const audio = this.#sfxBus.getAudio(SOUND_CONSTANTS.DIAGNOSTIC_SAMPLE.CUE_ID);
+        if (audio) {
+            audio.volume = normalizeAudioVolume(this.#diagnosticVolume)
+                * normalizeAudioVolume(this.#lastVolumes.sfx);
+        }
     }
 
-    /**
-     * 진단용 샘플 사운드 상태를 반환합니다.
-     * @returns {{path: string, paused: boolean, currentTime: number, duration: number, volume: number}}
-     */
     getDiagnosticSampleState() {
-        const audio = this.diagnosticSampleAudio;
+        const cueId = SOUND_CONSTANTS.DIAGNOSTIC_SAMPLE.CUE_ID;
+        const audio = this.#sfxBus.getAudio(cueId);
         return {
-            path: SOUND_CONSTANTS.DIAGNOSTIC_SAMPLE.PATH,
-            paused: audio ? audio.paused : true,
-            currentTime: audio && Number.isFinite(audio.currentTime) ? audio.currentTime : 0,
-            duration: audio && Number.isFinite(audio.duration) ? audio.duration : 0,
-            volume: audio ? Math.round(audio.volume * SOUND_CONSTANTS.BGM.DEFAULT_VOLUME) : 0
+            path: this.#resolver.resolve(cueId, 'sfx')?.entry.runtimePath || '',
+            paused: audio ? audio.paused !== false : true,
+            currentTime: Number(audio?.currentTime) || 0,
+            duration: Number(audio?.duration) || 0,
+            volume: Math.round((Number(audio?.volume) || 0) * 100)
         };
     }
 
-    /**
-     * 입력된 볼륨 값이 유효한 숫자인지 확인하고 0~100 범위로 보정합니다.
-     * @param {number|string} value - 검사할 볼륨 수치입니다.
-     * @returns {number} 안전하게 정규화된 0~100 사이 볼륨값입니다.
-     * @private
-     */
-    #sanitizeVolume(value) {
-        return clampFiniteNumber(
-            Number(value),
-            0,
-            SOUND_CONSTANTS.BGM.DEFAULT_VOLUME,
-            SOUND_CONSTANTS.BGM.DEFAULT_VOLUME
-        );
+    /** @returns {Readonly<object>} 현재 BGM 진단 상태입니다. */
+    getBgmState() {
+        return this.#musicBus.getState();
     }
 
-    /**
-     * Audio 요소에 대입할 수 있는 0.0~1.0 실수 스케일로 변환합니다.
-     * @param {number|string} value - 변경할 볼륨입니다.
-     * @returns {number} Audio API용 볼륨 계수입니다.
-     * @private
-     */
-    #normalizeVolume(value) {
-        return this.#sanitizeVolume(value) / SOUND_CONSTANTS.BGM.DEFAULT_VOLUME;
+    /** @returns {object|null} 기존 인스턴스 필드 호환용 활성 BGM Audio입니다. */
+    get bgmAudio() {
+        return this.#musicBus.getAudio();
     }
 
-    /**
-     * 설정(save_system)의 현재 볼륨 값을 확인하여 브라우저 Audio 객체에 동기화합니다.
-     * @private
-     */
-    #syncBgmVolume() {
-        if (!this.bgmAudio) return;
+    /** @returns {object|null} 기존 인스턴스 필드 호환용 진단 Audio입니다. */
+    get diagnosticSampleAudio() {
+        return this.#sfxBus.getAudio(SOUND_CONSTANTS.DIAGNOSTIC_SAMPLE.CUE_ID);
+    }
 
-        const settingVolume = this.#sanitizeVolume(getSetting('bgmVolume'));
-        if (this.#lastBgmVolume === settingVolume) {
+    /** 모든 리스너와 Audio 인스턴스를 정리합니다. */
+    destroy() {
+        if (this.#destroyed) {
             return;
         }
-
-        this.#lastBgmVolume = settingVolume;
-        this.bgmAudio.volume = settingVolume / SOUND_CONSTANTS.BGM.DEFAULT_VOLUME;
-    }
-
-    /**
-     * 브라우저 오디오 자동재생 정책에 의해 막혔을 때 사용자 첫 상호작용 후 재생되도록 이벤트를 겁니다.
-     * @private
-     */
-    #attachUnlockListeners() {
-        if (this.#isUnlockListenerAttached || typeof window === 'undefined') {
-            return;
+        this.#unlockGate.destroy();
+        this.#musicBus.destroy();
+        this.#sfxBus.destroy();
+        this.#uiBus.destroy();
+        this.#destroyed = true;
+        if (soundSystemInstance === this) {
+            soundSystemInstance = null;
         }
-
-        this.#unlockEvents.forEach((eventName) => {
-            window.addEventListener(eventName, this.#unlockAndPlayHandler, { once: true });
-        });
-        this.#isUnlockListenerAttached = true;
     }
 
-    /**
-     * 오디오 잠금 해제 이벤트 리스너를 정리/제거합니다.
-     * @private
-     */
-    #detachUnlockListeners() {
-        if (!this.#isUnlockListenerAttached || typeof window === 'undefined') {
-            return;
+    /** @param {'bgm'|'sfx'|'ui'} bus @param {*} value @private */
+    #setBusVolume(bus, value) {
+        const fallback = SOUND_CONSTANTS[bus.toUpperCase()]?.DEFAULT_VOLUME ?? 100;
+        const sanitized = sanitizeAudioVolume(value, fallback);
+        this.#lastVolumes[bus] = sanitized;
+        const normalized = normalizeAudioVolume(sanitized, fallback);
+        if (bus === 'bgm') this.#musicBus.setVolume(normalized);
+        if (bus === 'sfx') this.#sfxBus.setVolume(normalized);
+        if (bus === 'ui') this.#uiBus.setVolume(normalized);
+    }
+
+    /** @private */
+    #syncVolumes() {
+        const values = {
+            bgm: this.#getSettingValue('bgmVolume'),
+            sfx: this.#getSettingValue('sfxVolume'),
+            ui: this.#getSettingValue('uiVolume')
+        };
+        for (const [bus, value] of Object.entries(values)) {
+            const fallback = SOUND_CONSTANTS[bus.toUpperCase()]?.DEFAULT_VOLUME ?? 100;
+            const sanitized = sanitizeAudioVolume(value, fallback);
+            if (this.#lastVolumes[bus] !== sanitized) {
+                this.#setBusVolume(bus, sanitized);
+            }
         }
-
-        this.#unlockEvents.forEach((eventName) => {
-            window.removeEventListener(eventName, this.#unlockAndPlayHandler);
-        });
-        this.#isUnlockListenerAttached = false;
     }
 
-    /**
-     * 사용자 상호작용 후 브라우저 오디오 재생 제한이 풀리면 대기 중인 BGM을 틀어줍니다.
-     * @private
-     */
-    async #unlockAndPlay() {
-        this.#detachUnlockListeners();
-        if (!this.#pendingAutoplay) return;
-        await this.playBgm();
+    /** @returns {Promise<boolean>} @private */
+    async #retryBlockedPlayback() {
+        const results = await Promise.all([
+            this.#musicBus.retryBlocked(),
+            this.#sfxBus.retryBlockedLoops(),
+            this.#uiBus.retryBlockedLoops()
+        ]);
+        return results.every((result) => result !== false);
     }
 }
 
-/**
- * 싱글톤 사운드 시스템 인스턴스를 반환합니다.
- * @returns {SoundSystem|null}
- */
 export const getSoundSystemInstance = () => soundSystemInstance;
-
-/**
- * BGM 재생을 요청합니다.
- */
-export const playBgm = () => soundSystemInstance?.playBgm();
-
-/**
- * BGM 정지를 요청합니다.
- */
+export const playBgm = (cueId, options) => soundSystemInstance?.playBgm(cueId, options);
 export const stopBgm = () => soundSystemInstance?.stopBgm();
-
-/**
- * BGM 볼륨 변경을 요청합니다.
- * @param {number} volume - 0~100
- */
 export const setBgmVolume = (volume) => soundSystemInstance?.setBgmVolume(volume);
-
-/**
- * 진단용 샘플 사운드를 재생합니다.
- * @param {{restart?: boolean, volume?: number}} [options={}]
- */
+export const setSfxVolume = (volume) => soundSystemInstance?.setSfxVolume(volume);
+export const setUiVolume = (volume) => soundSystemInstance?.setUiVolume(volume);
+export const playCue = (cueId, options) => soundSystemInstance?.playCue(cueId, options);
+export const startLoop = (cueId, options) => soundSystemInstance?.startLoop(cueId, options);
+export const stopCue = (cueId) => soundSystemInstance?.stopCue(cueId);
 export const playDiagnosticSample = (options = {}) => soundSystemInstance?.playDiagnosticSample(options);
-
-/**
- * 진단용 샘플 사운드를 일시정지합니다.
- */
 export const pauseDiagnosticSample = () => soundSystemInstance?.pauseDiagnosticSample();
-
-/**
- * 진단용 샘플 사운드를 정지합니다.
- */
 export const stopDiagnosticSample = () => soundSystemInstance?.stopDiagnosticSample();
-
-/**
- * 진단용 샘플 사운드 볼륨을 변경합니다.
- * @param {number} volume - 0~100
- */
 export const setDiagnosticSampleVolume = (volume) => soundSystemInstance?.setDiagnosticSampleVolume(volume);
-
-/**
- * 진단용 샘플 사운드 상태를 반환합니다.
- */
 export const getDiagnosticSampleState = () => soundSystemInstance?.getDiagnosticSampleState();
