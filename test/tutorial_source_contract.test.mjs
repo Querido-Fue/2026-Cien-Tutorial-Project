@@ -27,7 +27,10 @@ const SOURCE_URLS = Object.freeze({
  */
 async function readContractSources() {
     const entries = await Promise.all(Object.entries(SOURCE_URLS).map(
-        async ([key, url]) => [key, await readFile(url, 'utf8')]
+        async ([key, url]) => [
+            key,
+            (await readFile(url, 'utf8')).replace(/\r\n?/g, '\n')
+        ]
     ));
     return Object.fromEntries(entries);
 }

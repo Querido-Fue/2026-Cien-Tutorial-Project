@@ -400,3 +400,29 @@ TutorialScene ── small state/cues ──> TutorialAudioDirector
   누락을 숨기지 않는 manifest fallback이고, `check:assets`가 MP3 헤더와 해시까지 검사한다.
 - Fake Audio 회귀는 crossfade·중복·cooldown/polyphony·loop·pause/resume·실패·설정 이관을
   검사한다. 세부 ID, 기획 추론과 초기 믹싱값은 `tutorial-audio.md`에 기록했다.
+
+## 12. Turn 16 저장·릴리스 경계 결과
+
+```text
+tutorialMeta raw
+      │
+      v
+TutorialMetaMigrator ──> meta schema ──> meta progress storage/operations
+
+source/imports ──> SourceGraphAuditor ──┐
+asset rights ────> ProvenanceAuditor ───┼─> check-release
+runtime source ──> RuntimeSourceAuditor ┘
+
+official NW.js ──> NwjsRuntimeValidator ──> NwjsPackager ──> Windows RC folder
+```
+
+- 메타 shape, 단계별 이관, 미래 버전 오류, 저장·진행 연산을 네 파일로 나눴다. v1의 함정
+  용어는 v4 이벤트 타일 용어로 이관하고 미래 버전은 덮어쓰지 않는다.
+- release auditor와 package validator/packager는 파일당 한 클래스이며 서로의 세부 구현을
+  소유하지 않는다. 조립 스크립트는 명령행 입출력과 종료 코드만 담당한다.
+- theme가 display 파사드를 역참조하던 순환은 작은 background write port로 끊었다. 정적
+  import map 감사 결과는 순환·미해결 import 0이다.
+- `TutorialBattlePresenter`의 cue 동결은 좌표형과 숫자형 `from/to`를 구분한다. 수동 스모크에서
+  발견한 HP `0/100` 표시 회귀를 프레젠터→타임라인 테스트로 고정했다.
+- 전체 릴리스 결과와 임의 결정, 미확인 항목, 공개 배포 차단은
+  `release-candidate-report.md`가 단일 인수 문서로 소유한다.

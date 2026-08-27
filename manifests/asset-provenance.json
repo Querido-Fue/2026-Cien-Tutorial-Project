@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "policy": {
+    "unknownOrigin": "release-blocker",
+    "unknownLicense": "release-blocker",
+    "runtimeCopiesInheritSourceStatus": true
+  },
+  "components": [
+    {
+      "id": "repository-code",
+      "category": "code",
+      "paths": [
+        "project/engine/**",
+        "scripts/**",
+        "test/**"
+      ],
+      "origin": "이 저장소의 Git 이력에서 프로젝트 팀이 작성·수정한 코드",
+      "originStatus": "project-authored",
+      "license": "공개 배포 라이선스 미선언",
+      "releaseStatus": "blocked",
+      "blocker": "공개 배포 전 저장소 소유자가 코드 라이선스와 배포 권한을 확정해야 합니다."
+    },
+    {
+      "id": "pretendard-variable-font",
+      "category": "font",
+      "paths": [
+        "project/asset/old/font/PretendardVariable.woff2"
+      ],
+      "origin": "Pretendard 프로젝트",
+      "originStatus": "verified-third-party",
+      "license": "SIL Open Font License 1.1",
+      "notice": "project/license/pretendard.txt",
+      "releaseStatus": "approved"
+    },
+    {
+      "id": "provided-art-sources",
+      "category": "art",
+      "paths": [
+        "project/asset/img/**",
+        "project/asset/old/ui/**",
+        "project/asset/old/icon/**"
+      ],
+      "origin": "프로젝트 제공 에셋 묶음; 개별 저작자·취득 경로 문서 없음",
+      "originStatus": "unknown",
+      "license": "미확인",
+      "releaseStatus": "blocked",
+      "blocker": "아트 원본별 저작자, 라이선스 또는 양도·사용 허가 증빙이 필요합니다."
+    },
+    {
+      "id": "provided-audio-sources",
+      "category": "audio",
+      "paths": [
+        "project/asset/audio/**",
+        "project/asset/old/audio/**"
+      ],
+      "origin": "프로젝트 제공 에셋 묶음; 개별 작곡가·음향 제작자·취득 경로 문서 없음",
+      "originStatus": "unknown",
+      "license": "미확인",
+      "releaseStatus": "blocked",
+      "blocker": "BGM·효과음 원본별 제작자와 배포 허가 증빙이 필요합니다."
+    },
+    {
+      "id": "runtime-asset-copies",
+      "category": "derived-runtime-copy",
+      "paths": [
+        "project/asset/tutorial/**"
+      ],
+      "origin": "provided-art-sources와 provided-audio-sources의 이름 안전 복사본",
+      "originStatus": "inherits-source",
+      "license": "원본 상태 상속",
+      "releaseStatus": "blocked",
+      "blocker": "원본 아트·오디오의 출처와 배포 권리가 확정될 때까지 같은 차단 상태를 상속합니다."
+    },
+    {
+      "id": "external-reference-item-icons",
+      "category": "art-rights-review",
+      "paths": [
+        "project/asset/img/UI/ingame_item_minecraft.png",
+        "project/asset/img/UI/ingame_item_mario.png",
+        "project/asset/img/UI/ingame_item_zelda.png",
+        "project/asset/img/UI/ingame_item_maplestory.png",
+        "project/asset/tutorial/ui/items/diamond-pickaxe.png",
+        "project/asset/tutorial/ui/items/mushroom.png",
+        "project/asset/tutorial/ui/items/ocarina.png",
+        "project/asset/tutorial/ui/items/haste.png"
+      ],
+      "origin": "Minecraft, Mario, The Legend of Zelda, MapleStory를 파일명과 기획상 참조",
+      "originStatus": "third-party-reference-unverified",
+      "license": "미확인",
+      "releaseStatus": "blocked",
+      "blocker": "상표·캐릭터·아이콘 표현의 사용 허가 또는 비침해 대체 아트 검토가 필요합니다.",
+      "references": [
+        "Minecraft",
+        "Mario",
+        "The Legend of Zelda",
+        "MapleStory"
+      ]
+    },
+    {
+      "id": "nwjs-packaging-runtime",
+      "category": "runtime",
+      "paths": [],
+      "origin": "공식 NW.js v0.108.0 Windows x64 배포본을 사용자가 별도로 제공",
+      "originStatus": "external-build-input",
+      "license": "NW.js 배포본의 credits.html 및 포함 고지",
+      "releaseStatus": "conditional",
+      "condition": "패키징 스크립트가 원본 credits.html을 결과물에 보존해야 합니다."
+    }
+  ]
+}

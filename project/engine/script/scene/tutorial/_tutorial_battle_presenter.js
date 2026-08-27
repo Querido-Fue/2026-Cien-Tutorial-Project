@@ -45,10 +45,10 @@ function freezeCue(cue) {
     if (cue.tile) {
         normalized.tile = cloneCueTile(cue.tile);
     }
-    if (cue.from) {
+    if (cue.from && typeof cue.from === 'object') {
         normalized.from = cloneCueTile(cue.from);
     }
-    if (cue.to) {
+    if (cue.to && typeof cue.to === 'object') {
         normalized.to = cloneCueTile(cue.to);
     }
     if (Array.isArray(cue.path)) {

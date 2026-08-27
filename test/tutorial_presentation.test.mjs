@@ -277,6 +277,59 @@ test('애니메이션 타임라인은 완료와 취소 경계에서 입력 잠�
     timeline.destroy();
 });
 
+test('프레젠터의 숫자 게이지 끝값은 타임라인까지 보존된다', async () => {
+    let nextId = 0;
+    const completions = [];
+    const presenter = new TutorialBattlePresenter({
+        animation: TUTORIAL_GAME_DATA.ANIMATION
+    });
+    const timeline = new TutorialAnimationTimeline({
+        config: TUTORIAL_GAME_DATA.ANIMATION,
+        animationPort: {
+            animate(owner, properties) {
+                const id = nextId++;
+                const promise = new Promise((resolve) => {
+                    completions.push(() => {
+                        owner[properties.variable] = properties.endValue;
+                        resolve();
+                    });
+                });
+                return { id, promise };
+            }
+        }
+    });
+    timeline.reset({ playerHp: 100, loraHp: 100, instability: 70 });
+    const cues = presenter.createCues({
+        previousSnapshot: createSnapshot(),
+        nextSnapshot: createSnapshot({ playerHp: 75, instability: 67 }),
+        events: [
+            { type: 'player-damaged', damage: 25, hp: 75, source: 'lora-area' },
+            { type: 'instability-changed', before: 70, after: 67, change: -3 }
+        ]
+    });
+    const playerHealthCue = cues.find((cue) => (
+        cue.type === TUTORIAL_PRESENTATION_CUE_TYPES.HEALTH_TRANSITION
+        && cue.actorId === 'player'
+    ));
+    const instabilityCue = cues.find((cue) => (
+        cue.type === TUTORIAL_PRESENTATION_CUE_TYPES.INSTABILITY_TRANSITION
+    ));
+
+    assert.equal(playerHealthCue.from, 100);
+    assert.equal(playerHealthCue.to, 75);
+    assert.equal(instabilityCue.from, 70);
+    assert.equal(instabilityCue.to, 67);
+
+    timeline.applyCues(cues);
+    for (const complete of completions) {
+        complete();
+    }
+    await Promise.resolve();
+    assert.equal(timeline.getState().playerHp, 75);
+    assert.equal(timeline.getState().instability, 67);
+    timeline.destroy();
+});
+
 test('애니메이션 타임라인은 겹친 연출이 모두 끝날 때까지 잠금을 유지한다', async () => {
     let nextId = 0;
     const completions = new Map();

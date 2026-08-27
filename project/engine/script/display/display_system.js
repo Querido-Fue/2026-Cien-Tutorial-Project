@@ -9,6 +9,10 @@ import { getData } from 'data/data_handler.js';
 import { CanvasSurfacePool } from './_surface_pool.js';
 import { VignetteRenderer } from './_vignette_renderer.js';
 import {
+    registerDisplayBackgroundSetter,
+    setDisplayBackgroundColor
+} from './_display_background_port.js';
+import {
     compareDisplaySurfaceDescriptors,
     createDisplaySurfaceDescriptor,
     resolveDisplayWebGLLayerName,
@@ -42,6 +46,9 @@ export class DisplaySystem {
         this.screenHandler = new ScreenHandler();
         this.drawHandler = new DrawHandler2D();
         this.webGLHandler = new WebGLHandler();
+        registerDisplayBackgroundSetter((r, g, b) => (
+            this.webGLHandler.setBackgroundColor(r, g, b)
+        ));
         this.themeHandler = new ThemeHandler();
 
         this.surfaceMap = new Map();
@@ -559,7 +566,7 @@ export const shadowOff = (layerName) => displaySystemInstance.drawHandler.shadow
  * @param {number} g - green 채널입니다.
  * @param {number} b - blue 채널입니다.
  */
-export const setBackgroundColor = (r, g, b) => displaySystemInstance.webGLHandler.setBackgroundColor(r, g, b);
+export const setBackgroundColor = (r, g, b) => setDisplayBackgroundColor(r, g, b);
 
 /**
  * 텍스트 너비를 측정합니다.

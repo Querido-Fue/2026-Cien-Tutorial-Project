@@ -1,5 +1,5 @@
 import { getData } from 'data/data_handler.js';
-import { setBackgroundColor } from 'display/display_system.js';
+import { setDisplayBackgroundColor } from './_display_background_port.js';
 import { colorUtil } from 'util/color_util.js';
 const fs = require('fs');
 const fsPromises = fs.promises;
@@ -116,7 +116,7 @@ export class ThemeHandler {
     updateBackgroundColor() {
         if (ColorSchemes.Background) {
             const rgb = colorUtil().cssToRgb(ColorSchemes.Background);
-            setBackgroundColor(rgb.r / 255, rgb.g / 255, rgb.b / 255);
+            setDisplayBackgroundColor(rgb.r / 255, rgb.g / 255, rgb.b / 255);
         }
     }
 

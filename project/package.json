@@ -10,6 +10,6 @@
         "position": "center",
         "min_width": 1280,
         "min_height": 720,
-        "icon": "asset/icon/logo.png"
+        "icon": "asset/old/icon/logo.png"
     }
 }

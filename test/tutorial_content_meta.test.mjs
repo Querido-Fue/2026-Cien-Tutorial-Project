@@ -17,6 +17,7 @@ import {
     saveTutorialMeta,
     TUTORIAL_META_RUNTIME_KEY,
     TUTORIAL_META_VERSION,
+    TutorialMetaVersionError,
     unlockTutorialAchievement,
     unlockTutorialCutscene
 } from '../project/engine/script/scene/tutorial/_tutorial_meta_progress.js';
@@ -179,7 +180,7 @@ test('메타 저장은 해금 멱등성·손상 정규화·완료 횟수 경계�
         openingWatched: true,
         combatGuideSeen: true,
         identifiedItemIds: ['mirror'],
-        discoveredTrapIds: [],
+        revealedEventTileIds: [],
         unlockedCutsceneIds: ['opening'],
         unlockedAchievementIds: ['peekaboo'],
         bestScore: 0,
@@ -227,6 +228,41 @@ test('메타 저장은 해금 멱등성·손상 정규화·완료 횟수 경계�
         cutscenes.next();
     }
     assert.equal(cutscenes.open('true').ok, true, '재실행 후에도 같은 컷씬을 다시 열 수 있어야 합니다.');
+});
+
+test('v1 메타는 함정 용어를 이벤트 타일 용어로 순차 이관하고 점수는 읽기 호환만 유지한다', () => {
+    const migrated = normalizeTutorialMeta({
+        version: 1,
+        playCount: 2,
+        discoveredTrapIds: ['f1-event-1', 'f1-event-1', 'b1-event-4-c'],
+        bestScore: 77
+    });
+    assert.equal(migrated.version, TUTORIAL_META_VERSION);
+    assert.deepEqual(migrated.revealedEventTileIds, [
+        'f1-event-1',
+        'b1-event-4-c'
+    ]);
+    assert.equal('discoveredTrapIds' in migrated, false);
+    assert.equal(migrated.bestScore, 77);
+});
+
+test('현재보다 새로운 메타는 읽기와 저장 모두 거부해 원본 덮어쓰기를 막는다', async () => {
+    const future = { version: TUTORIAL_META_VERSION + 1, playCount: 99 };
+    assert.throws(
+        () => normalizeTutorialMeta(future),
+        (error) => error instanceof TutorialMetaVersionError
+            && error.code === 'tutorial-meta-future-version'
+    );
+    let writeCount = 0;
+    await assert.rejects(
+        () => saveTutorialMeta(future, {
+            setRuntimeStateValue() {
+                writeCount += 1;
+            }
+        }),
+        TutorialMetaVersionError
+    );
+    assert.equal(writeCount, 0);
 });
 
 test('콘텐츠 런타임은 파일당 한 클래스와 장면 역참조 금지를 지킨다', async () => {

@@ -35,6 +35,7 @@ import { TutorialGuidanceController } from './_tutorial_guidance_controller.js';
 import {
     createDefaultTutorialMeta,
     identifyTutorialItem,
+    isTutorialMetaFutureVersionError,
     loadTutorialMeta,
     markTutorialCombatGuideSeen,
     markTutorialOpeningWatched,
@@ -134,6 +135,7 @@ export class TutorialScene extends BaseScene {
         this.meta = createDefaultTutorialMeta();
         this.committedMeta = cloneCheckpointValue(this.meta);
         this.metaStaging = false;
+        this.metaWritesBlocked = false;
         this.cutscenes = new TutorialCutsceneController(this.data.CUTSCENES);
         const knownCutsceneIds = Object.values(this.data.CUTSCENES).map(
             (entry) => entry.id
@@ -301,6 +303,10 @@ export class TutorialScene extends BaseScene {
             })
             .catch((error) => {
                 console.warn('튜토리얼 진행도 로드 오류:', error);
+                this.metaWritesBlocked = isTutorialMetaFutureVersionError(error);
+                if (this.metaWritesBlocked) {
+                    console.warn('더 최신 버전의 진행도를 보호하기 위해 이번 실행의 메타 저장을 중지합니다.');
+                }
                 if (!this.destroyed) {
                     enqueueSimulationCommand({
                         type: COMMANDS.META_READY,
@@ -689,7 +695,7 @@ export class TutorialScene extends BaseScene {
         const knowledge = {
             discoveredItemIds: [...this.meta.identifiedItemIds],
             identifiedItemIds: [...this.meta.identifiedItemIds],
-            revealedTrapIds: [...this.meta.discoveredTrapIds],
+            revealedTrapIds: [...this.meta.revealedEventTileIds],
             unlockedCutsceneIds: [...this.meta.unlockedCutsceneIds]
         };
         this.model = new TutorialBattleModel(this.data, { knowledge });
@@ -1347,6 +1353,9 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #saveMeta(meta = this.meta) {
+        if (this.metaWritesBlocked) {
+            return;
+        }
         const snapshot = cloneCheckpointValue(meta);
         this.saveSequence = this.saveSequence
             .then(() => saveTutorialMeta(snapshot))

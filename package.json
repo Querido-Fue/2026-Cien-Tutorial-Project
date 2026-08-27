@@ -2,16 +2,22 @@
   "name": "cien-tutorial-project",
   "private": true,
   "scripts": {
-    "test": "npm run test:model && npm run test:balance && npm run test:contracts && npm run test:presentation && npm run test:assets && npm run test:audio && npm run check:assets && npm run check:repo",
+    "test": "npm run test:all && npm run check",
+    "test:all": "node --experimental-default-type=module --test",
     "test:model": "node --experimental-default-type=module --test test/tutorial_battle_model.test.mjs test/tutorial_combat_preview.test.mjs",
     "test:balance": "node --experimental-default-type=module --test test/tutorial_balance_simulation.test.mjs",
-    "test:contracts": "node --experimental-default-type=module --test test/tutorial_source_contract.test.mjs test/tutorial_scene_seams.test.mjs test/tutorial_content_meta.test.mjs test/tutorial_nonbattle_views.test.mjs test/tutorial_battle_views.test.mjs",
+    "test:contracts": "node --experimental-default-type=module --test test/tutorial_source_contract.test.mjs test/tutorial_scene_seams.test.mjs test/tutorial_content_meta.test.mjs test/tutorial_nonbattle_views.test.mjs test/tutorial_battle_views.test.mjs test/tutorial_release_tooling.test.mjs",
     "test:presentation": "node --experimental-default-type=module --test test/tutorial_presentation.test.mjs test/tutorial_sprite_data.test.mjs test/tutorial_sprite_animation.test.mjs test/tutorial_sprite_render.test.mjs",
     "test:assets": "node --experimental-default-type=module --test test/tutorial_assets.test.mjs",
     "test:audio": "node --experimental-default-type=module --test test/tutorial_audio.test.mjs",
+    "test:release": "node --experimental-default-type=module --test test/tutorial_release_tooling.test.mjs",
+    "check": "npm run check:assets && npm run check:repo && npm run check:release",
     "import:assets": "node --experimental-default-type=module scripts/import-tutorial-assets.mjs",
     "check:assets": "node --experimental-default-type=module scripts/check-assets.mjs",
     "check:repo": "node --experimental-default-type=module scripts/check-repo.mjs",
-    "simulate:balance": "node --experimental-default-type=module scripts/simulate-tutorial-balance.mjs"
+    "check:release": "node --experimental-default-type=module scripts/check-release.mjs",
+    "simulate:balance": "node --experimental-default-type=module scripts/simulate-tutorial-balance.mjs",
+    "package:nwjs": "node scripts/package-nwjs.mjs",
+    "package": "npm run package:nwjs"
   }
 }
