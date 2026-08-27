@@ -144,7 +144,7 @@ test('피드백 큐는 cue 순서와 수명을 소유하고 오디오를 별도�
         ordered.map((_, index) => index)
     );
     const active = queue.getSnapshot();
-    assert.equal(active.floatingTexts.length, 1);
+    assert.equal(active.floatingTexts.length, 2);
     assert.equal(active.particles.length, 4);
     assert.ok(active.screenShakeSeconds > 0);
     assert.ok(active.flashSeconds > 0);

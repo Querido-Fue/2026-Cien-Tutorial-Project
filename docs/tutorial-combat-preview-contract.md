@@ -17,7 +17,7 @@
 
 ## 2. 공개 API
 
-### `getLoraIntent()`
+### `getLoraIntent(options)`
 
 다음 정보를 반환한다.
 
@@ -42,6 +42,11 @@
 
 근접 공격은 플레이어 타일을 `affectedTiles`에 넣는다. 전역 공격은 개별 타일을 열거하지
 않고 `affectsAll: true`로 표시한다. 평화와 무피해 상태는 `actionType: 'none'`이다.
+
+기본 호출은 실제 로라 단계만 허용해 `performLoraTurn()`의 검증 경계를 유지한다. HUD가
+`getLoraIntent({ allowForecast: true })`로 요청하면 플레이어 이동·행동 단계의 현재 상태를
+다음 로라 턴 시작 상태로 보고 같은 플래너를 비변이 호출한다. 이 값은 아직 확정하지 않은
+플레이어 행동까지 가정하지 않으므로 화면에는 `현재 기준`으로 표시한다.
 
 ### `previewPlayerAction(action, options)`
 
@@ -79,7 +84,16 @@
 `restoreCheckpoint()`를 호출하거나 실제 모델을 임시 변경한 뒤 되돌리는 방식을 사용하지
 않는다. 미리보기 전후의 공개 스냅샷과 전체 체크포인트가 동일해야 한다.
 
-## 5. 회귀 명세
+## 5. Turn 08 표시 문구
+
+아이템 설명은 Drive의
+[`시스템 기획 3차`](https://docs.google.com/document/d/1qq1jIdDYxPpKDOucQaEO8RHK7XQDD-ARnDFoeaCtmhQ/edit)
+내 `아이템 설명`을 우선 사용하고 HUD 폭에 맞게 뜻을 유지한 채 줄였다. 문서와 실행 규칙이
+충돌하는 경우 미리보기와 실제 행동이 같은 값을 보여야 하므로 현재 모델 규칙을 우선한다.
+현재 확인된 충돌은 버섯의 지속 조건으로, 기획 문서 일부는 두 번 피격을 말하지만 모델은
+다음 실제 피해 1회에 효과를 끝낸다.
+
+## 6. 회귀 명세
 
 `test/tutorial_combat_preview.test.mjs`는 다음 동등성 표를 정의한다.
 
@@ -94,3 +108,6 @@
 - 모든 미리보기 전후의 스냅샷·체크포인트 동일성
 
 Turn 07에서는 사용자의 테스트 중단 요청에 따라 이 명세를 작성만 했고 실행하지 않았다.
+
+Turn 08에서는 HUD가 이 API와 플레이어 행동 미리보기를 소비하도록 연결했다. 사용자 요청에
+따라 새 표시·포커스·메타 회귀 명세도 실행하지 않은 상태다.

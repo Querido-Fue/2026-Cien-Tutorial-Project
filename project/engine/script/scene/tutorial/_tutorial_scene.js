@@ -25,11 +25,15 @@ import {
     enqueueSimulationCommand
 } from 'simulation/simulation_command_queue.js';
 import { TutorialBattleModel } from './_tutorial_battle_model.js';
+import { TutorialBattleFocusController } from './_tutorial_battle_focus_controller.js';
+import { TutorialCombatReadabilityPresenter } from './_tutorial_combat_readability_presenter.js';
 import { TutorialCutsceneController } from './_tutorial_cutscene_controller.js';
+import { TutorialGuidanceController } from './_tutorial_guidance_controller.js';
 import {
     createDefaultTutorialMeta,
     identifyTutorialItem,
     loadTutorialMeta,
+    markTutorialCombatGuideSeen,
     markTutorialOpeningWatched,
     recordTutorialResult,
     saveTutorialMeta,
@@ -66,6 +70,7 @@ import { TutorialFeedbackQueue } from './_tutorial_feedback_queue.js';
 import { TutorialBattleFeedbackView } from './view/_tutorial_battle_feedback_view.js';
 import { TutorialBattleHudView } from './view/_tutorial_battle_hud_view.js';
 import { TutorialBattleLayout } from './view/_tutorial_battle_layout.js';
+import { TutorialBattleTutorialView } from './view/_tutorial_battle_tutorial_view.js';
 import { TutorialBattleWorldView } from './view/_tutorial_battle_world_view.js';
 import { TutorialButtonHost } from './view/_tutorial_button_host.js';
 import { TutorialCutsceneView } from './view/_tutorial_cutscene_view.js';
@@ -117,6 +122,8 @@ export class TutorialScene extends BaseScene {
         this.cutsceneReturnMode = MODES.MENU;
         this.pendingCutscenes = [];
         this.runCutsceneIds = new Set();
+        this.battleFocus = new TutorialBattleFocusController();
+        this.guidance = new TutorialGuidanceController();
         this.galleryEntries = Object.values(this.data.CUTSCENES);
         this.galleryIndex = 0;
         this.starterIndex = Math.max(
@@ -148,6 +155,7 @@ export class TutorialScene extends BaseScene {
         this.galleryView = new TutorialGalleryView(tutorialRenderPort);
         this.resultView = new TutorialResultView(tutorialRenderPort);
         this.cutsceneView = new TutorialCutsceneView(tutorialRenderPort);
+        this.battleTutorialView = new TutorialBattleTutorialView(tutorialRenderPort);
         this.battleLayout = new TutorialBattleLayout({
             map: this.data.MAP,
             floors: this.data.FLOORS,
@@ -157,7 +165,8 @@ export class TutorialScene extends BaseScene {
         });
         this.buttonHost = new TutorialButtonHost({
             parent: this,
-            onCommand: (type, payload) => this.#queueUiCommand(type, payload)
+            onCommand: (type, payload) => this.#queueUiCommand(type, payload),
+            onFocus: (key) => this.#focusBattleControl(key)
         });
         this.assetLoader = new TutorialAssetLoader({
             onChange: () => this.buttonHost.invalidate()
@@ -179,6 +188,10 @@ export class TutorialScene extends BaseScene {
         this.battlePresenter = new TutorialBattlePresenter({
             items: this.data.ITEMS,
             animation: this.data.ANIMATION
+        });
+        this.combatReadability = new TutorialCombatReadabilityPresenter({
+            items: this.data.ITEMS,
+            reasonCopy: this.data.TEXT.COMBAT_REASONS
         });
         this.feedbackQueue = new TutorialFeedbackQueue({
             eventLogLimit: this.data.RULES.EVENT_LOG_LIMIT,
@@ -289,6 +302,9 @@ export class TutorialScene extends BaseScene {
             this.battleWorldView.draw(battleViewModel);
             this.battleFeedbackView.draw(battleViewModel);
             this.battleHudView.draw(battleViewModel);
+            this.battleTutorialView.draw(
+                this.#createBattleTutorialViewModel(battleViewModel)
+            );
         } else if (view === 'result') {
             this.resultView.draw(this.#createResultViewModel());
         }
@@ -373,11 +389,20 @@ export class TutorialScene extends BaseScene {
                 case COMMANDS.INVENTORY_PAGE_SHIFT:
                     this.#applyInventoryPageShift(command.payload);
                     break;
+                case COMMANDS.FOCUS_SHIFT:
+                    this.#applyFocusShift(command.payload);
+                    break;
                 case COMMANDS.SELECT_CLEANSE:
                     this.#applySelectCleanse();
                     break;
                 case COMMANDS.CLEANSE_EVENT_TILE:
                     this.#applyCleanseEventTile(command.payload);
+                    break;
+                case COMMANDS.GUIDE_SHOW:
+                    this.#applyGuideShow();
+                    break;
+                case COMMANDS.GUIDE_DISMISS:
+                    this.#applyGuideDismiss();
                     break;
                 case COMMANDS.PERFORM_LORA:
                     this.#applyLoraAction(command.payload);
@@ -435,6 +460,8 @@ export class TutorialScene extends BaseScene {
         this.cutscenes.close();
         this.pendingCutscenes = [];
         this.runCutsceneIds.clear();
+        this.battleFocus.reset();
+        this.guidance.reset();
         this.loraTurnState = null;
         this.floorView = null;
         this.floorActorView = null;
@@ -566,6 +593,8 @@ export class TutorialScene extends BaseScene {
         this.inventoryPage = 0;
         this.hoveredTile = null;
         this.hoveredTileKey = '';
+        this.battleFocus.reset();
+        this.guidance.reset();
         this.reachability.clear();
         this.actionTargets = [];
         this.plannedPath = [];
@@ -606,6 +635,8 @@ export class TutorialScene extends BaseScene {
         this.cleanseTargetIndex = 0;
         this.inventoryPage = 0;
         this.loraTurnState = null;
+        this.battleFocus.reset();
+        this.guidance.beginRun({ seen: this.meta.combatGuideSeen === true });
         this.feedbackQueue.clear();
         this.lastPresentationSnapshot = cloneCheckpointValue(initialSnapshot);
         this.presentationTimeline.reset({
@@ -837,6 +868,7 @@ export class TutorialScene extends BaseScene {
         }
         this.attackSelected = !selectingSameWeapon;
         this.attackWeapon = weapon;
+        this.battleFocus.focus(weapon === 'bow' ? 'battle-ranged' : 'battle-melee');
         this.cleanseSelected = false;
         this.cleanseTargets = [];
         this.targetIndex = 0;
@@ -1446,6 +1478,7 @@ export class TutorialScene extends BaseScene {
     #canAcceptBattleInput() {
         return isTutorialBattleMode(this.mode)
             && !this.cutscenes.isOpen()
+            && !this.guidance.isOpen()
             && !this.presentationTimeline.isLocked()
             && this.model?.turn === 'player'
             && !this.model?.result;
@@ -1562,6 +1595,18 @@ export class TutorialScene extends BaseScene {
         if (this.mode !== MODES.BATTLE) {
             return;
         }
+        if (this.guidance.isOpen()) {
+            if (this.#wasKeyPressed(KEY_CODES.GUIDE)
+                || this.#wasKeyPressed(KEY_CODES.CONFIRM)
+                || this.#wasKeyPressed(KEY_CODES.CANCEL)) {
+                enqueueSimulationCommand({ type: COMMANDS.GUIDE_DISMISS });
+            }
+            return;
+        }
+        if (this.#wasKeyPressed(KEY_CODES.GUIDE)) {
+            enqueueSimulationCommand({ type: COMMANDS.GUIDE_SHOW });
+            return;
+        }
         if (this.#wasKeyPressed(KEY_CODES.RESTART)) {
             enqueueSimulationCommand({ type: COMMANDS.RESTART });
             return;
@@ -1593,6 +1638,11 @@ export class TutorialScene extends BaseScene {
                 type: COMMANDS.PLAN_STEP,
                 payload: { x: 1, y: 0 }
             });
+        } else if (this.#wasKeyPressed(KEY_CODES.TARGET_NEXT)) {
+            enqueueSimulationCommand({
+                type: COMMANDS.FOCUS_SHIFT,
+                payload: { delta: 1 }
+            });
         } else if (this.#wasKeyPressed(KEY_CODES.CONFIRM)) {
             if (this.cleanseSelected) {
                 const target = this.cleanseTargets[this.cleanseTargetIndex];
@@ -1605,6 +1655,9 @@ export class TutorialScene extends BaseScene {
                     type: COMMANDS.ATTACK,
                     payload: { targetId: this.actionTargets[this.targetIndex]?.id }
                 });
+            } else if (this.model.phase === 'action'
+                && this.#queueFocusedBattleControl()) {
+                return;
             } else if (this.model.phase === 'move') {
                 enqueueSimulationCommand({ type: COMMANDS.COMMIT_PATH });
             }
@@ -1633,7 +1686,9 @@ export class TutorialScene extends BaseScene {
      */
     #updatePointerState() {
         let nextTile = null;
-        if (this.mode !== MODES.BATTLE || this.cutscenes.isOpen()) {
+        if (this.mode !== MODES.BATTLE
+            || this.cutscenes.isOpen()
+            || this.guidance.isOpen()) {
             this.hoveredTile = null;
             this.hoveredTileKey = '';
             return;
@@ -1919,6 +1974,59 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
+     * 현재 공격 선택 또는 공통 버튼 포커스를 모델 미리보기 호출로 변환합니다.
+     * @param {string|null} focusedKey - 키보드·포인터 공통 포커스 키입니다.
+     * @returns {{preview:object|null,label:string}} 모델 결과와 짧은 선택 이름입니다.
+     * @private
+     */
+    #createPlayerActionPreviewSelection(focusedKey) {
+        if (!this.model || this.model.phase !== 'action' || this.model.result) {
+            return { preview: null, label: '이동 경로' };
+        }
+        if (this.attackSelected) {
+            const target = this.actionTargets[this.targetIndex];
+            return {
+                preview: this.model.previewPlayerAction('attack', {
+                    targetId: target?.id || LORA_ID,
+                    weapon: this.attackWeapon
+                }),
+                label: this.attackWeapon === 'bow' ? '원거리 공격' : '근접 공격'
+            };
+        }
+        if (focusedKey === 'battle-melee' || focusedKey === 'battle-ranged') {
+            const weapon = focusedKey === 'battle-ranged' ? 'bow' : 'melee';
+            const target = toList(this.model.getValidTargets({ weapon }))[0];
+            return {
+                preview: this.model.previewPlayerAction('attack', {
+                    targetId: target?.id || LORA_ID,
+                    weapon
+                }),
+                label: weapon === 'bow' ? '원거리 공격' : '근접 공격'
+            };
+        }
+        if (focusedKey === 'battle-heal') {
+            return {
+                preview: this.model.previewPlayerAction('heal'),
+                label: '회복'
+            };
+        }
+        if (focusedKey === 'battle-idle') {
+            return {
+                preview: this.model.previewPlayerAction('wait'),
+                label: '대기'
+            };
+        }
+        if (focusedKey?.startsWith('item-')) {
+            const itemId = focusedKey.slice('item-'.length);
+            return {
+                preview: this.model.previewPlayerAction('use-item', { itemId }),
+                label: this.data.ITEMS[itemId]?.label || itemId
+            };
+        }
+        return { preview: null, label: '행동을 선택하세요' };
+    }
+
+    /**
      * 한 프레임의 모델·선택·표현·HUD 상태를 읽기 전용 BattleViewModel로 조립합니다.
      * @returns {object|null} 세 전투 뷰가 함께 소비할 프레임입니다.
      * @private
@@ -1955,10 +2063,18 @@ export class TutorialScene extends BaseScene {
             Object.entries(this.data.ITEMS).map(([itemId, item]) => ([itemId, Object.freeze({
                 id: itemId,
                 label: item.label || itemId,
+                description: item.description || '효과 확인 중',
                 known: this.#isItemKnown(itemId),
                 hasIcon: this.assetLoader.hasAtlasCell('item-icons', itemId),
                 usable: this.#isItemUsable(itemId),
-                movementConsumable: itemId === 'tile-cleanser'
+                movementConsumable: itemId === 'tile-cleanser',
+                statusLabel: itemId === 'tile-cleanser'
+                    ? '이동'
+                    : item.passive === true && item.useOnce !== true
+                        ? '자동'
+                        : item.consumable === true || item.useOnce === true
+                            ? '사용'
+                            : '보유'
             })]))
         ));
         const pagedInventory = Object.freeze({
@@ -1971,6 +2087,10 @@ export class TutorialScene extends BaseScene {
                     itemId: entry.itemId,
                     count: Number(entry.count) || 0,
                     label: metadata.known ? metadata.label : '미확인',
+                    description: metadata.known
+                        ? metadata.description
+                        : '선택해 효과를 확인하세요.',
+                    statusLabel: metadata.statusLabel || '보유',
                     known: metadata.known === true,
                     hasIcon: metadata.hasIcon === true,
                     movementConsumable,
@@ -1998,6 +2118,34 @@ export class TutorialScene extends BaseScene {
         const movePreview = snapshot.phase === 'move'
             ? cloneCheckpointValue(this.model.previewPath(this.plannedPath))
             : null;
+        const inventoryFocusKeys = pagedInventory.entries.map(
+            (entry) => 'item-' + entry.itemId
+        );
+        const actionFocusKeys = [
+            'battle-melee',
+            'battle-ranged',
+            'battle-heal',
+            'battle-idle'
+        ];
+        this.battleFocus.setKeys(snapshot.phase === 'move'
+            ? inventoryFocusKeys
+            : [...actionFocusKeys, ...inventoryFocusKeys]);
+        const focusedControlKey = this.battleFocus.getFocusedKey();
+        const actionSelection = this.#createPlayerActionPreviewSelection(
+            focusedControlKey
+        );
+        const inspectedItem = focusedControlKey?.startsWith('item-')
+            ? pagedInventory.entries.find(
+                (entry) => entry.itemId === focusedControlKey.slice('item-'.length)
+            ) || null
+            : null;
+        const readability = this.combatReadability.create({
+            snapshot,
+            loraIntent: this.model.getLoraIntent({ allowForecast: true }),
+            actionPreview: actionSelection.preview,
+            selectionLabel: actionSelection.label,
+            inspectedItem
+        });
         return Object.freeze({
             viewport: layout.viewport,
             layout,
@@ -2031,6 +2179,7 @@ export class TutorialScene extends BaseScene {
                 )),
                 cleanseTargetIndex: this.cleanseTargetIndex,
                 itemMetadata,
+                readability,
                 feedback: Object.freeze({
                     flashSeconds: feedback.flashSeconds,
                     stabilizeSeconds: feedback.stabilizeSeconds
@@ -2051,10 +2200,12 @@ export class TutorialScene extends BaseScene {
                 attackSelected: this.attackSelected,
                 attackWeapon: this.attackWeapon,
                 cleanseSelected: this.cleanseSelected,
+                focusedControlKey,
                 instabilityState: Object.freeze(cloneCheckpointValue(
                     this.model.getInstabilityState?.() || {}
                 )),
                 movePreview: movePreview ? Object.freeze(movePreview) : null,
+                readability,
                 eventLog: feedback.eventLog,
                 inventory: pagedInventory,
                 controls: Object.freeze({
@@ -2077,6 +2228,32 @@ export class TutorialScene extends BaseScene {
             feedback: Object.freeze({
                 floatingTexts: feedback.floatingTexts,
                 particles: feedback.particles
+            })
+        });
+    }
+
+    /**
+     * 전투 안내 뷰가 필요한 레이아웃·문구·표시 상태만 조립합니다.
+     * @param {object|null} battleViewModel - 같은 프레임의 전투 뷰 모델입니다.
+     * @returns {object|null} 안내 오버레이 표시 모델입니다.
+     * @private
+     */
+    #createBattleTutorialViewModel(battleViewModel) {
+        if (!battleViewModel) {
+            return null;
+        }
+        const copy = this.data.TEXT.TUTORIAL_GUIDE;
+        return Object.freeze({
+            open: this.guidance.isOpen(),
+            viewport: battleViewModel.viewport,
+            layout: battleViewModel.layout,
+            fonts: battleViewModel.fonts,
+            colors: battleViewModel.colors,
+            modal: Object.freeze({ ...this.data.LAYOUT.MODAL }),
+            copy: Object.freeze({
+                title: copy.TITLE,
+                sentences: Object.freeze([...copy.SENTENCES]),
+                replay: copy.REPLAY
             })
         });
     }
@@ -2126,6 +2303,8 @@ export class TutorialScene extends BaseScene {
             String(this.cleanseTargetIndex),
             this.plannedPath.map((point) => toTileKey(point.x, point.y)).join('>'),
             String(this.inventoryPage),
+            String(this.battleFocus.getFocusedKey()),
+            String(this.guidance.isOpen()),
             String(this.presentationTimeline.isLocked()),
             inventory
         ].join('/');
@@ -2200,8 +2379,15 @@ export class TutorialScene extends BaseScene {
         if (!this.model) {
             return [];
         }
-        return this.battleHudView
-            .getButtonSpecs(this.#createBattleViewModel())
+        const battleViewModel = this.#createBattleViewModel();
+        const tutorialViewModel = this.#createBattleTutorialViewModel(battleViewModel);
+        const specs = this.guidance.isOpen()
+            ? this.battleTutorialView.getButtonSpecs(tutorialViewModel)
+            : [
+                ...this.battleHudView.getButtonSpecs(battleViewModel),
+                ...this.battleTutorialView.getButtonSpecs(tutorialViewModel)
+            ];
+        return specs
             .map((spec) => {
                 const { iconId, iconWidth, ...resolved } = spec;
                 if (!iconId || !(Number(iconWidth) > 0)) {
@@ -2300,6 +2486,93 @@ export class TutorialScene extends BaseScene {
             paging.page + Math.sign(delta) + paging.pageCount
         ) % paging.pageCount;
         this.buttonHost.invalidate();
+    }
+
+    /**
+     * 키보드 조사 포커스를 현재 전투 버튼 목록에서 순환합니다.
+     * @param {object} payload - 이동 방향입니다.
+     * @private
+     */
+    #applyFocusShift(payload) {
+        if (this.mode !== MODES.BATTLE || this.guidance.isOpen()) {
+            return;
+        }
+        const before = this.battleFocus.getFocusedKey();
+        const after = this.battleFocus.shift(Number(payload?.delta) || 1);
+        if (after && after !== before) {
+            this.presentationTimeline.startSelection('menu-selection');
+            this.buttonHost.invalidate();
+        }
+    }
+
+    /** 첫 플레이 또는 도움말 요청으로 전투 안내를 엽니다. @private */
+    #applyGuideShow() {
+        if (this.mode !== MODES.BATTLE || this.cutscenes.isOpen()) {
+            return;
+        }
+        this.guidance.show();
+        this.buttonHost.invalidate();
+    }
+
+    /** 전투 안내를 닫고 메타 진행도에 확인 여부를 기록합니다. @private */
+    #applyGuideDismiss() {
+        if (this.mode !== MODES.BATTLE || !this.guidance.dismiss()) {
+            return;
+        }
+        this.#replaceMeta(markTutorialCombatGuideSeen(this.meta));
+        this.buttonHost.invalidate();
+    }
+
+    /**
+     * 포인터가 진입한 전투 버튼을 키보드와 같은 조사 포커스로 맞춥니다.
+     * @param {string} key - 버튼 키입니다.
+     * @private
+     */
+    #focusBattleControl(key) {
+        if (this.mode === MODES.BATTLE
+            && !this.guidance.isOpen()
+            && this.battleFocus.focus(key)) {
+            this.buttonHost.invalidate();
+        }
+    }
+
+    /**
+     * 행동 단계에서 현재 키보드 포커스의 버튼 명령을 큐에 넣습니다.
+     * @returns {boolean} 포커스가 전투 조사 항목이었는지 여부입니다.
+     * @private
+     */
+    #queueFocusedBattleControl() {
+        const key = this.battleFocus.getFocusedKey();
+        if (!key) {
+            return false;
+        }
+        if (key === 'battle-melee' || key === 'battle-ranged') {
+            enqueueSimulationCommand({
+                type: COMMANDS.SELECT_ATTACK,
+                payload: { weapon: key === 'battle-ranged' ? 'bow' : 'melee' }
+            });
+            return true;
+        }
+        if (key === 'battle-heal') {
+            enqueueSimulationCommand({ type: COMMANDS.HEAL });
+            return true;
+        }
+        if (key === 'battle-idle') {
+            enqueueSimulationCommand({ type: COMMANDS.IDLE });
+            return true;
+        }
+        if (key.startsWith('item-')) {
+            const itemId = key.slice('item-'.length);
+            const item = this.data.ITEMS[itemId];
+            if (item && item.movementConsumable !== true && this.#isItemUsable(itemId)) {
+                enqueueSimulationCommand({
+                    type: COMMANDS.USE_ITEM,
+                    payload: { itemId }
+                });
+            }
+            return true;
+        }
+        return false;
     }
 
     /**

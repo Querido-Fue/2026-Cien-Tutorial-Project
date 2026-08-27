@@ -2,11 +2,12 @@ import { UIPool, releaseUIItem } from 'ui/_ui_pool.js';
 
 /**
  * @class TutorialButtonHost
- * @description 튜토리얼 버튼의 풀 획득·갱신·그리기·반납만 소유합니다.
+ * @description 튜토리얼 버튼의 풀 수명과 명령·포인터 포커스 포트 전달을 소유합니다.
  */
 export class TutorialButtonHost {
     #parent;
     #onCommand;
+    #onFocus;
     #buttons;
     #signature;
 
@@ -14,10 +15,12 @@ export class TutorialButtonHost {
      * @param {object} options - 버튼 호스트 의존성입니다.
      * @param {object} options.parent - UI 요소의 부모 객체입니다.
      * @param {Function} options.onCommand - 명령 의도를 씬으로 전달하는 콜백입니다.
+     * @param {Function} [options.onFocus] - 포인터 포커스 키를 씬으로 전달하는 콜백입니다.
      */
-    constructor({ parent, onCommand }) {
+    constructor({ parent, onCommand, onFocus = () => {} }) {
         this.#parent = parent;
         this.#onCommand = onCommand;
+        this.#onFocus = onFocus;
         this.#buttons = {};
         this.#signature = null;
     }
@@ -84,6 +87,7 @@ export class TutorialButtonHost {
             return;
         }
         const enabled = spec.enabled !== false;
+        const inspectable = spec.inspectable === true || enabled;
         const textElement = UIPool.text_element.get();
         textElement.init({
             parent: this.#parent,
@@ -109,18 +113,28 @@ export class TutorialButtonHost {
             itemSpacing: spec.itemSpacing,
             radius: spec.radius ?? style.defaultRadius,
             shadow: spec.shadow,
-            idleColor: enabled
-                ? (spec.idleColor
-                    || (spec.active ? style.colors.accent : style.colors.idle))
+            idleColor: enabled || spec.focused
+                ? (spec.active || spec.focused
+                    ? style.colors.accent
+                    : spec.idleColor || style.colors.idle)
                 : style.colors.disabled,
-            hoverColor: enabled
+            hoverColor: inspectable
                 ? (spec.hoverColor || style.colors.hover)
                 : style.colors.disabled,
             color: style.colors.text,
-            clickAble: enabled,
-            onClick: () => this.#activate(spec)
+            clickAble: inspectable,
+            tooltip: spec.tooltip,
+            onHover: () => {
+                this.#onFocus(spec.key);
+                return spec.tooltip;
+            },
+            onClick: () => {
+                if (enabled) {
+                    this.#activate(spec);
+                }
+            }
         });
-        button.clickAble = enabled;
+        button.clickAble = inspectable;
         button.hoverScaleMultiplier = style.hoverScale;
         button.pressScaleMultiplier = style.pressScale;
         this.#buttons[spec.key] = { item: button, text: textElement };

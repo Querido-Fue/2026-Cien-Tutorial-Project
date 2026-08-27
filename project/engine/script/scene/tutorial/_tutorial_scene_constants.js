@@ -36,8 +36,11 @@ export const TUTORIAL_COMMANDS = Object.freeze({
     IDLE: 'tutorial/idle',
     USE_ITEM: 'tutorial/use-item',
     INVENTORY_PAGE_SHIFT: 'tutorial/inventory-page-shift',
+    FOCUS_SHIFT: 'tutorial/focus-shift',
     SELECT_CLEANSE: 'tutorial/select-cleanse',
     CLEANSE_EVENT_TILE: 'tutorial/cleanse-event-tile',
+    GUIDE_SHOW: 'tutorial/guide-show',
+    GUIDE_DISMISS: 'tutorial/guide-dismiss',
     PERFORM_LORA: 'tutorial/perform-lora',
     COMPLETE_LORA: 'tutorial/complete-lora'
 });

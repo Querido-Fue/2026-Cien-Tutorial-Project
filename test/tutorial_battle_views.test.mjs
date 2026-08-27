@@ -5,6 +5,9 @@ import test from 'node:test';
 import { TUTORIAL_GAME_DATA } from '../project/engine/script/data/game/tutorial_game_data.js';
 import { TutorialBattleHudView } from '../project/engine/script/scene/tutorial/view/_tutorial_battle_hud_view.js';
 import { TutorialBattleLayout } from '../project/engine/script/scene/tutorial/view/_tutorial_battle_layout.js';
+import { TutorialBattleFocusController } from '../project/engine/script/scene/tutorial/_tutorial_battle_focus_controller.js';
+import { TutorialCombatReadabilityPresenter } from '../project/engine/script/scene/tutorial/_tutorial_combat_readability_presenter.js';
+import { TutorialGuidanceController } from '../project/engine/script/scene/tutorial/_tutorial_guidance_controller.js';
 
 const VIEWPORTS = Object.freeze([
     Object.freeze({ name: '1280×720', WW: 1280, WH: 720, UIWW: 1280, UIOffsetX: 0 }),
@@ -129,12 +132,77 @@ test('인벤토리 페이지는 음수와 초과 요청을 유효 범위로 제�
     assert.equal(last.entries.length, 2);
 });
 
+test('전투 조사 포커스는 마우스 직접 선택과 키보드 순환에서 같은 키를 사용한다', () => {
+    const focus = new TutorialBattleFocusController();
+    focus.setKeys(['battle-heal', 'item-mirror']);
+    assert.equal(focus.focus('item-mirror'), true);
+    assert.equal(focus.getFocusedKey(), 'item-mirror');
+    assert.equal(focus.shift(1), 'battle-heal');
+    focus.setKeys(['item-mirror']);
+    assert.equal(focus.getFocusedKey(), null);
+});
+
+test('첫 플레이 안내는 자동으로 열리고 확인 뒤 재플레이에서는 수동으로만 열린다', () => {
+    const guidance = new TutorialGuidanceController();
+    guidance.beginRun({ seen: false });
+    assert.equal(guidance.isOpen(), true);
+    assert.equal(guidance.dismiss(), true);
+    guidance.beginRun({ seen: true });
+    assert.equal(guidance.isOpen(), false);
+    guidance.show();
+    assert.equal(guidance.isOpen(), true);
+});
+
+test('가독성 프레젠터는 모델 수치를 재계산하지 않고 현재→예상 표시값을 보존한다', () => {
+    const presenter = new TutorialCombatReadabilityPresenter({
+        items: TUTORIAL_GAME_DATA.ITEMS,
+        reasonCopy: TUTORIAL_GAME_DATA.TEXT.COMBAT_REASONS
+    });
+    const view = presenter.create({
+        snapshot: {
+            player: { hp: 70 },
+            lora: { hp: 80, instability: 50 },
+            consecutiveAttackCount: 1
+        },
+        loraIntent: {
+            ok: true,
+            forecast: true,
+            actionType: 'area',
+            stateLabel: '불안정',
+            finalDamage: 40,
+            affectsAll: true,
+            reason: 'player-outside-melee-range'
+        },
+        actionPreview: {
+            ok: true,
+            reason: 'action-available',
+            before: { playerHp: 70, loraHp: 80, instability: 50 },
+            expected: {
+                playerHp: 70,
+                loraHp: 50,
+                instability: 60,
+                peaceTurns: 0,
+                extraPlayerTurns: 0,
+                consecutiveAttackCount: 2
+            },
+            changes: { consumedItemId: null, consumedItemCount: 0 }
+        },
+        selectionLabel: '근접 공격'
+    });
+    assert.equal(view.loraIntent.finalDamage, 40);
+    assert.equal(view.loraIntent.rangeLabel, '전장 전체');
+    assert.equal(view.playerPreview.before.loraHp, 80);
+    assert.equal(view.playerPreview.expected.loraHp, 50);
+    assert.match(view.playerPreview.persistentLabel, /연속 공격 2회/);
+});
+
 test('전투 뷰는 장면·모델·저장·명령 큐를 직접 import하지 않는다', async () => {
     const names = [
         '_tutorial_battle_layout.js',
         '_tutorial_battle_world_view.js',
         '_tutorial_battle_hud_view.js',
-        '_tutorial_battle_feedback_view.js'
+        '_tutorial_battle_feedback_view.js',
+        '_tutorial_battle_tutorial_view.js'
     ];
     const sources = await Promise.all(names.map((name) => readFile(new URL(
         `../project/engine/script/scene/tutorial/view/${name}`,

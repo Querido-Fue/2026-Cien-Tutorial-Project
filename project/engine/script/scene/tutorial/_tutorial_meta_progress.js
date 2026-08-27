@@ -1,11 +1,12 @@
 export const TUTORIAL_META_RUNTIME_KEY = 'tutorialMeta';
-export const TUTORIAL_META_VERSION = 1;
+export const TUTORIAL_META_VERSION = 2;
 
 /**
  * @typedef {object} TutorialMeta
  * @property {number} version - 메타 진행도 스키마 버전입니다.
  * @property {number} playCount - 결과까지 완료한 플레이 횟수입니다.
  * @property {boolean} openingWatched - 오프닝 시청 여부입니다.
+ * @property {boolean} combatGuideSeen - 전투 기본 안내 확인 여부입니다.
  * @property {string[]} identifiedItemIds - 정체가 공개된 아이템 ID 목록입니다.
  * @property {string[]} discoveredTrapIds - 발견한 함정 ID 목록입니다.
  * @property {string[]} unlockedCutsceneIds - 해금한 컷씬 ID 목록입니다.
@@ -22,6 +23,7 @@ export function createDefaultTutorialMeta() {
         version: TUTORIAL_META_VERSION,
         playCount: 0,
         openingWatched: false,
+        combatGuideSeen: false,
         identifiedItemIds: [],
         discoveredTrapIds: [],
         unlockedCutsceneIds: [],
@@ -123,6 +125,7 @@ export function normalizeTutorialMeta(value) {
         version: TUTORIAL_META_VERSION,
         playCount: normalizeNonNegativeInteger(source.playCount),
         openingWatched: normalizeBoolean(source.openingWatched),
+        combatGuideSeen: normalizeBoolean(source.combatGuideSeen),
         identifiedItemIds: normalizeIdList(source.identifiedItemIds),
         discoveredTrapIds: normalizeIdList(source.discoveredTrapIds),
         unlockedCutsceneIds: normalizeIdList(source.unlockedCutsceneIds),
@@ -192,6 +195,18 @@ export function markTutorialOpeningWatched(meta) {
     return {
         ...normalizeTutorialMeta(meta),
         openingWatched: true
+    };
+}
+
+/**
+ * 전투 기본 안내를 확인한 상태의 새 메타 진행도를 반환합니다.
+ * @param {*} meta - 현재 메타 진행도입니다.
+ * @returns {TutorialMeta} 안내 확인 여부가 반영된 새 객체입니다.
+ */
+export function markTutorialCombatGuideSeen(meta) {
+    return {
+        ...normalizeTutorialMeta(meta),
+        combatGuideSeen: true
     };
 }
 

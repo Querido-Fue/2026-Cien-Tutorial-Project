@@ -102,6 +102,14 @@ export class TutorialBattlePresenter {
                 message: this.formatFailureReason(failureReason),
                 sourceEventType: 'action-failed'
             }));
+            cues.push(freezeCue({
+                type: CUE_TYPES.FLOATING_TEXT,
+                actorId: 'player',
+                text: '무효',
+                tone: 'danger',
+                duration: toFiniteNumber(this.#animation.HEAL_TEXT_SECONDS, 0.62),
+                sourceEventType: 'action-failed'
+            }));
         }
         for (const event of toEventList(events)) {
             this.#appendEventCues(cues, event, tracker, next);
@@ -167,6 +175,16 @@ export class TutorialBattlePresenter {
             break;
         case 'instability-changed':
             this.#appendInstabilityCues(cues, event, tracker, next);
+            break;
+        case 'peace':
+            cues.push(freezeCue({
+                type: CUE_TYPES.FLOATING_TEXT,
+                actorId: 'lora',
+                text: '무공격',
+                tone: 'success',
+                duration: toFiniteNumber(this.#animation.HEAL_TEXT_SECONDS, 0.62),
+                sourceEventType: event.type
+            }));
             break;
         case 'item-picked':
             cues.push(freezeCue({
@@ -371,6 +389,16 @@ export class TutorialBattlePresenter {
             duration: toFiniteNumber(this.#animation.GAUGE_SECONDS, 0.26),
             sourceEventType: event.type
         }));
+        if (change !== 0) {
+            cues.push(freezeCue({
+                type: CUE_TYPES.FLOATING_TEXT,
+                actorId: 'lora',
+                text: (change > 0 ? '+' : '') + String(Math.round(change)),
+                tone: change < 0 ? 'success' : 'danger',
+                duration: toFiniteNumber(this.#animation.HEAL_TEXT_SECONDS, 0.62),
+                sourceEventType: event.type
+            }));
+        }
         if (change < 0) {
             cues.push(freezeCue({
                 type: CUE_TYPES.STABILIZE,

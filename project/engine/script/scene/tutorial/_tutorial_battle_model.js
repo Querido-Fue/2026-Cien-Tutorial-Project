@@ -690,11 +690,13 @@ export class TutorialBattleModel {
 
     /**
      * 다음 로라 행동과 예상 피해를 모델 상태 변경 없이 반환합니다.
+     * @param {{allowForecast?:boolean}} [options={}] - 플레이어 턴 현재 상태 기준 예고 허용 여부입니다.
      * @returns {object} 상태·대상·피해·reason ID를 가진 의도입니다.
      */
-    getLoraIntent() {
+    getLoraIntent(options = {}) {
         return this.#cloneValue(this.#loraIntentPlanner.getIntent(
-            this.#createCombatPlanningState()
+            this.#createCombatPlanningState(),
+            { allowForecast: options.allowForecast === true }
         ));
     }
 

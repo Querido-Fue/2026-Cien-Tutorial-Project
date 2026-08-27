@@ -94,6 +94,10 @@ export class TutorialBattleWorldView {
             return;
         }
 
+        if (!world.attackSelected && !world.cleanseSelected) {
+            this.#drawLoraIntentRange(boardTiles);
+        }
+
         if (snapshot.phase === 'move') {
             for (const extension of world.pathExtensions) {
                 extension.forEach((tile, index) => {
@@ -213,6 +217,34 @@ export class TutorialBattleWorldView {
                 'center'
             );
         });
+    }
+
+    /**
+     * 다음 로라 행동의 근접 타일 또는 전장 전체 범위를 낮은 강조도로 그립니다.
+     * @param {{x:number,y:number}[]} boardTiles - 현재 보드 전체 타일입니다.
+     * @private
+     */
+    #drawLoraIntentRange(boardTiles) {
+        const { colors, layout, world } = this.#frame;
+        const intent = world.readability?.loraIntent;
+        if (!intent?.ok || intent.actionType === 'none') {
+            return;
+        }
+        const tiles = intent.affectsAll
+            ? boardTiles
+            : toBattleViewList(intent.affectedTiles);
+        for (const tile of tiles) {
+            const point = this.#projectTile(tile.x, tile.y);
+            this.#renderPort.renderGL('background', {
+                shape: 'diamond',
+                x: point.x,
+                y: point.y,
+                w: layout.tileWidth * 0.82,
+                h: layout.tileHeight * 0.82,
+                fill: colors.Tile.Attack,
+                alpha: intent.affectsAll ? 0.07 : 0.24
+            });
+        }
     }
 
     /** 현재 층 오브젝트와 액터를 깊이 순서로 그립니다. @private */
@@ -417,7 +449,10 @@ export class TutorialBattleWorldView {
             presentation.playerHp,
             player.maxHp || 100,
             size,
-            alpha
+            alpha,
+            world.readability?.playerPreview?.available
+                ? world.readability.playerPreview.expected?.playerHp
+                : null
         );
     }
 
@@ -493,7 +528,11 @@ export class TutorialBattleWorldView {
             point.y - (size * 0.68),
             world.presentation.loraHp,
             lora.maxHp || 100,
-            size * 1.08
+            size * 1.08,
+            1,
+            world.readability?.playerPreview?.available
+                ? world.readability.playerPreview.expected?.loraHp
+                : null
         );
     }
 
@@ -513,11 +552,21 @@ export class TutorialBattleWorldView {
     }
 
     /** 월드 HP 막대를 그립니다. @private */
-    #drawWorldHp(x, y, hp, maxHp, width, alpha = 1) {
+    #drawWorldHp(x, y, hp, maxHp, width, alpha = 1, pendingHp = null) {
         const colors = this.#frame.colors;
         const ratio = clampBattleViewNumber(Number(hp) / Math.max(1, Number(maxHp)), 0, 1);
+        const pendingRatio = pendingHp !== null
+            && pendingHp !== undefined
+            && Number.isFinite(Number(pendingHp))
+            ? clampBattleViewNumber(
+                Number(pendingHp) / Math.max(1, Number(maxHp)),
+                0,
+                1
+            )
+            : ratio;
+        const height = Math.max(2, width * 0.09);
         this.#renderPort.renderGL('object', {
-            shape: 'rect', x, y, w: width, h: Math.max(2, width * 0.09),
+            shape: 'rect', x, y, w: width, h: height,
             fill: colors.UI.HpEmpty, alpha
         });
         if (ratio > 0) {
@@ -526,8 +575,23 @@ export class TutorialBattleWorldView {
                 x: x - (width * 0.5) + ((width * ratio) * 0.5),
                 y,
                 w: width * ratio,
-                h: Math.max(2, width * 0.09),
+                h: height,
                 fill: colors.UI.HpFull,
+                alpha
+            });
+        }
+        if (Math.abs(pendingRatio - ratio) > 0.0001) {
+            const startRatio = Math.min(ratio, pendingRatio);
+            const segmentRatio = Math.abs(pendingRatio - ratio);
+            this.#renderPort.renderGL('object', {
+                shape: 'rect',
+                x: x - (width * 0.5)
+                    + (width * startRatio)
+                    + ((width * segmentRatio) * 0.5),
+                y,
+                w: width * segmentRatio,
+                h: height,
+                fill: pendingRatio > ratio ? colors.UI.Success : colors.UI.Danger,
                 alpha
             });
         }

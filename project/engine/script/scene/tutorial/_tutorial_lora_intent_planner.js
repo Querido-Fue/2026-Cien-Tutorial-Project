@@ -42,14 +42,23 @@ export class TutorialLoraIntentPlanner {
     /**
      * 다음 로라 행동과 피해를 안정된 reason ID로 반환합니다.
      * @param {object} state - 읽기 전용 전투 상태입니다.
+     * @param {{allowForecast?:boolean}} [options={}] - 플레이어 턴 현재 상태 기준 예고 허용 여부입니다.
      * @returns {object} 상태·대상·범위·피해 계산을 가진 의도입니다.
      */
-    getIntent(state) {
+    getIntent(state, options = {}) {
         const draft = this.#rules.createDraft(state);
         const currentState = this.#getInstabilityState(draft.lora.instability);
+        const activeLoraTurn = draft.turn === 'lora'
+            && draft.phase === 'lora'
+            && !draft.result;
+        const forecast = options.allowForecast === true
+            && draft.turn === 'player'
+            && (draft.phase === 'move' || draft.phase === 'action')
+            && !draft.result;
         const base = {
             ok: false,
             reason: 'not-lora-turn',
+            forecast,
             actionType: 'none',
             executionAction: 'none',
             stateId: currentState?.id ?? null,
@@ -73,10 +82,10 @@ export class TutorialLoraIntentPlanner {
             passiveChanges: [],
             damageCalculation: null
         };
-        if (draft.turn !== 'lora' || draft.phase !== 'lora' || draft.result) {
+        if (!activeLoraTurn && !forecast) {
             return base;
         }
-        if (draft.loraTurnPerformed) {
+        if (activeLoraTurn && draft.loraTurnPerformed) {
             return { ...base, reason: 'lora-turn-already-performed' };
         }
 

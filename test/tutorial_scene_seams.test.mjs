@@ -26,6 +26,11 @@ import {
     toList,
     toTileKey
 } from '../project/engine/script/scene/tutorial/_tutorial_value_utils.js';
+import {
+    TUTORIAL_META_VERSION,
+    markTutorialCombatGuideSeen,
+    normalizeTutorialMeta
+} from '../project/engine/script/scene/tutorial/_tutorial_meta_progress.js';
 
 const EXPECTED_MODES = Object.freeze({
     LOADING: 'loading',
@@ -57,8 +62,11 @@ const EXPECTED_COMMANDS = Object.freeze({
     IDLE: 'tutorial/idle',
     USE_ITEM: 'tutorial/use-item',
     INVENTORY_PAGE_SHIFT: 'tutorial/inventory-page-shift',
+    FOCUS_SHIFT: 'tutorial/focus-shift',
     SELECT_CLEANSE: 'tutorial/select-cleanse',
     CLEANSE_EVENT_TILE: 'tutorial/cleanse-event-tile',
+    GUIDE_SHOW: 'tutorial/guide-show',
+    GUIDE_DISMISS: 'tutorial/guide-dismiss',
     PERFORM_LORA: 'tutorial/perform-lora',
     COMPLETE_LORA: 'tutorial/complete-lora'
 });
@@ -148,6 +156,15 @@ test('범용 방어 복제는 배열·Map·Set·순환 참조를 독립 복제�
     assert.equal(original.entries[0].value, 1);
     assert.equal(areSerializableValuesEqual({ a: [1] }, { a: [1] }), true);
     assert.equal(areSerializableValuesEqual({ a: [1] }, { a: [2] }), false);
+});
+
+test('구버전 메타는 전투 안내 미확인으로 이관되고 확인 상태는 새 객체에 기록된다', () => {
+    const migrated = normalizeTutorialMeta({ version: 1, playCount: 2 });
+    assert.equal(migrated.version, TUTORIAL_META_VERSION);
+    assert.equal(migrated.combatGuideSeen, false);
+    const seen = markTutorialCombatGuideSeen(migrated);
+    assert.equal(seen.combatGuideSeen, true);
+    assert.equal(migrated.combatGuideSeen, false);
 });
 
 test('모드 정책 표는 기존 표시·복귀·재시작·전투 입력 경계를 보존한다', () => {

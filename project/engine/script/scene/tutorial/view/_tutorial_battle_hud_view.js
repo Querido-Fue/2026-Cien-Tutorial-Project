@@ -140,6 +140,8 @@ export class TutorialBattleHudView {
                     label: spec.label,
                     enabled: spec.enabled,
                     active: spec.active,
+                    focused: hud.focusedControlKey === 'battle-' + spec.key,
+                    inspectable: true,
                     command: { type: spec.type, payload: spec.payload }
                 });
             });
@@ -240,9 +242,7 @@ export class TutorialBattleHudView {
                     ? this.#uww(itemAtlas.BUTTON_ICON_GAP_UIWW)
                     : 0;
                 const countLabel = ' ×' + String(entry.count);
-                const displayLabel = entry.movementConsumable
-                    ? '[이동] ' + entry.label
-                    : entry.label;
+                const displayLabel = '[' + entry.statusLabel + '] ' + entry.label;
                 const label = truncateBattleViewText(
                     this.#renderPort,
                     displayLabel,
@@ -267,6 +267,8 @@ export class TutorialBattleHudView {
                     itemSpacing: iconGap,
                     enabled: entry.usable,
                     active: entry.movementConsumable && hud.cleanseSelected,
+                    focused: hud.focusedControlKey === 'item-' + entry.itemId,
+                    inspectable: true,
                     idleColor: colors.UI.CardHeader,
                     hoverColor: colors.UI.ButtonHover,
                     command: {
@@ -471,51 +473,89 @@ export class TutorialBattleHudView {
         const loraHp = Math.max(0, Number(world.presentation.loraHp) || 0);
         const loraMaxHp = Math.max(1, Number(snapshot.lora?.maxHp) || 100);
         const instability = clampBattleViewNumber(world.presentation.instability, 0, 100);
+        const preview = hud.readability?.playerPreview;
+        const expectedLoraHp = preview?.available
+            ? Math.max(0, Number(preview.expected?.loraHp) || 0)
+            : loraHp;
+        const expectedInstability = preview?.available
+            ? clampBattleViewNumber(preview.expected?.instability, 0, 100)
+            : instability;
         const gaugeH = clampBattleViewNumber(rect.h * 0.055, 7, 12);
         const hpLabelY = rect.y + (rect.h * 0.48);
         this.#drawText(
-            'ui', 'HP  ' + String(Math.round(loraHp)) + '/' + String(loraMaxHp),
+            'ui', 'HP  ' + this.#formatTransition(loraHp, expectedLoraHp)
+                + '/' + String(loraMaxHp),
             contentX, hpLabelY, fonts.SMALL, colors.UI.Text
         );
         this.#drawGauge(
             contentX, rect.y + (rect.h * 0.57), contentW, gaugeH,
-            loraHp / loraMaxHp, colors.UI.GaugeHp
+            loraHp / loraMaxHp, colors.UI.GaugeHp, expectedLoraHp / loraMaxHp
         );
         this.#drawText(
-            'ui', '불안정도  ' + String(Math.round(instability)),
+            'ui', '불안정도  ' + this.#formatTransition(instability, expectedInstability),
             contentX, rect.y + (rect.h * 0.73), fonts.SMALL, colors.UI.Text
         );
         this.#drawGauge(
             contentX, rect.y + (rect.h * 0.82), contentW, gaugeH,
-            instability / 100, colors.UI.GaugeInstability
+            instability / 100, colors.UI.GaugeInstability, expectedInstability / 100
         );
     }
 
-    /** 목표와 최근 이벤트 카드를 그립니다. @private */
+    /** 다음 로라 행동, 선택 행동 미리보기와 조사 아이템을 그립니다. @private */
     #drawMissionCard() {
         const { colors, fonts, hud, layout, snapshot } = this.#frame;
         const rect = layout.hudRects.MISSION_CARD;
         const pad = clampBattleViewNumber(rect.w * 0.07, 14, 22);
-        const lineH = clampBattleViewNumber(this.#uwh(2.7), 18, 30);
+        const lineH = clampBattleViewNumber(this.#uwh(2.45), 17, 27);
+        const maxW = rect.w - (pad * 2);
+        const intent = hud.readability?.loraIntent || {};
+        const preview = hud.readability?.playerPreview || {};
+        const inspectedItem = hud.readability?.inspectedItem || null;
         this.#drawHudCard(rect);
         let y = rect.y + pad;
         this.#drawText(
-            'ui', 'MISSION  ·  ' + hud.config.text.CORE_LOOP,
+            'ui', 'NEXT LORA' + (intent.forecast ? ' · 현재 기준' : ''),
             rect.x + pad, y, fonts.SMALL, colors.UI.Primary
         );
-        y += lineH * 1.4;
-        const objectiveLines = wrapBattleViewText(
-            this.#renderPort,
-            hud.config.text.OBJECTIVE,
-            fonts.SMALL,
-            rect.w - (pad * 2),
-            3
+        y += lineH * 1.25;
+        this.#drawText(
+            'ui',
+            truncateBattleViewText(
+                this.#renderPort,
+                intent.actionLabel + ' · ' + intent.stateLabel,
+                fonts.BODY,
+                maxW
+            ),
+            rect.x + pad,
+            y,
+            fonts.BODY,
+            colors.UI.Text
         );
-        objectiveLines.forEach((line) => {
-            this.#drawText('ui', line, rect.x + pad, y, fonts.SMALL, colors.UI.Text);
-            y += lineH;
-        });
-        y += lineH * 0.35;
+        y += lineH;
+        this.#drawText(
+            'ui',
+            '예상 피해 ' + String(Math.round(Number(intent.finalDamage) || 0))
+                + ' · 범위 ' + String(intent.rangeLabel || '없음'),
+            rect.x + pad,
+            y,
+            fonts.SMALL,
+            Number(intent.finalDamage) > 0 ? colors.UI.Danger : colors.UI.Success
+        );
+        y += lineH;
+        this.#drawText(
+            'ui',
+            truncateBattleViewText(
+                this.#renderPort,
+                String(intent.reasonLabel || ''),
+                fonts.SMALL,
+                maxW
+            ),
+            rect.x + pad,
+            y,
+            fonts.SMALL,
+            colors.UI.Muted
+        );
+        y += lineH * 0.8;
         this.#renderPort.render('ui', {
             shape: 'rect',
             x: rect.x + pad,
@@ -524,19 +564,101 @@ export class TutorialBattleHudView {
             h: 1,
             fill: colors.UI.Border
         });
+        y += lineH * 0.9;
+        this.#drawText(
+            'ui',
+            'ACTION PREVIEW · ' + String(preview.title || '선택 없음'),
+            rect.x + pad,
+            y,
+            fonts.SMALL,
+            colors.UI.Primary
+        );
         y += lineH;
-        this.#drawText('ui', '최근 이벤트', rect.x + pad, y, fonts.BODY, colors.UI.Text);
-        y += lineH * 1.25;
-        hud.eventLog.slice(-3).forEach((entry) => {
-            const line = truncateBattleViewText(
-                this.#renderPort,
-                '· ' + entry,
+        const hpLine = '로라 HP '
+            + this.#formatTransition(preview.before?.loraHp, preview.expected?.loraHp)
+            + ' · 내 HP '
+            + this.#formatTransition(preview.before?.playerHp, preview.expected?.playerHp);
+        this.#drawText(
+            'ui',
+            truncateBattleViewText(this.#renderPort, hpLine, fonts.SMALL, maxW),
+            rect.x + pad,
+            y,
+            fonts.SMALL,
+            colors.UI.Text
+        );
+        y += lineH;
+        this.#drawText(
+            'ui',
+            '불안정 '
+                + this.#formatTransition(
+                    preview.before?.instability,
+                    preview.expected?.instability
+                ),
+            rect.x + pad,
+            y,
+            fonts.SMALL,
+            colors.UI.Text
+        );
+        y += lineH;
+        const consumedLine = '소모 ' + String(preview.consumedItemLabel || '없음')
+            + (Number(preview.consumedItemCount) > 0
+                ? ' ×' + String(preview.consumedItemCount)
+                : '')
+            + ' · ' + String(preview.persistentLabel || '연속 공격 0회');
+        this.#drawText(
+            'ui',
+            truncateBattleViewText(this.#renderPort, consumedLine, fonts.SMALL, maxW),
+            rect.x + pad,
+            y,
+            fonts.SMALL,
+            colors.UI.Muted
+        );
+        y += lineH;
+        if (!inspectedItem) {
+            this.#drawText(
+                'ui',
+                truncateBattleViewText(
+                    this.#renderPort,
+                    String(preview.reasonLabel || ''),
+                    fonts.SMALL,
+                    maxW
+                ),
+                rect.x + pad,
+                y,
                 fonts.SMALL,
-                rect.w - (pad * 2)
+                preview.ok === false && preview.available
+                    ? colors.UI.Warning
+                    : colors.UI.Muted
             );
-            this.#drawText('ui', line, rect.x + pad, y, fonts.SMALL, colors.UI.Muted);
+        } else {
+            const itemTitle = 'ITEM · ' + inspectedItem.label
+                + ' ×' + String(inspectedItem.count)
+                + ' [' + inspectedItem.statusLabel + ']';
+            this.#drawText(
+                'ui',
+                truncateBattleViewText(this.#renderPort, itemTitle, fonts.SMALL, maxW),
+                rect.x + pad,
+                y,
+                fonts.SMALL,
+                colors.UI.Accent
+            );
             y += lineH;
-        });
+            wrapBattleViewText(
+                this.#renderPort,
+                inspectedItem.description,
+                fonts.SMALL,
+                maxW,
+                2
+            ).forEach((line) => {
+                const detailBottom = rect.y + rect.h - pad - (lineH * 1.2);
+                if (y < detailBottom) {
+                    this.#drawText(
+                        'ui', line, rect.x + pad, y, fonts.SMALL, colors.UI.Text
+                    );
+                    y += lineH;
+                }
+            });
+        }
         const statusLine = snapshot.phase === 'move'
             ? '이동 ' + String(hud.movePreview?.stepsUsed || 0)
                 + '/' + String(hud.movePreview?.moveRange || hud.config.playerMoveRange)
@@ -566,20 +688,26 @@ export class TutorialBattleHudView {
 
     /** 플레이어 HP 라벨과 게이지를 그립니다. @private */
     #drawPlayerStatus() {
-        const { colors, fonts, layout, snapshot, world } = this.#frame;
+        const { colors, fonts, hud, layout, snapshot, world } = this.#frame;
         const rect = layout.hudRects.PLAYER_STATUS;
         const playerHp = Math.max(0, Number(world.presentation.playerHp) || 0);
         const playerMaxHp = Math.max(1, Number(snapshot.player?.maxHp) || 100);
+        const preview = hud.readability?.playerPreview;
+        const expectedPlayerHp = preview?.available
+            ? Math.max(0, Number(preview.expected?.playerHp) || 0)
+            : playerHp;
         const gaugeH = clampBattleViewNumber(rect.h * 0.24, 8, 12);
         this.#drawText('ui', 'HP', rect.x, rect.y + (rect.h * 0.28), fonts.BODY, colors.UI.Text);
         this.#drawText(
-            'ui', String(Math.round(playerHp)) + '/' + String(playerMaxHp),
+            'ui', this.#formatTransition(playerHp, expectedPlayerHp)
+                + '/' + String(playerMaxHp),
             rect.x + rect.w, rect.y + (rect.h * 0.28),
             fonts.MONO, colors.UI.Muted, 'right'
         );
         this.#drawGauge(
             rect.x, rect.y + rect.h - gaugeH, rect.w, gaugeH,
-            playerHp / playerMaxHp, colors.UI.GaugeHp
+            playerHp / playerMaxHp, colors.UI.GaugeHp,
+            expectedPlayerHp / playerMaxHp
         );
     }
 
@@ -618,10 +746,15 @@ export class TutorialBattleHudView {
         });
     }
 
-    /** 지정 비율만큼 채운 둥근 게이지를 그립니다. @private */
-    #drawGauge(x, y, w, h, ratio, fill) {
+    /** 현재값과 선택 행동의 예상 구간을 함께 그립니다. @private */
+    #drawGauge(x, y, w, h, ratio, fill, pendingRatio = null) {
         const colors = this.#frame.colors;
         const safeRatio = clampBattleViewNumber(ratio, 0, 1);
+        const safePending = pendingRatio !== null
+            && pendingRatio !== undefined
+            && Number.isFinite(Number(pendingRatio))
+            ? clampBattleViewNumber(pendingRatio, 0, 1)
+            : safeRatio;
         this.#renderPort.render('ui', {
             shape: 'roundRect', x, y, w, h,
             radius: h * 0.5, fill: colors.UI.GaugeTrack
@@ -632,6 +765,26 @@ export class TutorialBattleHudView {
                 radius: h * 0.5, fill
             });
         }
+        if (Math.abs(safePending - safeRatio) > 0.0001) {
+            const startRatio = Math.min(safeRatio, safePending);
+            const segmentRatio = Math.abs(safePending - safeRatio);
+            this.#renderPort.render('ui', {
+                shape: 'roundRect',
+                x: x + (w * startRatio),
+                y,
+                w: w * segmentRatio,
+                h,
+                radius: Math.min(h * 0.5, w * segmentRatio * 0.5),
+                fill: safePending > safeRatio ? colors.UI.Success : colors.UI.Danger
+            });
+        }
+    }
+
+    /** @param {*} before @param {*} expected @returns {string} 현재→예상 표시입니다. @private */
+    #formatTransition(before, expected) {
+        const current = Math.round(Number(before) || 0);
+        const next = Math.round(Number(expected) || 0);
+        return current === next ? String(current) : String(current) + '→' + String(next);
     }
 
     /** UI 기준 너비 백분율을 픽셀로 변환합니다. @private */

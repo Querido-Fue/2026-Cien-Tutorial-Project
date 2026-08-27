@@ -201,6 +201,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         bow: {
             id: 'bow',
             label: '활과 화살',
+            description: '로라가 더 불안정해지고 공격이 강해지지만, 거리 제약 없이 공격할 수 있습니다.',
             category: 'starter',
             passive: true,
             effect: { type: 'bow', rangedDamage: 30 }
@@ -208,6 +209,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         'mascot-costume': {
             id: 'mascot-costume',
             label: '인형탈',
+            description: '받는 피해를 줄이고, 플레이어 턴 종료마다 로라를 안정시킵니다.',
             category: 'starter',
             passive: true,
             effect: { type: 'mascot-costume', damageReduction: 10, turnEndInstabilityReduction: 5 }
@@ -215,6 +217,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         'old-teddy': {
             id: 'old-teddy',
             label: '낡은 곰인형',
+            description: '소지하면 받는 피해와 공격력이 감소하고, 사용하면 로라를 크게 안정시킵니다.',
             category: 'interaction',
             passive: true,
             useOnce: true,
@@ -228,6 +231,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         'music-box': {
             id: 'music-box',
             label: '오르골',
+            description: '2턴 동안 모두 공격할 수 없는 평화 모드가 됩니다.',
             category: 'interaction',
             consumable: true,
             effect: { type: 'music-box', durationLoraTurns: 2, instabilityReductionPerTurn: 20 }
@@ -235,6 +239,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         eyeliner: {
             id: 'eyeliner',
             label: '아이라인',
+            description: '사용하면 로라의 불안정 수치가 감소합니다.',
             category: 'interaction',
             consumable: true,
             effect: { type: 'eyeliner', instabilityReduction: 15 }
@@ -242,6 +247,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         'diamond-pickaxe': {
             id: 'diamond-pickaxe',
             label: '다이아몬드 곡괭이',
+            description: '벽을 넘어서 이동할 수 있습니다.',
             category: 'compatible',
             passive: true,
             effect: { type: 'diamond-pickaxe' }
@@ -249,6 +255,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         mirror: {
             id: 'mirror',
             label: '거울',
+            description: '사용하면 로라가 1턴 동안 아무 행동도 하지 않습니다.',
             category: 'interaction',
             consumable: true,
             effect: { type: 'mirror', extraPlayerTurns: 1 }
@@ -256,6 +263,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         mushroom: {
             id: 'mushroom',
             label: '마리오의 버섯',
+            description: '이동·공격이 2배가 되며 피해를 받으면 끝납니다.',
             category: 'compatible',
             consumable: true,
             effect: { type: 'mushroom', moveMultiplier: 2, attackMultiplier: 2 }
@@ -263,6 +271,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         ocarina: {
             id: 'ocarina',
             label: '링크의 오카리나',
+            description: '소지하면 로라의 불안정 수치가 증가하지 않습니다.',
             category: 'compatible',
             passive: true,
             effect: { type: 'ocarina' }
@@ -270,6 +279,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         haste: {
             id: 'haste',
             label: '메이플스토리의 헤이스트',
+            description: '한 턴에 행동을 두 번 할 수 있습니다.',
             category: 'compatible',
             passive: true,
             effect: { type: 'haste', actionCountBonus: 1 }
@@ -277,6 +287,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         'memory-photo': {
             id: 'memory-photo',
             label: '알파와 같이 찍은 사진',
+            description: '사용하면 로라의 현재 불안정 수치가 절반으로 감소합니다.',
             category: 'interaction',
             consumable: true,
             effect: { type: 'memory-photo', instabilityRatio: 0.5 }
@@ -284,6 +295,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         'tile-cleanser': {
             id: 'tile-cleanser',
             label: '타일 정화제',
+            description: '페널티 이벤트 타일을 보너스 이벤트 타일로 바꿉니다.',
             category: 'compatible',
             consumable: true,
             movementConsumable: true,
@@ -378,7 +390,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
             SECONDARY_ACTIONS: { X_UIWW: 32.5, Y_WH: 87, WIDTH_UIWW: 43, HEIGHT_WH: 9 },
             PRIMARY_ACTION: { X_UIWW: 78, Y_WH: 87, WIDTH_UIWW: 19, HEIGHT_WH: 9 }
         },
-        MODAL: { WIDTH_UIWW: 38, HEIGHT_WH: 34, RADIUS_WH: 2 }
+        MODAL: { WIDTH_UIWW: 42, HEIGHT_WH: 46, RADIUS_WH: 2 }
     },
     ANIMATION: {
         EASING: 'easeOutExpo',
@@ -432,6 +444,33 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
             CLEANSE: '타일 정화',
             STAY: '제자리 이동',
             RESTART: '스타터 다시 선택'
+        },
+        TUTORIAL_GUIDE: {
+            TITLE: '전투 안내',
+            SENTENCES: [
+                '업적을 달성하면 이곳에 표시됩니다.',
+                '로라의 체력, 불안정 수치를 확인할 수 있습니다.',
+                '매턴 최대 4칸 이동할 수 있습니다.'
+            ],
+            REPLAY: 'H로 언제든 다시 열 수 있습니다.'
+        },
+        COMBAT_REASONS: {
+            'action-available': '선택한 행동을 사용할 수 있습니다.',
+            'action-unavailable': '행동 단계에서 사용할 수 있습니다.',
+            'peace-active': '평화 효과로 로라가 공격하지 않습니다.',
+            'invalid-target': '현재 선택에는 유효한 대상이 없습니다.',
+            'item-not-owned': '보유하지 않은 아이템입니다.',
+            'passive-item': '자동으로 적용되는 아이템입니다.',
+            'movement-item': '이동 단계에서 사용하는 아이템입니다.',
+            'item-already-used': '이번 전투에서 이미 사용했습니다.',
+            'unsupported-item-effect': '현재 사용할 수 없는 효과입니다.',
+            'unsupported-action': '지원하지 않는 행동입니다.',
+            'not-lora-turn': '로라 행동을 기다리는 중입니다.',
+            'lora-turn-already-performed': '이번 로라 행동은 끝났습니다.',
+            'state-no-damage': '현재 상태에서는 로라가 공격하지 않습니다.',
+            'player-in-melee-range': '플레이어가 근접 범위에 있습니다.',
+            'player-outside-melee-range': '플레이어가 멀어 전체 공격을 준비합니다.',
+            'movement-preview': '이동 확정 후 행동을 선택하세요.'
         }
     }
 });
