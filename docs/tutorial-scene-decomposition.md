@@ -6,22 +6,25 @@
 장면은 최종적으로 `BaseScene` 생명주기와 명령 조율만 소유하고, 입력·뷰·버튼·표현·에셋은
 각각 한 책임을 가진 모듈로 이동한다.
 
-| 항목 | 분리 전 기준 | Turn 03 결과 | Turn 04 결과 | Turn 05 결과 |
-| --- | ---: | ---: | ---: | ---: |
-| 기준 커밋 | `253507b` | `1f0711e` | `cf9736a` | Turn 05 작업 트리 |
-| `_tutorial_scene.js` 줄 수 | 5,024 | 4,883 | 4,458 | 3,119 |
-| private 메서드 수 | 136 | 136 | 128 | 100 |
-| 장면 내부 모드·명령·키 상수 | 있음 | 제거 | 제거 유지 | 제거 유지 |
-| 장면 내부 좌표·복제 유틸 | 있음 | 제거 | 제거 유지 | 제거 유지 |
-| 장면 내부 비전투 draw 구현 | 6개 | 6개 | 0개 | 0개 |
-| 장면 내부 전투 draw 구현 | 있음 | 있음 | 있음 | 0개 |
-| 장면의 전투 투영·HUD 좌표 소유 | 있음 | 있음 | 있음 | 제거 |
-| 장면의 UI 풀 소유 | 있음 | 있음 | 제거 | 제거 유지 |
+| 항목 | 분리 전 기준 | Turn 03 결과 | Turn 04 결과 | Turn 05 결과 | Turn 06 결과 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 기준 커밋 | `253507b` | `1f0711e` | `cf9736a` | `cd8069e` | Turn 06 작업 트리 |
+| `_tutorial_scene.js` 줄 수 | 5,024 | 4,883 | 4,458 | 3,119 | 2,426 |
+| private 메서드 수 | 136 | 136 | 128 | 100 | 81 |
+| 장면 내부 모드·명령·키 상수 | 있음 | 제거 | 제거 유지 | 제거 유지 | 제거 유지 |
+| 장면 내부 좌표·복제 유틸 | 있음 | 제거 | 제거 유지 | 제거 유지 | 제거 유지 |
+| 장면 내부 비전투 draw 구현 | 6개 | 6개 | 0개 | 0개 | 0개 |
+| 장면 내부 전투 draw 구현 | 있음 | 있음 | 있음 | 0개 | 0개 |
+| 장면의 전투 투영·HUD 좌표 소유 | 있음 | 있음 | 있음 | 제거 | 제거 유지 |
+| 장면의 UI 풀 소유 | 있음 | 있음 | 제거 | 제거 유지 | 제거 유지 |
+| 장면의 모델 event 해석 | 있음 | 있음 | 있음 | 있음 | 제거 |
+| 장면의 이미지 로딩·atlas 분할 | 있음 | 있음 | 있음 | 있음 | 제거 |
 
 Turn 04에서 비전투 렌더링과 버튼 풀 수명주기를 이동했고, Turn 05에서 전투 레이아웃,
-월드, HUD, 피드백 렌더링을 실제 클래스로 이동했다. 장면에는 프레젠테이션 타임라인과
-에셋 수명주기가 남아 있으며 Turn 06에서 이어서 분리한다. 다음 불변 조건은 모든 분리
-단계에서 유지한다.
+월드, HUD, 피드백 렌더링을 실제 클래스로 이동했다. Turn 06에서는 모델 event 해석,
+피드백 큐, 애니메이션 타임라인, 이미지·atlas 수명주기를 각각 전용 모듈로 옮겼다. 장면에
+남은 큰 책임은 입력 변환, 모델 명령 조율, 메타 저장, view model 조립이다. 다음 불변 조건은
+모든 분리 단계에서 유지한다.
 
 - 전투 판정은 `TutorialBattleModel`과 `TUTORIAL_GAME_DATA`만 결정한다.
 - `update()`는 입력 의도를 명령 큐에 넣고, 상태 변경은 `applySimulationCommands()`에서 한다.
@@ -29,7 +32,7 @@ Turn 04에서 비전투 렌더링과 버튼 풀 수명주기를 이동했고, Tu
 - 좌표, 레이아웃, 색상, 밸런스, 문구와 공개 모델 API를 분리 편의를 위해 변경하지 않는다.
 - 새 클래스는 파일당 하나만 두고, 순수 값 모듈에는 불필요한 클래스 래퍼를 만들지 않는다.
 
-## 2. 이번 턴에 만든 단방향 seam
+## 2. 기초 단방향 seam
 
 ```text
 TutorialScene
@@ -58,9 +61,9 @@ import하지 않고, 모드 정책만 모드 상수를 참조한다.
 | 입력 | 모드 정책, 모델 phase, 선택 대상, 마우스 focus | 키 latch/edge, hover, 대상 index, 명령 큐 | `input_system`, 입력 바인딩, command queue |
 | 모델 조율 | `model`, 계획 경로, 선택 상태, 캐시 | 모델 공개 API를 통한 상태 변경, 캐시, 결과 진입 | `TutorialBattleModel` 공개 API |
 | 저장·메타 | `meta`, 모델 snapshot, 결과 | `meta`, `committedMeta`, `metaStaging`, `saveSequence` | `_tutorial_meta_progress.js` |
-| 프레젠테이션 | 모델 결과·event, `presentation`, 타임라인 | 애니메이션 slot, 잠금, 피드백 수명, floor view | `animation_system`, 향후 presenter/queue |
+| 프레젠테이션 | 모델 결과·전후 snapshot, cue, floor view | 장면은 floor snapshot 교체만 조율 | presenter, feedback queue, animation timeline |
 | 렌더·레이아웃 | 읽기 전용 모델/표현 상태, viewport, 데이터 | viewport 파생값과 렌더 명령만 | display, theme, font util |
-| 에셋 | 데이터의 asset 경로, `destroyed` | 이미지 readiness, atlas canvas cache | `Image`, DOM canvas |
+| 에셋 | 데이터의 asset 경로 | 장면은 loader 생성·조회·정리만 조율 | `TutorialAssetLoader`, asset port |
 | 버튼 | 모드·모델·선택·인벤토리, viewport | 풀 소유 목록, 서명, page, UI 소비 플래그 | `UIPool`, `releaseUIItem` |
 
 ### 3.1 흐름·생명주기 메서드
@@ -83,7 +86,7 @@ import하지 않고, 모드 정책만 모드 상수를 참조한다.
 - `#wasKeyPressed`, `#wasAnyKeyPressed`, `#prepareKeyboardEdges`, `#captureKeyboardLatch`
 - 공간 판정: `TutorialBattleLayout.hitTestTile(#createBattleLayoutFrame(), x, y)`
 
-입력은 `mode`, `presentationLocked`, `cutscenes`, 모델 phase, 계획 경로와 선택 대상을 읽는다.
+입력은 `mode`, `presentationTimeline.isLocked()`, `cutscenes`, 모델 phase, 계획 경로와 선택 대상을 읽는다.
 `keyboardLatch`, `keyboardPressObserved`, `frameKeyEdges`, `lastKeyboardEventTimestamp`,
 `hoveredTile`, `hoveredTileKey`, `targetIndex`, `cleanseTargetIndex`, `uiActionHandled`를 쓰고
 실제 게임 의도는 `enqueueSimulationCommand()`로만 내보낸다.
@@ -116,17 +119,15 @@ import하지 않고, 모드 정책만 모드 상수를 참조한다.
 
 ### 3.5 프레젠테이션 메서드
 
-- 애니메이션: `#animateSlot`, `#clearOwnedAnimations`, `#startSelectionAnimation`,
-  `#animateHudToModel`, `#startActionPresentation`, `#startPlayerPathPresentation`,
-  `#animatePlayerRoute`, `#animateTeleportTo`, `#animateFloorSwapTo`,
-  `#startFloorTransitionPresentation`, `#isTeleportTransition`, `#finishPresentationLock`
-- 피드백: `#consumeEvents`, `#formatEvent`, `#formatReason`, `#spawnEventEffect`,
-  `#spawnPathParticles`, `#updatePresentation`, `#appendEvent`
+- 장면 조율: `#afterModelChange`, `#startFloorTransitionPresentation`, `#appendEvent`
+- event→cue: `TutorialBattlePresenter`
+- cue 순서·수명·오디오 대기열: `TutorialFeedbackQueue`
+- 표시 상태·animation slot·입력 잠금: `TutorialAnimationTimeline`
 
-`presentation`, `presentationLocked`, `ownedAnimationIds`, `animationSlots`,
-`floatingTexts`, `particles`, `screenShakeSeconds`, `stabilizeSeconds`, `flashSeconds`,
-`eventLog`를 읽고 쓴다. Turn 06에서 event→cue 변환, cue 수명, 애니메이션 실행을 각각
-별도 클래스로 분리한다.
+장면은 모델 결과와 전후 snapshot을 프레젠터에 전달하고, 생성된 cue를 큐와 타임라인에
+순서대로 전달한다. 이벤트 문구·피해/회복·불안정도 해석, 일시적 피드백 배열, 애니메이션
+ID와 잠금 토큰은 장면이 소유하지 않는다. 층 전환의 `floorView`/`floorActorView` 교체만 모델
+캐시와 연결되는 작은 callback으로 남긴다. 전체 계약은 `tutorial-presentation-cues.md`에 둔다.
 
 ### 3.6 렌더·레이아웃 메서드
 
@@ -144,12 +145,14 @@ import하지 않고, 모드 정책만 모드 상수를 참조한다.
 
 ### 3.7 에셋 메서드와 상태
 
-- `#isImageReady`, `#sliceItemAtlas`
-- 상태: `loraPortrait`, `itemAtlasImage`, `itemIconCanvases`, `loraSprite`,
-  `loraSpriteReady`, `destroyed`
+- 장면 조율: 생성자에서 데이터 경로를 `loadImage()`/`loadAtlas()`에 전달하고,
+  `destroy()`에서 loader를 정리한다.
+- loader 소유: 이미지 캐시, readiness, `onload`/`onerror`, atlas canvas, 실패 상태와 cleanup
+- 뷰 연결: `getImage()`/`getAtlasCell()`만 노출하는 작은 asset port
 
-현재 생성자와 `destroy()`가 이미지 이벤트 수명까지 직접 관리한다. Turn 06에서 주입 가능한
-이미지 팩토리와 명시적 `destroy()`를 가진 `TutorialAssetLoader` 한 클래스로 이동한다.
+장면에는 `new Image()`, DOM canvas 생성, atlas 좌표 분할 또는 이미지 콜백이 없다.
+`TutorialAssetLoader`는 Image/Canvas 팩토리를 주입받을 수 있으며 실패 시 `null` 폴백과
+직렬화 가능한 상태를 제공한다.
 
 ### 3.8 버튼 메서드와 상태
 
@@ -180,12 +183,13 @@ import하지 않고, 모드 정책만 모드 상수를 참조한다.
 | Turn 05 | `TutorialBattleFeedbackView` | cue의 화면 표시 | feedback snapshot, render port |
 | Turn 06 | `TutorialBattlePresenter` | 모델 event와 snapshot을 결정론적 cue로 변환 | 순수 값만 |
 | Turn 06 | `TutorialFeedbackQueue` | cue 순서·수명·시간 경과 | delta와 cue만 |
+| Turn 06 | `TutorialAnimationTimeline` | 표시 보간·slot·겹친 입력 잠금·취소 | 주입된 animation port와 cue |
 | Turn 06 | `TutorialAssetLoader` | 이미지 캐시·atlas 분할·실패·정리 | 주입된 Image/Canvas 팩토리 |
 
 `TutorialScene`은 위 모듈을 조립하되 모듈 전체가 다시 장면을 받는 God context는 만들지
 않는다. 각 생성자/메서드에는 필요한 작은 포트와 읽기 전용 값만 전달한다.
 
-## 5. Turn 03에서 바꾸지 않은 부분
+## 5. 분리 과정에서 바꾸지 않은 부분
 
 - `TutorialBattleModel` 공개 API, 체크포인트 형식과 전투 밸런스
 - `TUTORIAL_GAME_DATA`, 테마 색상, 레이아웃 수치와 콘텐츠 문구
@@ -244,3 +248,38 @@ TutorialScene
   에셋 로드·실패·정리 수명주기는 다음 분리 대상이다.
 - 화면 문구, 수치, 자산 경로와 전투 규칙을 새로 결정하지 않았으므로 외부 회의 문서 조회는
   필요하지 않았다.
+
+## 8. Turn 06 프레젠테이션·에셋 결과
+
+```text
+TutorialBattleModel result + previous/next snapshot
+                         │
+                         v
+              TutorialBattlePresenter
+                         │ ordered immutable cues
+            ┌────────────┴─────────────┐
+            v                          v
+ TutorialFeedbackQueue      TutorialAnimationTimeline
+ log/transient/audio        gauges/route/floor/lock
+
+TUTORIAL_GAME_DATA asset paths
+              │
+              v
+    TutorialAssetLoader ──> view asset port
+```
+
+- 프레젠터는 모델의 26개 event 타입을 명시적 계약으로 고정하고 동일 입력에 동일한 불변 cue
+  배열을 만든다. 모델·장면·저장·명령 큐를 import하거나 입력 snapshot을 변경하지 않는다.
+- 피드백 큐는 cue에 단조 증가 순번을 부여하고 로그, 떠오르는 글자, 결정론적 경로 입자,
+  흔들림·플래시·안정화 시간과 재생 전 오디오 ID 대기열을 소유한다.
+- 타임라인은 HUD 보간, 선택·행동·경로·텔레포트·층 전환 애니메이션과 animation ID 정리를
+  소유한다. 겹친 연출은 개별 잠금 토큰을 사용해 모두 완료되기 전에 입력이 풀리지 않으며,
+  `cancel()`은 이전 세대 완료 callback을 무효화한다.
+- 에셋 로더는 이미지 상태와 atlas canvas를 ID별로 캐시하고, 실패·팩토리 부재 시 null
+  폴백을 제공한다. 장면과 뷰는 로더의 브라우저 콜백이나 DOM 구현을 알지 못한다.
+- 새 클래스는 파일당 하나이고 프레젠테이션 계약은 클래스 없는 값 모듈이다. 새 모듈은
+  `TutorialScene`, `TutorialBattleModel`, 메타 저장 또는 시뮬레이션 명령 큐를 역참조하지 않는다.
+- 자동 테스트와 NW.js 수동 확인은 사용자의 중단 요청으로 실행하지 않았다. cue 계약,
+  queue 수명, 겹친 잠금, 에셋 성공·실패·정리를 다루는 테스트 소스만 추가했다.
+- 화면 문구, 애니메이션 시간, 자산 경로와 전투 규칙을 새로 결정하지 않아 외부 회의 문서
+  조회는 필요하지 않았다.

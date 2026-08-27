@@ -59,6 +59,10 @@ import {
     toList,
     toTileKey
 } from './_tutorial_value_utils.js';
+import { TutorialAnimationTimeline } from './_tutorial_animation_timeline.js';
+import { TutorialAssetLoader } from './_tutorial_asset_loader.js';
+import { TutorialBattlePresenter } from './_tutorial_battle_presenter.js';
+import { TutorialFeedbackQueue } from './_tutorial_feedback_queue.js';
 import { TutorialBattleFeedbackView } from './view/_tutorial_battle_feedback_view.js';
 import { TutorialBattleHudView } from './view/_tutorial_battle_hud_view.js';
 import { TutorialBattleLayout } from './view/_tutorial_battle_layout.js';
@@ -125,24 +129,7 @@ export class TutorialScene extends BaseScene {
         this.destroyed = false;
         this.saveSequence = Promise.resolve();
         this.timelineRevision = 0;
-        this.ownedAnimationIds = new Set();
-        this.animationSlots = new Map();
-        this.presentationLocked = false;
-        this.presentation = {
-            floorIndex: 0,
-            playerX: 0,
-            playerY: 0,
-            playerAlpha: 1,
-            playerScale: 1,
-            playerHp: 100,
-            loraHp: 100,
-            instability: 0,
-            hoverProgress: 1,
-            pathProgress: 1,
-            attackProgress: 1,
-            menuSelectionProgress: 1,
-            actionPulse: 0
-        };
+        this.lastPresentationSnapshot = null;
         this.hoveredTileKey = '';
 
         const tutorialRenderPort = Object.freeze({
@@ -168,14 +155,17 @@ export class TutorialScene extends BaseScene {
             hud: this.data.LAYOUT.HUD,
             shakeTileRatio: this.data.ANIMATION.SHAKE_TILE_RATIO
         });
+        this.buttonHost = new TutorialButtonHost({
+            parent: this,
+            onCommand: (type, payload) => this.#queueUiCommand(type, payload)
+        });
+        this.assetLoader = new TutorialAssetLoader({
+            onChange: () => this.buttonHost.invalidate()
+        });
         const battleAssetPort = Object.freeze({
-            getItemIcon: (itemId) => this.itemIconCanvases?.get(itemId) || null,
-            getLoraPortrait: () => this.loraPortrait,
-            getLoraSprite: () => (
-                this.loraSpriteReady && this.#isImageReady(this.loraSprite)
-                    ? this.loraSprite
-                    : null
-            )
+            getItemIcon: (itemId) => this.assetLoader.getAtlasCell('item-icons', itemId),
+            getLoraPortrait: () => this.assetLoader.getImage('lora-portrait'),
+            getLoraSprite: () => this.assetLoader.getImage('lora-sprite')
         });
         this.battleWorldView = new TutorialBattleWorldView(
             tutorialRenderPort,
@@ -186,10 +176,27 @@ export class TutorialScene extends BaseScene {
             battleAssetPort
         );
         this.battleFeedbackView = new TutorialBattleFeedbackView(tutorialRenderPort);
-        this.buttonHost = new TutorialButtonHost({
-            parent: this,
-            onCommand: (type, payload) => this.#queueUiCommand(type, payload)
+        this.battlePresenter = new TutorialBattlePresenter({
+            items: this.data.ITEMS,
+            animation: this.data.ANIMATION
         });
+        this.feedbackQueue = new TutorialFeedbackQueue({
+            eventLogLimit: this.data.RULES.EVENT_LOG_LIMIT,
+            particleCount: this.data.ANIMATION.PARTICLE_COUNT,
+            particleSeconds: this.data.ANIMATION.PARTICLE_SECONDS
+        });
+        this.presentationTimeline = new TutorialAnimationTimeline({
+            animationPort: Object.freeze({ animate, remove }),
+            config: this.data.ANIMATION,
+            onLockChange: () => this.buttonHost.invalidate()
+        });
+        this.assetLoader.loadImage('lora-portrait', this.data.ASSETS.LORA_PORTRAIT);
+        this.assetLoader.loadAtlas(
+            'item-icons',
+            this.data.ASSETS.ITEM_ICON_ATLAS,
+            this.data.SPRITES.ITEM_ATLAS
+        );
+        this.assetLoader.loadImage('lora-sprite', this.data.ASSETS.LORA_SPRITE);
 
         this.elapsedSeconds = 0;
         this.hoveredTile = null;
@@ -204,48 +211,6 @@ export class TutorialScene extends BaseScene {
         this.cleanseTargetIndex = 0;
         this.inventoryPage = 0;
         this.loraTurnState = null;
-        this.eventLog = [];
-        this.floatingTexts = [];
-        this.particles = [];
-        this.screenShakeSeconds = 0;
-        this.stabilizeSeconds = 0;
-        this.flashSeconds = 0;
-        this.loraPortrait = typeof Image === 'function' ? new Image() : null;
-        if (this.loraPortrait) {
-            this.loraPortrait.decoding = 'async';
-            this.loraPortrait.src = this.data.ASSETS.LORA_PORTRAIT;
-        }
-        this.itemIconCanvases = new Map();
-        this.itemAtlasImage = typeof Image === 'function' ? new Image() : null;
-        if (this.itemAtlasImage) {
-            this.itemAtlasImage.decoding = 'async';
-            this.itemAtlasImage.onload = () => {
-                if (!this.destroyed) {
-                    this.#sliceItemAtlas();
-                }
-            };
-            this.itemAtlasImage.onerror = () => {
-                if (!this.destroyed) {
-                    this.itemIconCanvases.clear();
-                    this.buttonHost.invalidate();
-                }
-            };
-            this.itemAtlasImage.src = this.data.ASSETS.ITEM_ICON_ATLAS;
-        }
-        this.loraSpriteReady = false;
-        this.loraSprite = typeof Image === 'function' ? new Image() : null;
-        if (this.loraSprite) {
-            this.loraSprite.decoding = 'async';
-            this.loraSprite.onload = () => {
-                if (!this.destroyed && this.#isImageReady(this.loraSprite)) {
-                    this.loraSpriteReady = true;
-                }
-            };
-            this.loraSprite.onerror = () => {
-                this.loraSpriteReady = false;
-            };
-            this.loraSprite.src = this.data.ASSETS.LORA_SPRITE;
-        }
 
         this.uiActionHandled = false;
         this.keyboardLatch = new Map();
@@ -298,7 +263,7 @@ export class TutorialScene extends BaseScene {
         this.#updatePointerState();
         this.#handlePointerInput();
         this.#updateLoraTurn(deltaSeconds);
-        this.#updatePresentation(deltaSeconds);
+        this.feedbackQueue.update(deltaSeconds);
         this.#captureKeyboardLatch();
     }
 
@@ -437,8 +402,7 @@ export class TutorialScene extends BaseScene {
      * @override
      */
     resize() {
-        this.floatingTexts = [];
-        this.particles = [];
+        this.feedbackQueue.clearTransient();
         this.#syncViewport();
     }
 
@@ -463,93 +427,17 @@ export class TutorialScene extends BaseScene {
         this.#commitStagedMeta();
         this.destroyed = true;
         this.timelineRevision += 1;
-        this.#clearOwnedAnimations();
-        if (this.itemAtlasImage) {
-            this.itemAtlasImage.onload = null;
-            this.itemAtlasImage.onerror = null;
-        }
-        if (this.loraSprite) {
-            this.loraSprite.onload = null;
-            this.loraSprite.onerror = null;
-        }
-        this.itemIconCanvases.clear();
-        this.loraSpriteReady = false;
+        this.presentationTimeline.destroy();
+        this.assetLoader.destroy();
+        this.feedbackQueue.destroy();
         clearSimulationCommands();
         this.buttonHost.destroy();
         this.cutscenes.close();
         this.pendingCutscenes = [];
         this.runCutsceneIds.clear();
-        this.floatingTexts = [];
-        this.particles = [];
         this.loraTurnState = null;
         this.floorView = null;
         this.floorActorView = null;
-    }
-
-    /**
-     * 이미지가 실제 픽셀까지 로드됐는지 확인합니다.
-     * @param {HTMLImageElement|null} image - 확인할 이미지입니다.
-     * @returns {boolean} 렌더 가능한 이미지 여부입니다.
-     * @private
-     */
-    #isImageReady(image) {
-        return Boolean(image?.complete
-            && Number(image.naturalWidth) > 0
-            && Number(image.naturalHeight) > 0);
-    }
-
-    /**
-     * 아이템 atlas의 fractional 셀을 정사각형 2D canvas 여덟 개로 분할합니다.
-     * @private
-     */
-    #sliceItemAtlas() {
-        this.itemIconCanvases.clear();
-        if (!this.#isImageReady(this.itemAtlasImage)
-            || typeof document === 'undefined') {
-            this.buttonHost.invalidate();
-            return;
-        }
-        const atlasData = this.data.SPRITES.ITEM_ATLAS;
-        const columns = Math.max(1, Number(atlasData.COLUMNS) || 1);
-        const rows = Math.max(1, Number(atlasData.ROWS) || 1);
-        const sourceWidth = this.itemAtlasImage.naturalWidth / columns;
-        const sourceHeight = this.itemAtlasImage.naturalHeight / rows;
-        const canvasSize = Math.max(1, Math.ceil(Math.max(sourceWidth, sourceHeight)));
-
-        for (const [itemId, cell] of Object.entries(atlasData.CELLS)) {
-            const column = Number(cell.COLUMN);
-            const row = Number(cell.ROW);
-            if (!Number.isInteger(column)
-                || !Number.isInteger(row)
-                || column < 0
-                || row < 0
-                || column >= columns
-                || row >= rows) {
-                continue;
-            }
-            const canvas = document.createElement('canvas');
-            canvas.width = canvasSize;
-            canvas.height = canvasSize;
-            const context = canvas.getContext('2d');
-            if (!context) {
-                continue;
-            }
-            context.clearRect(0, 0, canvasSize, canvasSize);
-            context.imageSmoothingEnabled = true;
-            context.drawImage(
-                this.itemAtlasImage,
-                column * sourceWidth,
-                row * sourceHeight,
-                sourceWidth,
-                sourceHeight,
-                (canvasSize - sourceWidth) * 0.5,
-                (canvasSize - sourceHeight) * 0.5,
-                sourceWidth,
-                sourceHeight
-            );
-            this.itemIconCanvases.set(itemId, canvas);
-        }
-        this.buttonHost.invalidate();
     }
 
     /**
@@ -617,7 +505,7 @@ export class TutorialScene extends BaseScene {
         }
         const delta = Number(payload?.delta) || 0;
         this.starterIndex = (this.starterIndex + delta + count) % count;
-        this.#startSelectionAnimation('menu-selection');
+        this.presentationTimeline.startSelection('menu-selection');
     }
 
     /**
@@ -657,7 +545,7 @@ export class TutorialScene extends BaseScene {
     #leaveRun(nextMode) {
         this.#commitStagedMeta();
         this.timelineRevision += 1;
-        this.#clearOwnedAnimations();
+        this.presentationTimeline.cancel();
         this.cutscenes.close();
         this.pendingCutscenes = [];
         this.runCutsceneIds.clear();
@@ -681,12 +569,8 @@ export class TutorialScene extends BaseScene {
         this.reachability.clear();
         this.actionTargets = [];
         this.plannedPath = [];
-        this.eventLog = [];
-        this.floatingTexts = [];
-        this.particles = [];
-        this.screenShakeSeconds = 0;
-        this.stabilizeSeconds = 0;
-        this.flashSeconds = 0;
+        this.lastPresentationSnapshot = null;
+        this.feedbackQueue.clear();
         this.buttonHost.invalidate();
     }
 
@@ -697,7 +581,7 @@ export class TutorialScene extends BaseScene {
      */
     #beginRun(starterItemId) {
         this.timelineRevision += 1;
-        this.#clearOwnedAnimations();
+        this.presentationTimeline.cancel();
         this.metaStaging = true;
         this.starterItemId = starterItemId;
         const knowledge = {
@@ -708,11 +592,12 @@ export class TutorialScene extends BaseScene {
         };
         this.model = new TutorialBattleModel(this.data, { knowledge });
         this.model.reset({ starterItemId });
+        const initialSnapshot = this.#getSnapshot();
         this.mode = MODES.BATTLE;
         this.resultData = null;
         this.resultRecorded = false;
         this.pendingCutscenes = [];
-        this.runCutsceneIds = new Set(this.#getSnapshot()?.unlockedCutscenes || []);
+        this.runCutsceneIds = new Set(initialSnapshot?.unlockedCutscenes || []);
         this.attackSelected = false;
         this.attackWeapon = 'melee';
         this.targetIndex = 0;
@@ -721,14 +606,9 @@ export class TutorialScene extends BaseScene {
         this.cleanseTargetIndex = 0;
         this.inventoryPage = 0;
         this.loraTurnState = null;
-        this.eventLog = [];
-        this.floatingTexts = [];
-        this.particles = [];
-        this.screenShakeSeconds = 0;
-        this.stabilizeSeconds = 0;
-        this.flashSeconds = 0;
-        this.presentation = {
-            ...this.presentation,
+        this.feedbackQueue.clear();
+        this.lastPresentationSnapshot = cloneCheckpointValue(initialSnapshot);
+        this.presentationTimeline.reset({
             floorIndex: Number(this.model.floorIndex) || 0,
             playerX: Number(this.model.player?.x) || 0,
             playerY: Number(this.model.player?.y) || 0,
@@ -742,7 +622,7 @@ export class TutorialScene extends BaseScene {
             attackProgress: 1,
             menuSelectionProgress: 1,
             actionPulse: 0
-        };
+        });
         this.hoveredTileKey = '';
         this.#resetPlannedPath();
         this.#refreshBattleCache();
@@ -764,7 +644,7 @@ export class TutorialScene extends BaseScene {
         }
         const delta = Number(payload?.delta) || 0;
         this.galleryIndex = (this.galleryIndex + delta + count) % count;
-        this.#startSelectionAnimation('menu-selection');
+        this.presentationTimeline.startSelection('menu-selection');
     }
 
     /**
@@ -848,12 +728,12 @@ export class TutorialScene extends BaseScene {
         const dy = Number(payload?.y) || 0;
         if (this.cleanseSelected) {
             this.#shiftCleanseTarget(dx || dy);
-            this.#startSelectionAnimation('attack');
+            this.presentationTimeline.startSelection('attack');
             return;
         }
         if (this.attackSelected) {
             this.#shiftAttackTarget(dx || dy);
-            this.#startSelectionAnimation('attack');
+            this.presentationTimeline.startSelection('attack');
             return;
         }
         if (this.model.movementUsed || this.model.phase !== 'move') {
@@ -864,7 +744,7 @@ export class TutorialScene extends BaseScene {
             return;
         }
         this.plannedPath = path;
-        this.#startSelectionAnimation('path');
+        this.presentationTimeline.startSelection('path');
     }
 
     /**
@@ -887,7 +767,7 @@ export class TutorialScene extends BaseScene {
             this.plannedPath.pop();
         }
         this.cleanseSelected = false;
-        this.#startSelectionAnimation('path');
+        this.presentationTimeline.startSelection('path');
     }
 
     /**
@@ -923,17 +803,19 @@ export class TutorialScene extends BaseScene {
             }))
             .filter((segment) => segment.from && segment.to);
         if (result?.ok) {
-            this.#spawnPathParticles(resultPath);
             this.cleanseSelected = false;
             this.cleanseTargets = [];
             this.#resetPlannedPath();
         }
         this.#afterModelChange(result);
         if (result?.ok) {
-            this.#startPlayerPathPresentation(
-                resultPath,
-                teleportSegments
-            );
+            this.presentationTimeline.startPlayerPath({
+                path: resultPath,
+                teleportSegments,
+                finalPlayer: this.model.player,
+                logicalFloorIndex: this.model.floorIndex,
+                visibleFloorIndex: this.floorView?.index
+            });
         }
     }
 
@@ -959,7 +841,7 @@ export class TutorialScene extends BaseScene {
         this.cleanseTargets = [];
         this.targetIndex = 0;
         this.#refreshBattleCache();
-        this.#startSelectionAnimation('attack');
+        this.presentationTimeline.startSelection('attack');
     }
 
     /**
@@ -982,7 +864,9 @@ export class TutorialScene extends BaseScene {
         const result = this.model.attack(targetId, { weapon: this.attackWeapon });
         this.attackSelected = false;
         this.#afterModelChange(result);
-        this.#startActionPresentation(result);
+        if (result?.ok === true) {
+            this.presentationTimeline.startAction();
+        }
     }
 
     /**
@@ -998,7 +882,9 @@ export class TutorialScene extends BaseScene {
         const result = this.model.heal();
         this.attackSelected = false;
         this.#afterModelChange(result);
-        this.#startActionPresentation(result);
+        if (result?.ok === true) {
+            this.presentationTimeline.startAction();
+        }
     }
 
     /**
@@ -1015,7 +901,9 @@ export class TutorialScene extends BaseScene {
         this.attackSelected = false;
         this.cleanseSelected = false;
         this.#afterModelChange(result);
-        this.#startActionPresentation(result);
+        if (result?.ok === true) {
+            this.presentationTimeline.startAction();
+        }
     }
 
     /**
@@ -1038,7 +926,7 @@ export class TutorialScene extends BaseScene {
         this.attackSelected = false;
         this.cleanseTargetIndex = 0;
         this.#refreshBattleCache();
-        this.#startSelectionAnimation('attack');
+        this.presentationTimeline.startSelection('attack');
     }
 
     /**
@@ -1060,7 +948,9 @@ export class TutorialScene extends BaseScene {
         this.cleanseSelected = false;
         this.cleanseTargets = [];
         this.#afterModelChange(result);
-        this.#startActionPresentation(result, this.data.ANIMATION.SELECTION_SECONDS);
+        if (result?.ok === true) {
+            this.presentationTimeline.startAction(this.data.ANIMATION.SELECTION_SECONDS);
+        }
     }
 
     /**
@@ -1081,7 +971,9 @@ export class TutorialScene extends BaseScene {
         const result = this.model.useItem(itemId);
         this.attackSelected = false;
         this.#afterModelChange(result);
-        this.#startActionPresentation(result);
+        if (result?.ok === true) {
+            this.presentationTimeline.startAction();
+        }
     }
 
     /**
@@ -1133,15 +1025,40 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #afterModelChange(result) {
-        if (result?.ok === false) {
-            this.#appendEvent(this.#formatReason(result.reason));
-        }
-        this.#consumeEvents(result?.events);
+        const nextSnapshot = this.#getSnapshot();
+        const cues = this.battlePresenter.createCues({
+            events: result?.events,
+            previousSnapshot: this.lastPresentationSnapshot || nextSnapshot,
+            nextSnapshot,
+            path: result?.ok === true ? result?.path : [],
+            failureReason: result?.ok === false ? result.reason : ''
+        });
+        const layout = this.#createBattleLayoutFrame();
+        const orderedCues = this.feedbackQueue.enqueue(cues, {
+            actors: {
+                player: nextSnapshot?.player,
+                lora: nextSnapshot?.lora
+            },
+            projectTile: (tile) => TutorialBattleLayout.projectTile(
+                layout,
+                tile.x,
+                tile.y
+            ),
+            tileSide: layout.tileSide,
+            colors: {
+                danger: ColorSchemes.Tactics.UI.Danger,
+                success: ColorSchemes.Tactics.UI.Success,
+                accent: ColorSchemes.Tactics.UI.Accent,
+                move: ColorSchemes.Tactics.Effects.Move
+            }
+        });
+        this.presentationTimeline.applyCues(orderedCues);
+        this.lastPresentationSnapshot = cloneCheckpointValue(nextSnapshot);
         this.#syncMetaFromModel();
         this.#refreshBattleCache();
         this.#enterResultIfNeeded();
-        this.#animateHudToModel();
-        if (this.presentation.floorIndex !== (Number(this.model?.floorIndex) || 0)) {
+        if (this.presentationTimeline.getState().floorIndex
+            !== (Number(this.model?.floorIndex) || 0)) {
             this.#startFloorTransitionPresentation();
         }
         if (this.mode === MODES.BATTLE
@@ -1383,7 +1300,9 @@ export class TutorialScene extends BaseScene {
             return;
         }
         const logicalFloorIndex = Number(this.model.floorIndex) || 0;
-        const presentationFloorIndex = Number(this.presentation.floorIndex) || 0;
+        const presentationFloorIndex = Number(
+            this.presentationTimeline.getState().floorIndex
+        ) || 0;
         if (!this.floorView || logicalFloorIndex === presentationFloorIndex) {
             this.floorView = this.model.getCurrentFloorState();
             this.floorActorView = this.#captureFloorActorView();
@@ -1527,7 +1446,7 @@ export class TutorialScene extends BaseScene {
     #canAcceptBattleInput() {
         return isTutorialBattleMode(this.mode)
             && !this.cutscenes.isOpen()
-            && !this.presentationLocked
+            && !this.presentationTimeline.isLocked()
             && this.model?.turn === 'player'
             && !this.model?.result;
     }
@@ -1541,7 +1460,7 @@ export class TutorialScene extends BaseScene {
         if (!this.loraTurnState
             || this.mode !== MODES.BATTLE
             || this.cutscenes.isOpen()
-            || this.presentationLocked
+            || this.presentationTimeline.isLocked()
             || this.loraTurnState.queued) {
             return;
         }
@@ -1573,7 +1492,7 @@ export class TutorialScene extends BaseScene {
         if (this.mode === MODES.LOADING) {
             return;
         }
-        if (this.presentationLocked) {
+        if (this.presentationTimeline.isLocked()) {
             return;
         }
         if (this.cutscenes.isOpen()) {
@@ -1735,7 +1654,7 @@ export class TutorialScene extends BaseScene {
         );
         const nextKey = nextTile ? toTileKey(nextTile.x, nextTile.y) : '';
         if (nextKey && nextKey !== this.hoveredTileKey) {
-            this.#startSelectionAnimation('hover');
+            this.presentationTimeline.startSelection('hover');
         }
         if (nextTile && this.attackSelected) {
             const hoveredTargetIndex = this.actionTargets.findIndex((target) => (
@@ -1743,7 +1662,7 @@ export class TutorialScene extends BaseScene {
             ));
             if (hoveredTargetIndex >= 0 && hoveredTargetIndex !== this.targetIndex) {
                 this.targetIndex = hoveredTargetIndex;
-                this.#startSelectionAnimation('attack');
+                this.presentationTimeline.startSelection('attack');
             }
         } else if (nextTile && this.cleanseSelected) {
             const hoveredTargetIndex = this.cleanseTargets.findIndex((target) => (
@@ -1752,7 +1671,7 @@ export class TutorialScene extends BaseScene {
             if (hoveredTargetIndex >= 0
                 && hoveredTargetIndex !== this.cleanseTargetIndex) {
                 this.cleanseTargetIndex = hoveredTargetIndex;
-                this.#startSelectionAnimation('attack');
+                this.presentationTimeline.startSelection('attack');
             }
         }
         this.hoveredTile = nextTile;
@@ -1940,7 +1859,9 @@ export class TutorialScene extends BaseScene {
                 description: choice.description
             }))),
             selectedIndex: this.starterIndex,
-            selectionProgress: Number(this.presentation.menuSelectionProgress) || 0,
+            selectionProgress: Number(
+                this.presentationTimeline.getState().menuSelectionProgress
+            ) || 0,
             selectionMinScale: Number(this.data.ANIMATION.SELECTION_MIN_SCALE) || 0.72
         });
     }
@@ -1956,7 +1877,9 @@ export class TutorialScene extends BaseScene {
                 unlocked: this.#isCutsceneUnlocked(entry.id)
             }))),
             selectedIndex: this.galleryIndex,
-            selectionProgress: Number(this.presentation.menuSelectionProgress) || 0,
+            selectionProgress: Number(
+                this.presentationTimeline.getState().menuSelectionProgress
+            ) || 0,
             selectionMinScale: Number(this.data.ANIMATION.SELECTION_MIN_SCALE) || 0.72
         });
     }
@@ -1967,7 +1890,7 @@ export class TutorialScene extends BaseScene {
             ...this.#createNonbattleViewFrame(),
             result: Object.freeze({ ...(this.resultData || {}) }),
             bestScore: Number(this.meta?.bestScore) || 0,
-            presentationLocked: this.presentationLocked
+            presentationLocked: this.presentationTimeline.isLocked()
         });
     }
 
@@ -1977,7 +1900,7 @@ export class TutorialScene extends BaseScene {
             ...this.#createNonbattleViewFrame(),
             state: Object.freeze({ ...this.cutscenes.getState() }),
             card: Object.freeze({ ...(this.cutscenes.getCurrentCard() || {}) }),
-            presentationLocked: this.presentationLocked
+            presentationLocked: this.presentationTimeline.isLocked()
         });
     }
 
@@ -1991,7 +1914,7 @@ export class TutorialScene extends BaseScene {
         return this.battleLayout.createFrame({
             floor,
             elapsedSeconds: this.elapsedSeconds,
-            screenShakeSeconds: this.screenShakeSeconds
+            screenShakeSeconds: this.feedbackQueue.getScreenShakeSeconds()
         });
     }
 
@@ -2009,7 +1932,10 @@ export class TutorialScene extends BaseScene {
             return null;
         }
         const floor = cloneCheckpointValue(this.#getCurrentFloor() || snapshot.floor);
-        const presentation = Object.freeze(cloneCheckpointValue(this.presentation));
+        const presentation = Object.freeze(cloneCheckpointValue(
+            this.presentationTimeline.getState()
+        ));
+        const feedback = this.feedbackQueue.getSnapshot();
         const layout = this.#createBattleLayoutFrame(floor);
         const inventoryEntries = this.#getInventoryEntries();
         const inventory = this.battleHudView.getInventoryPaging(
@@ -2030,7 +1956,7 @@ export class TutorialScene extends BaseScene {
                 id: itemId,
                 label: item.label || itemId,
                 known: this.#isItemKnown(itemId),
-                hasIcon: this.itemIconCanvases.has(itemId),
+                hasIcon: this.assetLoader.hasAtlasCell('item-icons', itemId),
                 usable: this.#isItemUsable(itemId),
                 movementConsumable: itemId === 'tile-cleanser'
             })]))
@@ -2106,8 +2032,8 @@ export class TutorialScene extends BaseScene {
                 cleanseTargetIndex: this.cleanseTargetIndex,
                 itemMetadata,
                 feedback: Object.freeze({
-                    flashSeconds: this.flashSeconds,
-                    stabilizeSeconds: this.stabilizeSeconds
+                    flashSeconds: feedback.flashSeconds,
+                    stabilizeSeconds: feedback.stabilizeSeconds
                 }),
                 config: Object.freeze({
                     attackRange: this.data.ACTORS.PLAYER.ATTACK_RANGE,
@@ -2121,7 +2047,7 @@ export class TutorialScene extends BaseScene {
                 })
             }),
             hud: Object.freeze({
-                presentationLocked: this.presentationLocked,
+                presentationLocked: this.presentationTimeline.isLocked(),
                 attackSelected: this.attackSelected,
                 attackWeapon: this.attackWeapon,
                 cleanseSelected: this.cleanseSelected,
@@ -2129,7 +2055,7 @@ export class TutorialScene extends BaseScene {
                     this.model.getInstabilityState?.() || {}
                 )),
                 movePreview: movePreview ? Object.freeze(movePreview) : null,
-                eventLog: Object.freeze([...this.eventLog]),
+                eventLog: feedback.eventLog,
                 inventory: pagedInventory,
                 controls: Object.freeze({
                     ready,
@@ -2149,12 +2075,8 @@ export class TutorialScene extends BaseScene {
                 })
             }),
             feedback: Object.freeze({
-                floatingTexts: Object.freeze(this.floatingTexts.map(
-                    (entry) => Object.freeze({ ...entry })
-                )),
-                particles: Object.freeze(this.particles.map(
-                    (entry) => Object.freeze({ ...entry })
-                ))
+                floatingTexts: feedback.floatingTexts,
+                particles: feedback.particles
             })
         });
     }
@@ -2204,7 +2126,7 @@ export class TutorialScene extends BaseScene {
             String(this.cleanseTargetIndex),
             this.plannedPath.map((point) => toTileKey(point.x, point.y)).join('>'),
             String(this.inventoryPage),
-            String(this.presentationLocked),
+            String(this.presentationTimeline.isLocked()),
             inventory
         ].join('/');
     }
@@ -2300,7 +2222,7 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #createItemIconChild(itemId, width) {
-        const image = this.itemIconCanvases.get(itemId);
+        const image = this.assetLoader.getAtlasCell('item-icons', itemId);
         if (!image || !Number.isFinite(width) || width <= 0) {
             return null;
         }
@@ -2438,411 +2360,25 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * 이름 있는 표현 속성 하나를 AnimationSystem 표준 애니메이션으로 갱신합니다.
-     * @param {string} slot - 씬 내부 애니메이션 슬롯입니다.
-     * @param {object} owner - 대상 객체입니다.
-     * @param {string} variable - 대상 속성입니다.
-     * @param {number} endValue - 목표 값입니다.
-     * @param {number} duration - 지속 시간입니다.
-     * @param {number|string} [startValue=current] - 시작 값입니다.
-     * @returns {Promise<void>} 완료 Promise입니다.
-     * @private
-     */
-    #animateSlot(slot, owner, variable, endValue, duration, startValue = 'current') {
-        const previousId = this.animationSlots.get(slot);
-        if (Number.isInteger(previousId) && previousId >= 0) {
-            remove(previousId);
-            this.ownedAnimationIds.delete(previousId);
-        }
-        const safeDuration = Math.max(0, Number(duration) || 0);
-        if (safeDuration <= 0 || Number(owner?.[variable]) === Number(endValue)) {
-            owner[variable] = endValue;
-            this.animationSlots.delete(slot);
-            return Promise.resolve();
-        }
-        const animation = animate(owner, {
-            variable,
-            startValue,
-            endValue,
-            duration: safeDuration,
-            type: this.data.ANIMATION.EASING
-        });
-        this.animationSlots.set(slot, animation.id);
-        this.ownedAnimationIds.add(animation.id);
-        return animation.promise.then(() => {
-            if (this.animationSlots.get(slot) === animation.id) {
-                this.animationSlots.delete(slot);
-            }
-            this.ownedAnimationIds.delete(animation.id);
-        });
-    }
-
-    /**
-     * 씬이 생성한 모든 표준 애니메이션을 취소하고 표현 잠금을 풉니다.
-     * @private
-     */
-    #clearOwnedAnimations() {
-        for (const animationId of this.ownedAnimationIds) {
-            remove(animationId);
-        }
-        this.ownedAnimationIds.clear();
-        this.animationSlots.clear();
-        this.presentationLocked = false;
-    }
-
-    /**
-     * 호버, 경로, 공격 대상, 메뉴 선택의 진입 값을 easeOutExpo로 보간합니다.
-     * @param {'hover'|'path'|'attack'|'menu-selection'} kind - 선택 연출 종류입니다.
-     * @private
-     */
-    #startSelectionAnimation(kind) {
-        const fields = {
-            hover: 'hoverProgress',
-            path: 'pathProgress',
-            attack: 'attackProgress',
-            'menu-selection': 'menuSelectionProgress'
-        };
-        const field = fields[kind];
-        if (!field) {
-            return;
-        }
-        this.presentation[field] = 0;
-        void this.#animateSlot(
-            'selection-' + kind,
-            this.presentation,
-            field,
-            1,
-            this.data.ANIMATION.SELECTION_SECONDS,
-            0
-        );
-    }
-
-    /**
-     * 모델의 HP와 불안정도를 현재 표시값에서 부드럽게 보간합니다.
-     * @returns {Promise<void>[]} 각 게이지 완료 Promise입니다.
-     * @private
-     */
-    #animateHudToModel() {
-        if (!this.model) {
-            return [];
-        }
-        const duration = this.data.ANIMATION.GAUGE_SECONDS;
-        return [
-            this.#animateSlot(
-                'hud-player-hp',
-                this.presentation,
-                'playerHp',
-                Number(this.model.player?.hp) || 0,
-                duration
-            ),
-            this.#animateSlot(
-                'hud-lora-hp',
-                this.presentation,
-                'loraHp',
-                Number(this.model.lora?.hp) || 0,
-                duration
-            ),
-            this.#animateSlot(
-                'hud-instability',
-                this.presentation,
-                'instability',
-                Number(this.model.lora?.instability) || 0,
-                duration
-            )
-        ];
-    }
-
-    /**
-     * 이동 외 플레이어 행동 동안 짧은 충격 연출과 입력 잠금을 적용합니다.
-     * @param {object} result - 모델 행동 결과입니다.
-     * @param {number} [duration] - 재생 시간입니다.
-     * @private
-     */
-    #startActionPresentation(result, duration = this.data.ANIMATION.ATTACK_SECONDS) {
-        if (result?.ok !== true) {
-            return;
-        }
-        const revision = this.timelineRevision;
-        this.presentationLocked = true;
-        this.presentation.actionPulse = 1;
-        this.buttonHost.invalidate();
-        void this.#animateSlot(
-            'action-pulse',
-            this.presentation,
-            'actionPulse',
-            0,
-            duration,
-            1
-        ).then(() => {
-            this.#finishPresentationLock(revision);
-        });
-    }
-
-    /**
-     * 모델이 반환한 실제 경로를 칸별로 재생하고 텔레포트 점프를 별도로 표현합니다.
-     * @param {Array<{x:number,y:number}>} path - 실제 이동 경로입니다.
-     * @param {Array<{from:object,to:object}>} [teleportSegments] - 텔레포트 구간입니다.
-     * @private
-     */
-    #startPlayerPathPresentation(path, teleportSegments = []) {
-        const route = this.#normalizePath(path);
-        const revision = this.timelineRevision;
-        this.presentationLocked = true;
-        this.buttonHost.invalidate();
-        if (route.length <= 1) {
-            const stayScale = Number(this.data.ANIMATION.STAY_SCALE) || 0.86;
-            this.presentation.playerScale = stayScale;
-            void this.#animateSlot(
-                'player-scale',
-                this.presentation,
-                'playerScale',
-                1,
-                this.data.ANIMATION.SELECTION_SECONDS,
-                stayScale
-            ).then(() => {
-                this.#finishPresentationLock(revision);
-            });
-            return;
-        }
-        void this.#animatePlayerRoute(
-            route,
-            revision,
-            this.data.ANIMATION.MOVE_SECONDS_PER_TILE,
-            teleportSegments
-        ).then(() => {
-            if (revision === this.timelineRevision && this.model) {
-                this.presentation.playerX = Number(this.model.player?.x) || 0;
-                this.presentation.playerY = Number(this.model.player?.y) || 0;
-                this.presentation.playerAlpha = 1;
-                this.presentation.playerScale = 1;
-                const logicalFloorIndex = Number(this.model.floorIndex) || 0;
-                if (Number(this.floorView?.index) === logicalFloorIndex) {
-                    this.presentation.floorIndex = logicalFloorIndex;
-                }
-            }
-            this.#finishPresentationLock(revision);
-        });
-    }
-
-    /**
-     * 좌표 경로를 순차 보간하며 맨해튼 인접이 아닌 단계는 텔레포트로 처리합니다.
-     * @param {Array<{x:number,y:number}>} route - 재생할 좌표 목록입니다.
-     * @param {number} revision - 시작 시점 타임라인 버전입니다.
-     * @param {number} secondsPerTile - 인접 타일당 시간입니다.
-     * @param {Array<{from:object,to:object}>} [teleportSegments] - 강제 텔레포트 구간입니다.
-     * @returns {Promise<void>} 재생 완료 Promise입니다.
-     * @private
-     */
-    async #animatePlayerRoute(route, revision, secondsPerTile, teleportSegments = []) {
-        for (const tile of route) {
-            if (revision !== this.timelineRevision || !tile) {
-                return;
-            }
-            const dx = Number(tile.x) - Number(this.presentation.playerX);
-            const dy = Number(tile.y) - Number(this.presentation.playerY);
-            if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) {
-                continue;
-            }
-            const isAdjacent = Math.abs(dx) + Math.abs(dy) <= 1.001;
-            const isTeleport = this.#isTeleportTransition(
-                this.presentation,
-                tile,
-                teleportSegments
-            );
-            if (!isAdjacent || isTeleport) {
-                await this.#animateTeleportTo(tile, revision);
-                continue;
-            }
-            await Promise.all([
-                this.#animateSlot(
-                    'player-x',
-                    this.presentation,
-                    'playerX',
-                    tile.x,
-                    secondsPerTile
-                ),
-                this.#animateSlot(
-                    'player-y',
-                    this.presentation,
-                    'playerY',
-                    tile.y,
-                    secondsPerTile
-                )
-            ]);
-        }
-    }
-
-    /**
-     * 플레이어를 축소·페이드한 뒤 새 타일로 옮기고 다시 나타냅니다.
-     * @param {{x:number,y:number}} tile - 도착 타일입니다.
-     * @param {number} revision - 시작 시점 타임라인 버전입니다.
-     * @returns {Promise<void>} 완료 Promise입니다.
-     * @private
-     */
-    async #animateTeleportTo(tile, revision) {
-        if (!tile) {
-            return;
-        }
-        await Promise.all([
-            this.#animateSlot(
-                'player-alpha',
-                this.presentation,
-                'playerAlpha',
-                0,
-                this.data.ANIMATION.TELEPORT_OUT_SECONDS
-            ),
-            this.#animateSlot(
-                'player-scale',
-                this.presentation,
-                'playerScale',
-                this.data.ANIMATION.TELEPORT_MIN_SCALE,
-                this.data.ANIMATION.TELEPORT_OUT_SECONDS
-            )
-        ]);
-        if (revision !== this.timelineRevision) {
-            return;
-        }
-        this.presentation.playerX = tile.x;
-        this.presentation.playerY = tile.y;
-        await Promise.all([
-            this.#animateSlot(
-                'player-alpha',
-                this.presentation,
-                'playerAlpha',
-                1,
-                this.data.ANIMATION.TELEPORT_IN_SECONDS,
-                0
-            ),
-            this.#animateSlot(
-                'player-scale',
-                this.presentation,
-                'playerScale',
-                1,
-                this.data.ANIMATION.TELEPORT_IN_SECONDS,
-                this.data.ANIMATION.TELEPORT_MIN_SCALE
-            )
-        ]);
-    }
-
-    /**
-     * 현재 층을 유지한 채 플레이어를 숨기고, 완전히 사라진 뒤 목표 층 스냅샷으로 교체합니다.
-     * @param {{x:number,y:number}} tile - 목표 층의 플레이어 타일입니다.
-     * @param {number} floorIndex - 목표 층 인덱스입니다.
-     * @param {object} floorView - 목표 층 표현 스냅샷입니다.
-     * @param {object} floorActorView - 목표 층 인물 표현 스냅샷입니다.
-     * @param {number} revision - 시작 시점 타임라인 버전입니다.
-     * @returns {Promise<void>} 완료 Promise입니다.
-     * @private
-     */
-    async #animateFloorSwapTo(tile, floorIndex, floorView, floorActorView, revision) {
-        if (!tile) {
-            return;
-        }
-        await Promise.all([
-            this.#animateSlot(
-                'player-alpha',
-                this.presentation,
-                'playerAlpha',
-                0,
-                this.data.ANIMATION.FLOOR_FADE_SECONDS
-            ),
-            this.#animateSlot(
-                'player-scale',
-                this.presentation,
-                'playerScale',
-                this.data.ANIMATION.TELEPORT_MIN_SCALE,
-                this.data.ANIMATION.FLOOR_FADE_SECONDS
-            )
-        ]);
-        if (revision !== this.timelineRevision) {
-            return;
-        }
-        this.floorView = cloneCheckpointValue(floorView);
-        this.floorActorView = cloneCheckpointValue(floorActorView);
-        this.presentation.floorIndex = floorIndex;
-        this.presentation.playerX = tile.x;
-        this.presentation.playerY = tile.y;
-        await Promise.all([
-            this.#animateSlot(
-                'player-alpha',
-                this.presentation,
-                'playerAlpha',
-                1,
-                this.data.ANIMATION.TELEPORT_IN_SECONDS,
-                0
-            ),
-            this.#animateSlot(
-                'player-scale',
-                this.presentation,
-                'playerScale',
-                1,
-                this.data.ANIMATION.TELEPORT_IN_SECONDS,
-                this.data.ANIMATION.TELEPORT_MIN_SCALE
-            )
-        ]);
-    }
-
-    /**
-     * 자동 층 전환 시 플레이어를 페이드한 뒤 새 층 시작 좌표에 배치합니다.
+     * 자동 층 전환에 필요한 표시 스냅샷을 준비해 타임라인에 위임합니다.
      * @private
      */
     #startFloorTransitionPresentation() {
         if (!this.model) {
             return;
         }
-        const revision = this.timelineRevision;
         const target = cloneTile(this.model.player);
         const targetFloorIndex = Number(this.model.floorIndex) || 0;
-        const targetFloorView = this.model.getCurrentFloorState();
-        const targetFloorActorView = this.#captureFloorActorView();
-        this.presentationLocked = true;
-        this.buttonHost.invalidate();
-        void this.#animateFloorSwapTo(
+        const targetFloorView = cloneCheckpointValue(this.model.getCurrentFloorState());
+        const targetFloorActorView = cloneCheckpointValue(this.#captureFloorActorView());
+        this.presentationTimeline.startFloorTransition({
             target,
-            targetFloorIndex,
-            targetFloorView,
-            targetFloorActorView,
-            revision
-        ).then(() => {
-            this.#finishPresentationLock(revision);
+            floorIndex: targetFloorIndex,
+            onSwap: () => {
+                this.floorView = cloneCheckpointValue(targetFloorView);
+                this.floorActorView = cloneCheckpointValue(targetFloorActorView);
+            }
         });
-    }
-
-    /**
-     * 현재 표시 좌표와 다음 타일이 기록된 텔레포트 구간인지 양방향으로 확인합니다.
-     * @param {object} from - 현재 표시 좌표를 가진 객체입니다.
-     * @param {{x:number,y:number}} to - 다음 타일입니다.
-     * @param {Array<{from:object,to:object}>} segments - 텔레포트 구간입니다.
-     * @returns {boolean} 텔레포트 전환 여부입니다.
-     * @private
-     */
-    #isTeleportTransition(from, to, segments) {
-        const fromX = Number(from?.playerX ?? from?.x);
-        const fromY = Number(from?.playerY ?? from?.y);
-        return toList(segments).some((segment) => {
-            const forward = segment?.from?.x === fromX
-                && segment?.from?.y === fromY
-                && segment?.to?.x === to.x
-                && segment?.to?.y === to.y;
-            const backward = segment?.to?.x === fromX
-                && segment?.to?.y === fromY
-                && segment?.from?.x === to.x
-                && segment?.from?.y === to.y;
-            return forward || backward;
-        });
-    }
-
-    /**
-     * 시작 타임라인이 여전히 유효할 때만 표현 입력 잠금을 해제합니다.
-     * @param {number} revision - 애니메이션 시작 타임라인 버전입니다.
-     * @private
-     */
-    #finishPresentationLock(revision) {
-        if (this.destroyed || revision !== this.timelineRevision) {
-            return;
-        }
-        this.presentationLocked = false;
-        this.buttonHost.invalidate();
     }
 
     /**
@@ -2857,7 +2393,9 @@ export class TutorialScene extends BaseScene {
         if (this.floorView) {
             return this.floorView;
         }
-        const floorIndex = Number(this.presentation.floorIndex) || 0;
+        const floorIndex = Number(
+            this.presentationTimeline.getState().floorIndex
+        ) || 0;
         return this.model.floorStates?.[floorIndex] || null;
     }
 
@@ -2877,243 +2415,12 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * 이벤트 목록을 로그와 간단한 전투 연출로 변환합니다.
-     * @param {*} events - 모델 이벤트 목록입니다.
-     * @private
-     */
-    #consumeEvents(events) {
-        for (const event of toList(events)) {
-            const message = this.#formatEvent(event);
-            if (message) {
-                this.#appendEvent(message);
-            }
-            if (event?.type === 'item-used' && event.itemId) {
-                this.#replaceMeta(identifyTutorialItem(this.meta, event.itemId));
-            }
-            this.#spawnEventEffect(event);
-        }
-    }
-
-    /**
-     * 모델 이벤트 하나를 한국어 로그로 변환합니다.
-     * @param {object} event - 모델 이벤트입니다.
-     * @returns {string} 로그 문자열입니다.
-     * @private
-     */
-    #formatEvent(event) {
-        if (!event || typeof event.type !== 'string') {
-            return '';
-        }
-        const itemLabel = this.data.ITEMS[event.itemId]?.label || event.itemId || '아이템';
-        const damage = Math.max(
-            0,
-            Math.round(Number(event.damage ?? event.amount) || 0)
-        );
-        if (event.type === 'event-tile-triggered') {
-            const labels = {
-                damage: '피해 -20 이벤트 타일 발동',
-                'move-penalty': '이동력 -2 이벤트 타일 발동',
-                'instability-up': '불안정도 +10 이벤트 타일 발동',
-                'instability-down': '불안정도 -10 이벤트 타일 발동'
-            };
-            return labels[event.eventType] || '이벤트 타일 발동';
-        }
-        if (event.type === 'instability-changed') {
-            const change = Math.round(Number(event.change) || 0);
-            return '로라 불안정도 ' + (change >= 0 ? '+' : '') + String(change);
-        }
-        const values = {
-            'item-picked': itemLabel + ' 획득',
-            'item-dropped': itemLabel + ' 드롭',
-            'wall-destroyed': '벽 파괴',
-            teleported: '텔레포트 작동',
-            'mob-damaged': '몹에게 ' + String(damage) + ' 피해',
-            'mob-defeated': '몹 격파',
-            'lora-damaged': '로라에게 ' + String(damage) + ' 피해',
-            'player-healed': '플레이어 HP 회복',
-            'player-damaged': '플레이어가 ' + String(damage) + ' 피해',
-            'item-used': itemLabel + ' 사용',
-            'player-waited': '플레이어 대기',
-            'event-tile-cleansed': '이벤트 타일을 positive로 정화',
-            'extra-player-turn': '거울 효과 · 플레이어 추가 턴 예약',
-            'mob-attack': '몹 공격 ' + String(damage) + ' 피해',
-            'mob-waited': '몹 대기',
-            'mushroom-activated': '버섯 효과 · 이동과 공격 2배',
-            'mushroom-ended': '피해를 받아 버섯 효과 종료',
-            peace: '로라가 공격하지 않았습니다.',
-            'lora-attack': '로라 공격',
-            'floor-transition': '6번째 로라 행동 종료 · 지하층 붕괴',
-            'battle-finished': '작전 판정 완료'
-        };
-        return values[event.type] || '';
-    }
-
-    /**
-     * 거절 사유를 짧은 안내로 변환합니다.
-     * @param {*} reason - 모델 사유입니다.
-     * @returns {string} 안내 문자열입니다.
-     * @private
-     */
-    #formatReason(reason) {
-        const values = {
-            'movement-used': '이번 턴 이동을 이미 사용했습니다.',
-            'action-used': '이번 턴 행동을 이미 사용했습니다.',
-            'movement-unavailable': '이번 턴 이동을 사용할 수 없습니다.',
-            'action-unavailable': '이번 턴 행동을 사용할 수 없습니다.',
-            'unreachable-destination': '그 타일까지 도달할 수 없습니다.',
-            'invalid-path': '그 경로로 이동할 수 없습니다.',
-            'path-cost-exceeded': '남은 이동력이 부족합니다.',
-            'blocked-by-wall': '벽이 경로를 막고 있습니다.',
-            'blocked-by-lora': '로라가 그 타일을 점유하고 있습니다.',
-            'blocked-by-mob': '몹이 그 타일을 점유하고 있습니다.',
-            'out-of-range': '대상이 범위 밖에 있습니다.',
-            'invalid-target': '선택할 수 없는 대상입니다.',
-            'item-missing': '해당 아이템이 없습니다.',
-            'item-not-owned': '해당 아이템을 보유하지 않았습니다.',
-            'passive-item': '자동 적용 아이템은 직접 사용할 수 없습니다.',
-            'item-already-used': '이번 플레이에서 이미 사용한 아이템입니다.',
-            'peace-active': '평화 효과 중에는 공격할 수 없습니다.',
-            'invalid-event-tile': '정화 가능한 negative 이벤트 타일을 선택하세요.'
-        };
-        return values[reason] || '지금은 그 선택을 적용할 수 없습니다.';
-    }
-
-    /**
-     * 이벤트에 맞는 떠오르는 글자와 화면 반응을 만듭니다.
-     * @param {object} event - 모델 이벤트입니다.
-     * @private
-     */
-    #spawnEventEffect(event) {
-        if (!event || !this.model) {
-            return;
-        }
-        if (event.type === 'lora-attack' || event.type === 'mob-attack') {
-            return;
-        }
-        const colors = ColorSchemes.Tactics;
-        let tile = cloneTile(event);
-        if (!tile && event.type?.startsWith('player-')) {
-            tile = cloneTile(this.model.player);
-        } else if (!tile && (event.type?.startsWith('lora-')
-            || event.type === 'instability-changed')) {
-            tile = cloneTile(this.model.lora);
-        }
-        if (!tile) {
-            return;
-        }
-        const layout = this.#createBattleLayoutFrame();
-        const point = TutorialBattleLayout.projectTile(layout, tile.x, tile.y);
-        const damage = Math.max(
-            0,
-            Math.round(Number(event.damage ?? event.amount) || 0)
-        );
-        const heal = Math.max(0, Math.round(Number(event.amount || event.heal) || 0));
-        if (damage > 0) {
-            this.floatingTexts.push({
-                text: '-' + String(damage),
-                x: point.x,
-                y: point.y - (layout.tileSide * 0.42),
-                fill: colors.UI.Danger,
-                seconds: 0,
-                duration: Number(this.data.ANIMATION.DAMAGE_TEXT_SECONDS)
-            });
-            this.screenShakeSeconds = Math.max(
-                this.screenShakeSeconds,
-                Number(this.data.ANIMATION.SHAKE_SECONDS) || 0.18
-            );
-            this.flashSeconds = Math.max(
-                this.flashSeconds,
-                Number(this.data.ANIMATION.HIT_FLASH_SECONDS)
-            );
-        } else if (heal > 0) {
-            this.floatingTexts.push({
-                text: '+' + String(heal),
-                x: point.x,
-                y: point.y - (layout.tileSide * 0.42),
-                fill: colors.UI.Success,
-                seconds: 0,
-                duration: Number(this.data.ANIMATION.HEAL_TEXT_SECONDS)
-            });
-        }
-        if (event.type === 'instability-changed'
-            && Number(event.change ?? event.delta ?? event.amount) < 0) {
-            this.stabilizeSeconds = Math.max(
-                this.stabilizeSeconds,
-                Number(this.data.ANIMATION.STABILIZE_SECONDS)
-            );
-        }
-    }
-
-    /**
-     * 이동 경로를 따라 짧은 입자를 생성합니다.
-     * @param {Array<{x:number,y:number}>} path - 이동 경로입니다.
-     * @private
-     */
-    #spawnPathParticles(path) {
-        const fill = ColorSchemes.Tactics.Effects.Move;
-        const steps = this.#normalizePath(path).slice(1);
-        if (steps.length === 0) {
-            return;
-        }
-        const count = Math.max(1, Number(this.data.ANIMATION.PARTICLE_COUNT) || 12);
-        const duration = Math.max(
-            0.01,
-            Number(this.data.ANIMATION.PARTICLE_SECONDS) || 0.48
-        );
-        const layout = this.#createBattleLayoutFrame();
-        for (let index = 0; index < count; index++) {
-            const tile = steps[index % steps.length];
-            const point = TutorialBattleLayout.projectTile(layout, tile.x, tile.y);
-            this.particles.push({
-                x: point.x,
-                y: point.y,
-                dx: (Math.random() - 0.5) * layout.tileSide,
-                dy: -layout.tileSide * (0.2 + (Math.random() * 0.5)),
-                size: layout.tileSide * 0.12,
-                fill,
-                seconds: 0,
-                duration
-            });
-        }
-    }
-
-    /**
-     * 표현 전용 수명을 갱신합니다.
-     * @param {number} deltaSeconds - 경과 초입니다.
-     * @private
-     */
-    #updatePresentation(deltaSeconds) {
-        this.screenShakeSeconds = Math.max(0, this.screenShakeSeconds - deltaSeconds);
-        this.stabilizeSeconds = Math.max(0, this.stabilizeSeconds - deltaSeconds);
-        this.flashSeconds = Math.max(0, this.flashSeconds - deltaSeconds);
-        for (const entry of this.floatingTexts) {
-            entry.seconds += deltaSeconds;
-        }
-        for (const particle of this.particles) {
-            particle.seconds += deltaSeconds;
-        }
-        this.floatingTexts = this.floatingTexts.filter(
-            (entry) => entry.seconds < entry.duration
-        );
-        this.particles = this.particles.filter(
-            (entry) => entry.seconds < entry.duration
-        );
-    }
-
-    /**
      * 이벤트 로그 끝에 중복을 줄여 새 메시지를 추가합니다.
      * @param {string} message - 로그 메시지입니다.
      * @private
      */
     #appendEvent(message) {
-        if (!message || this.eventLog[this.eventLog.length - 1] === message) {
-            return;
-        }
-        this.eventLog.push(message);
-        const limit = Number(this.data.RULES.EVENT_LOG_LIMIT) || 80;
-        if (this.eventLog.length > limit) {
-            this.eventLog.splice(0, this.eventLog.length - limit);
-        }
+        this.feedbackQueue.appendLog(message);
     }
 
 }
