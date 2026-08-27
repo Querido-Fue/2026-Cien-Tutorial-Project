@@ -4,7 +4,7 @@
   "scripts": {
     "test": "npm run test:model && npm run test:contracts && npm run check:repo",
     "test:model": "node --experimental-default-type=module --test test/tutorial_battle_model.test.mjs",
-    "test:contracts": "node --experimental-default-type=module --test test/tutorial_source_contract.test.mjs test/tutorial_scene_seams.test.mjs test/tutorial_nonbattle_views.test.mjs",
+    "test:contracts": "node --experimental-default-type=module --test test/tutorial_source_contract.test.mjs test/tutorial_scene_seams.test.mjs test/tutorial_nonbattle_views.test.mjs test/tutorial_battle_views.test.mjs",
     "check:repo": "node --experimental-default-type=module scripts/check-repo.mjs"
   }
 }

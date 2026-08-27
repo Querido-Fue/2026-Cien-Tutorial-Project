@@ -35,6 +35,7 @@ export const TUTORIAL_COMMANDS = Object.freeze({
     HEAL: 'tutorial/heal',
     IDLE: 'tutorial/idle',
     USE_ITEM: 'tutorial/use-item',
+    INVENTORY_PAGE_SHIFT: 'tutorial/inventory-page-shift',
     SELECT_CLEANSE: 'tutorial/select-cleanse',
     CLEANSE_EVENT_TILE: 'tutorial/cleanse-event-tile',
     PERFORM_LORA: 'tutorial/perform-lora',

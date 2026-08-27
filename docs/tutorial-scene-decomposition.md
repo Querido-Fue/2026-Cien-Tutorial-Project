@@ -6,19 +6,22 @@
 장면은 최종적으로 `BaseScene` 생명주기와 명령 조율만 소유하고, 입력·뷰·버튼·표현·에셋은
 각각 한 책임을 가진 모듈로 이동한다.
 
-| 항목 | 분리 전 기준 | Turn 03 결과 | Turn 04 결과 |
-| --- | ---: | ---: | ---: |
-| 기준 커밋 | `253507b` | `1f0711e` | Turn 04 작업 트리 |
-| `_tutorial_scene.js` 줄 수 | 5,024 | 4,883 | 4,458 |
-| private 메서드 수 | 136 | 136 | 128 |
-| 장면 내부 모드·명령·키 상수 | 있음 | 제거 | 제거 유지 |
-| 장면 내부 좌표·복제 유틸 | 있음 | 제거 | 제거 유지 |
-| 장면 내부 비전투 draw 구현 | 6개 | 6개 | 0개 |
-| 장면의 UI 풀 소유 | 있음 | 있음 | 제거 |
+| 항목 | 분리 전 기준 | Turn 03 결과 | Turn 04 결과 | Turn 05 결과 |
+| --- | ---: | ---: | ---: | ---: |
+| 기준 커밋 | `253507b` | `1f0711e` | `cf9736a` | Turn 05 작업 트리 |
+| `_tutorial_scene.js` 줄 수 | 5,024 | 4,883 | 4,458 | 3,119 |
+| private 메서드 수 | 136 | 136 | 128 | 100 |
+| 장면 내부 모드·명령·키 상수 | 있음 | 제거 | 제거 유지 | 제거 유지 |
+| 장면 내부 좌표·복제 유틸 | 있음 | 제거 | 제거 유지 | 제거 유지 |
+| 장면 내부 비전투 draw 구현 | 6개 | 6개 | 0개 | 0개 |
+| 장면 내부 전투 draw 구현 | 있음 | 있음 | 있음 | 0개 |
+| 장면의 전투 투영·HUD 좌표 소유 | 있음 | 있음 | 있음 | 제거 |
+| 장면의 UI 풀 소유 | 있음 | 있음 | 제거 | 제거 유지 |
 
-전투 월드·HUD와 프레젠터가 아직 장면에 남아 있어 파일은 크지만, Turn 04에서 비전투
-렌더링과 버튼 풀 수명주기를 실제 클래스로 이동했다. 전투 뷰와 프레젠터 이동은
-Turn 05~06에서 이어간다. 다음 불변 조건은 모든 분리 단계에서 유지한다.
+Turn 04에서 비전투 렌더링과 버튼 풀 수명주기를 이동했고, Turn 05에서 전투 레이아웃,
+월드, HUD, 피드백 렌더링을 실제 클래스로 이동했다. 장면에는 프레젠테이션 타임라인과
+에셋 수명주기가 남아 있으며 Turn 06에서 이어서 분리한다. 다음 불변 조건은 모든 분리
+단계에서 유지한다.
 
 - 전투 판정은 `TutorialBattleModel`과 `TUTORIAL_GAME_DATA`만 결정한다.
 - `update()`는 입력 의도를 명령 큐에 넣고, 상태 변경은 `applySimulationCommands()`에서 한다.
@@ -78,7 +81,7 @@ import하지 않고, 모드 정책만 모드 상수를 참조한다.
 
 - `#handleKeyboardInput`, `#updatePointerState`, `#handlePointerInput`, `#queueUiCommand`
 - `#wasKeyPressed`, `#wasAnyKeyPressed`, `#prepareKeyboardEdges`, `#captureKeyboardLatch`
-- 공간 판정: `#hitTestTile`
+- 공간 판정: `TutorialBattleLayout.hitTestTile(#createBattleLayoutFrame(), x, y)`
 
 입력은 `mode`, `presentationLocked`, `cutscenes`, 모델 phase, 계획 경로와 선택 대상을 읽는다.
 `keyboardLatch`, `keyboardPressObserved`, `frameKeyEdges`, `lastKeyboardEventTimestamp`,
@@ -95,8 +98,8 @@ import하지 않고, 모드 정책만 모드 상수를 참조한다.
 - 읽기 캐시: `#getSnapshot`, `#captureFloorActorView`, `#refreshBattleCache`,
   `#normalizeReachability`, `#normalizePath`, `#resetPlannedPath`, `#shiftAttackTarget`,
   `#shiftCleanseTarget`, `#canAcceptBattleInput`
-- 인벤토리 조회: `#getInventoryEntries`, `#getInventoryPaging`, `#isItemUsable`,
-  `#isItemKnown`
+- 인벤토리 조회·명령 적용: `#getInventoryEntries`, `#getInventoryPaging`,
+  `#applyInventoryPageShift`, `#isItemUsable`, `#isItemKnown`
 
 이 그룹은 `model`의 공개 API만 호출한다. 장면 캐시인 `floorView`, `floorActorView`,
 `reachability`, `plannedPath`, `actionTargets`, `cleanseTargets`와 선택 index를 갱신하지만
@@ -127,24 +130,17 @@ import하지 않고, 모드 정책만 모드 상수를 참조한다.
 
 ### 3.6 렌더·레이아웃 메서드
 
-- viewport·투영: `#syncViewport`, `#uww`, `#uwh`, `#getBoardShake`, `#projectTile`,
-  `#getCurrentFloor`
+- viewport: `#syncViewport`, `#uwh`, `#getCurrentFloor`
 - 공통 배경: `#drawBackdrop`
 - 비전투 view model: `#createNonbattleViewFrame`, `#createLoadingViewModel`,
   `#createMenuViewModel`, `#createStarterViewModel`, `#createGalleryViewModel`,
   `#createResultViewModel`, `#createCutsceneViewModel`
-- 전투 월드: `#drawBattle`, `#drawQuarterViewBoard`, `#drawWorldObjects`, `#drawWall`,
-  `#drawWorldItem`, `#drawEventTile`, `#drawTeleport`, `#drawMob`, `#drawPlayer`,
-  `#drawLora`, `#drawShadow`, `#drawWorldHp`, `#drawWorldGlyph`, `#getItemGlyph`,
-  `#drawWorldEffects`
-- HUD: `#drawBattleHud`, `#drawBattleStageHeader`, `#drawLoraStatusCard`,
-  `#drawMissionCard`, `#drawPlayerStatus`, `#drawInventoryCard`, `#drawHudCard`,
-  `#drawGauge`
-- 공통 텍스트: `#wrapText`, `#truncateText`, `#drawText`
+- 전투 view model: `#createBattleLayoutFrame`, `#createBattleViewModel`
 
-이 그룹은 `WW`, `WH`, `UIWW`, `UIOffsetX`, `fonts`, `boardRect`, `hudRects`,
-`tileWidth`, `tileHeight`, `tileElevation`, `tileSide`, `tileGap`, `isoOriginX`,
-`isoOriginY`와 읽기 전용 모델·표현 상태를 사용한다. 렌더 메서드는 모델을 변경하지 않는다.
+장면은 viewport를 `TutorialBattleLayout.resize()`에 전달하고, 같은 레이아웃 프레임을
+월드 렌더링·피드백·마우스 히트테스트에 사용한다. 전투 월드 draw는
+`TutorialBattleWorldView`, HUD draw와 버튼 사양은 `TutorialBattleHudView`, 입자와 떠오르는
+텍스트는 `TutorialBattleFeedbackView`가 각각 소유한다. 뷰는 장면이나 모델을 변경하지 않는다.
 
 ### 3.7 에셋 메서드와 상태
 
@@ -158,12 +154,13 @@ import하지 않고, 모드 정책만 모드 상수를 참조한다.
 ### 3.8 버튼 메서드와 상태
 
 - 장면 조율: `#ensureButtons`, `#getButtonSignature`, `#getButtonSpecs`,
-  `#createButtonHostStyle`, `#getBattleButtonSpecs`, `#changeInventoryPage`
+  `#createButtonHostStyle`, `#getBattleButtonSpecs`, `#applyInventoryPageShift`
 - 전투 atlas 어댑터: `#createItemIconChild`
 
-`TutorialButtonHost`가 `UIPool` 획득·갱신·그리기·반납과 구성 서명을 소유한다. 비전투
-화면은 직렬화 가능한 command button spec만 반환하고, 호스트가 `onCommand(type, payload)`로
-씬에 전달한다. 씬은 전투 버튼 사양과 `inventoryPage`, `uiActionHandled`만 조율한다.
+`TutorialButtonHost`가 `UIPool` 획득·갱신·그리기·반납과 구성 서명을 소유한다. 모든 화면은
+직렬화 가능한 command button spec만 반환하고, 호스트가 `onCommand(type, payload)`로 씬에
+전달한다. 전투 버튼 좌표·활성 조건·인벤토리 페이지 범위는 HUD 뷰가 계산하고, 페이지
+변경은 `INVENTORY_PAGE_SHIFT` 명령을 거쳐 장면에서 적용한다.
 
 ## 4. 목표 모듈과 이동 순서
 
@@ -176,8 +173,9 @@ import하지 않고, 모드 정책만 모드 상수를 참조한다.
 | Turn 04 | `TutorialResultView` | 결과 렌더·button spec | view model, `onCommand` |
 | Turn 04 | `TutorialCutsceneView` | 컷씬 카드 렌더·button spec | controller snapshot, `onCommand` |
 | Turn 04 | `TutorialButtonHost` | `UIPool` 획득·갱신·그리기·반납 | button spec, UI API |
-| Turn 05 | `TutorialBattleViewModelBuilder` | 한 프레임의 직렬화 가능한 전투 view model 생성 | model snapshot·장면 선택 상태 읽기 |
-| Turn 05 | `TutorialBattleWorldView` | 타일·경로·오브젝트·액터 렌더와 hit region | battle view model, render port |
+| Turn 05 | `TutorialBattleLayout` | viewport별 보드·HUD 좌표와 타일 투영·히트테스트 | 정적 레이아웃 데이터, 순수 viewport 값 |
+| Turn 05 | 장면 `#createBattleViewModel` | 한 프레임의 직렬화 가능한 전투 view model 생성 | model snapshot·장면 선택 상태 읽기 |
+| Turn 05 | `TutorialBattleWorldView` | 타일·경로·오브젝트·액터 렌더 | battle view model, layout, render/asset port |
 | Turn 05 | `TutorialBattleHudView` | 턴·게이지·행동·인벤토리 렌더 | battle view model, render port |
 | Turn 05 | `TutorialBattleFeedbackView` | cue의 화면 표시 | feedback snapshot, render port |
 | Turn 06 | `TutorialBattlePresenter` | 모델 event와 snapshot을 결정론적 cue로 변환 | 순수 값만 |
@@ -222,3 +220,27 @@ TutorialScene
   저장, 명령 큐를 알지 못한다.
 - 화면 문구, 좌표 비율, 테마 키, 기능 플래그와 전투 규칙은 변경하지 않았다. 외부 기획
   자료가 필요한 새 콘텐츠 결정도 없었다.
+
+## 7. Turn 05 전투 뷰 결과
+
+```text
+TutorialScene
+├──> TutorialBattleLayout <──── 월드 렌더·히트테스트 공유 좌표
+├──> TutorialBattleWorldView ──> battle view helpers
+├──> TutorialBattleHudView ────> battle view helpers
+├──> TutorialBattleFeedbackView
+└──> TutorialButtonHost ───────> UIPool
+```
+
+- 장면의 `#createBattleViewModel()`이 snapshot, 현재 층, 도달 가능 타일, 계획 경로, 행동·정화
+  대상과 선택, 보간 상태, 아이템 메타데이터, HUD 상태를 한 번에 조립한다.
+- 네 전투 클래스는 파일당 하나이며 모델, 메타 저장, 시뮬레이션 명령 큐와 장면을 import하지
+  않는다. 공용 도우미는 상태 없는 순수 함수만 제공한다.
+- `TutorialBattleLayout`이 보드/HUD 크기와 타일 투영을 소유한다. 월드 뷰와 장면의
+  히트테스트가 동일 프레임을 소비하므로 렌더 좌표와 입력 좌표가 별도로 어긋나지 않는다.
+- HUD 뷰는 전투 버튼을 직접 실행하지 않고 `{ type, payload }`만 반환한다. 인벤토리 페이지
+  이동도 명령 경계를 거치므로 뷰가 장면 상태를 변경하지 않는다.
+- 이미지·atlas canvas는 직렬화 가능한 view model에 섞지 않고 작은 asset port로 주입했다.
+  에셋 로드·실패·정리 수명주기는 다음 분리 대상이다.
+- 화면 문구, 수치, 자산 경로와 전투 규칙을 새로 결정하지 않았으므로 외부 회의 문서 조회는
+  필요하지 않았다.
