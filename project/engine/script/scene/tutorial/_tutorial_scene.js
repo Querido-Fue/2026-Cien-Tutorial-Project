@@ -36,110 +36,36 @@ import {
     saveTutorialMeta,
     unlockTutorialCutscene
 } from './_tutorial_meta_progress.js';
+import {
+    TUTORIAL_COMMANDS as COMMANDS,
+    TUTORIAL_MODES as MODES
+} from './_tutorial_scene_constants.js';
+import {
+    TUTORIAL_KEY_CODES as KEY_CODES,
+    TUTORIAL_KEY_DIRECTIONS as KEY_DIRECTIONS,
+    TUTORIAL_SELECTION_KEY_CODES as SELECTION_KEY_CODES,
+    TUTORIAL_WATCHED_KEY_CODES as WATCHED_KEY_CODES
+} from './_tutorial_input_bindings.js';
+import {
+    canRestartTutorialRun,
+    canReturnToTutorialMenu,
+    getTutorialModePolicy,
+    isTutorialBattleMode
+} from './_tutorial_mode_policy.js';
+import {
+    areSerializableValuesEqual as isSameMeta,
+    clampNumber,
+    cloneTile,
+    cloneValue as cloneCheckpointValue,
+    toList,
+    toTileKey
+} from './_tutorial_value_utils.js';
 
 const TUTORIAL_GAME_DATA = getData('TUTORIAL_GAME_DATA');
-
-const MODES = Object.freeze({
-    LOADING: 'loading',
-    MENU: 'menu',
-    STARTER: 'starter',
-    BATTLE: 'battle',
-    RESULT: 'result',
-    GALLERY: 'gallery'
-});
-
-const COMMANDS = Object.freeze({
-    META_READY: 'tutorial/meta-ready',
-    START: 'tutorial/start',
-    OPEN_GALLERY: 'tutorial/open-gallery',
-    RETURN_MENU: 'tutorial/return-menu',
-    STARTER_SHIFT: 'tutorial/starter-shift',
-    CHOOSE_STARTER: 'tutorial/choose-starter',
-    RESTART: 'tutorial/restart',
-    GALLERY_SHIFT: 'tutorial/gallery-shift',
-    GALLERY_PLAY: 'tutorial/gallery-play',
-    CUTSCENE_NEXT: 'tutorial/cutscene-next',
-    CUTSCENE_CLOSE: 'tutorial/cutscene-close',
-    PLAN_STEP: 'tutorial/plan-step',
-    PLAN_BACK: 'tutorial/plan-back',
-    COMMIT_PATH: 'tutorial/commit-path',
-    SELECT_ATTACK: 'tutorial/select-attack',
-    ATTACK: 'tutorial/attack',
-    HEAL: 'tutorial/heal',
-    IDLE: 'tutorial/idle',
-    USE_ITEM: 'tutorial/use-item',
-    SELECT_CLEANSE: 'tutorial/select-cleanse',
-    CLEANSE_EVENT_TILE: 'tutorial/cleanse-event-tile',
-    PERFORM_LORA: 'tutorial/perform-lora',
-    COMPLETE_LORA: 'tutorial/complete-lora'
-});
-
-const WATCHED_KEY_CODES = Object.freeze([
-    'ArrowUp',
-    'ArrowRight',
-    'ArrowDown',
-    'ArrowLeft',
-    'KeyW',
-    'KeyD',
-    'KeyS',
-    'KeyA',
-    'Enter',
-    'Space',
-    'Digit1',
-    'Digit2',
-    'Digit3',
-    'Digit4',
-    'Backspace',
-    'KeyR',
-    'Tab',
-    'Escape'
-]);
-
-const KEY_DIRECTIONS = Object.freeze([
-    Object.freeze({ codes: Object.freeze(['ArrowUp', 'KeyW']), x: 0, y: -1 }),
-    Object.freeze({ codes: Object.freeze(['ArrowRight', 'KeyD']), x: 1, y: 0 }),
-    Object.freeze({ codes: Object.freeze(['ArrowDown', 'KeyS']), x: 0, y: 1 }),
-    Object.freeze({ codes: Object.freeze(['ArrowLeft', 'KeyA']), x: -1, y: 0 })
-]);
 
 const PLAYER_ID = 'player';
 const LORA_ID = 'lora';
 const KNOWN_STARTER_IDS = new Set(['bow', 'mascot-costume']);
-
-/**
- * 숫자를 지정한 범위 안으로 제한합니다.
- * @param {*} value - 제한할 값입니다.
- * @param {number} min - 최솟값입니다.
- * @param {number} max - 최댓값입니다.
- * @returns {number} 제한된 숫자입니다.
- */
-function clampNumber(value, min, max) {
-    return Math.min(Math.max(Number(value) || 0, min), max);
-}
-
-/**
- * 타일 좌표를 조회 키로 변환합니다.
- * @param {number} x - 타일 X 좌표입니다.
- * @param {number} y - 타일 Y 좌표입니다.
- * @returns {string} 좌표 키입니다.
- */
-function toTileKey(x, y) {
-    return String(x) + ',' + String(y);
-}
-
-/**
- * 좌표처럼 보이는 값을 안전한 타일 좌표로 복제합니다.
- * @param {*} value - 원본 값입니다.
- * @returns {{x:number,y:number}|null} 좌표 복제본입니다.
- */
-function cloneTile(value) {
-    const x = Number(value?.x);
-    const y = Number(value?.y);
-    if (!Number.isInteger(x) || !Number.isInteger(y)) {
-        return null;
-    }
-    return { x, y };
-}
 
 /**
  * 반응형 폰트 문자열을 생성합니다.
@@ -153,77 +79,6 @@ function createResponsiveFont(spec, uiWidth) {
         family: spec.FAMILY,
         weight: spec.WEIGHT
     });
-}
-
-/**
- * 임의 값을 배열로 정규화합니다.
- * @param {*} value - 원본 값입니다.
- * @returns {Array} 배열입니다.
- */
-function toList(value) {
-    if (Array.isArray(value)) {
-        return value;
-    }
-    if (value instanceof Map) {
-        return Array.from(value.values());
-    }
-    return [];
-}
-
-/**
- * 체크포인트에 넣을 배열, Map, Set, 일반 객체를 참조 공유 없이 복제합니다.
- * @param {*} value - 복제할 값입니다.
- * @param {WeakMap<object, *>} [seen] - 순환 참조 방지 지도입니다.
- * @returns {*} 독립 복제본입니다.
- */
-function cloneCheckpointValue(value, seen = new WeakMap()) {
-    if (value === null || typeof value !== 'object') {
-        return value;
-    }
-    if (seen.has(value)) {
-        return seen.get(value);
-    }
-    if (Array.isArray(value)) {
-        const copy = [];
-        seen.set(value, copy);
-        value.forEach((entry) => copy.push(cloneCheckpointValue(entry, seen)));
-        return copy;
-    }
-    if (value instanceof Map) {
-        const copy = new Map();
-        seen.set(value, copy);
-        for (const [key, entry] of value.entries()) {
-            copy.set(
-                cloneCheckpointValue(key, seen),
-                cloneCheckpointValue(entry, seen)
-            );
-        }
-        return copy;
-    }
-    if (value instanceof Set) {
-        const copy = new Set();
-        seen.set(value, copy);
-        for (const entry of value.values()) {
-            copy.add(cloneCheckpointValue(entry, seen));
-        }
-        return copy;
-    }
-    const copy = {};
-    seen.set(value, copy);
-    for (const [key, entry] of Object.entries(value)) {
-        copy[key] = cloneCheckpointValue(entry, seen);
-    }
-    return copy;
-}
-
-/**
- * 튜토리얼 메타 두 값이 같은지 비교합니다.
- * @param {object} left - 왼쪽 값입니다.
- * @param {object} right - 오른쪽 값입니다.
- * @returns {boolean} 같으면 true입니다.
- */
-function isSameMeta(left, right) {
-    return JSON.stringify(left) === JSON.stringify(right);
 }
 
 /**
@@ -400,18 +255,19 @@ export class TutorialScene extends BaseScene {
     draw() {
         this.#ensureButtons();
         this.#drawBackdrop();
+        const view = getTutorialModePolicy(this.mode)?.view;
 
-        if (this.mode === MODES.LOADING) {
+        if (view === 'loading') {
             this.#drawLoading();
-        } else if (this.mode === MODES.MENU) {
+        } else if (view === 'menu') {
             this.#drawMenu();
-        } else if (this.mode === MODES.STARTER) {
+        } else if (view === 'starter') {
             this.#drawStarterSelect();
-        } else if (this.mode === MODES.GALLERY) {
+        } else if (view === 'gallery') {
             this.#drawGallery();
-        } else if (this.mode === MODES.BATTLE) {
+        } else if (view === 'battle') {
             this.#drawBattle();
-        } else if (this.mode === MODES.RESULT) {
+        } else if (view === 'result') {
             this.#drawResult();
         }
 
@@ -680,7 +536,7 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #applyReturnMenu() {
-        if (this.mode === MODES.LOADING) {
+        if (!canReturnToTutorialMenu(this.mode)) {
             return;
         }
         this.#leaveRun(MODES.MENU);
@@ -727,7 +583,7 @@ export class TutorialScene extends BaseScene {
 
     /** 전투를 중단하거나 결과를 닫고 스타터 선택으로 돌아갑니다. @private */
     #applyRestart() {
-        if (this.mode !== MODES.BATTLE && this.mode !== MODES.RESULT) {
+        if (!canRestartTutorialRun(this.mode)) {
             return;
         }
         this.#leaveRun(MODES.STARTER);
@@ -1609,7 +1465,7 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #canAcceptBattleInput() {
-        return this.mode === MODES.BATTLE
+        return isTutorialBattleMode(this.mode)
             && !this.cutscenes.isOpen()
             && !this.presentationLocked
             && this.model?.turn === 'player'
@@ -1661,63 +1517,64 @@ export class TutorialScene extends BaseScene {
             return;
         }
         if (this.cutscenes.isOpen()) {
-            if (this.#wasKeyPressed('Enter') || this.#wasKeyPressed('Space')) {
+            if (this.#wasKeyPressed(KEY_CODES.CONFIRM)
+                || this.#wasKeyPressed(KEY_CODES.ALTERNATE_CONFIRM)) {
                 enqueueSimulationCommand({ type: COMMANDS.CUTSCENE_NEXT });
-            } else if (this.#wasKeyPressed('Escape')) {
+            } else if (this.#wasKeyPressed(KEY_CODES.CANCEL)) {
                 enqueueSimulationCommand({ type: COMMANDS.CUTSCENE_CLOSE });
             }
             return;
         }
 
         if (this.mode === MODES.MENU) {
-            if (this.#wasKeyPressed('Enter')) {
+            if (this.#wasKeyPressed(KEY_CODES.CONFIRM)) {
                 enqueueSimulationCommand({ type: COMMANDS.START });
             }
             return;
         }
 
         if (this.mode === MODES.STARTER) {
-            if (this.#wasAnyKeyPressed(['ArrowLeft', 'ArrowUp', 'KeyA', 'KeyW'])) {
+            if (this.#wasAnyKeyPressed(SELECTION_KEY_CODES.PREVIOUS)) {
                 enqueueSimulationCommand({
                     type: COMMANDS.STARTER_SHIFT,
                     payload: { delta: -1 }
                 });
-            } else if (this.#wasAnyKeyPressed(['ArrowRight', 'ArrowDown', 'KeyD', 'KeyS'])) {
+            } else if (this.#wasAnyKeyPressed(SELECTION_KEY_CODES.NEXT)) {
                 enqueueSimulationCommand({
                     type: COMMANDS.STARTER_SHIFT,
                     payload: { delta: 1 }
                 });
-            } else if (this.#wasKeyPressed('Enter')) {
+            } else if (this.#wasKeyPressed(KEY_CODES.CONFIRM)) {
                 enqueueSimulationCommand({ type: COMMANDS.CHOOSE_STARTER });
-            } else if (this.#wasKeyPressed('Escape')) {
+            } else if (this.#wasKeyPressed(KEY_CODES.CANCEL)) {
                 enqueueSimulationCommand({ type: COMMANDS.RETURN_MENU });
             }
             return;
         }
 
         if (this.mode === MODES.GALLERY) {
-            if (this.#wasAnyKeyPressed(['ArrowLeft', 'ArrowUp', 'KeyA', 'KeyW'])) {
+            if (this.#wasAnyKeyPressed(SELECTION_KEY_CODES.PREVIOUS)) {
                 enqueueSimulationCommand({
                     type: COMMANDS.GALLERY_SHIFT,
                     payload: { delta: -1 }
                 });
-            } else if (this.#wasAnyKeyPressed(['ArrowRight', 'ArrowDown', 'KeyD', 'KeyS'])) {
+            } else if (this.#wasAnyKeyPressed(SELECTION_KEY_CODES.NEXT)) {
                 enqueueSimulationCommand({
                     type: COMMANDS.GALLERY_SHIFT,
                     payload: { delta: 1 }
                 });
-            } else if (this.#wasKeyPressed('Enter')) {
+            } else if (this.#wasKeyPressed(KEY_CODES.CONFIRM)) {
                 enqueueSimulationCommand({ type: COMMANDS.GALLERY_PLAY });
-            } else if (this.#wasKeyPressed('Escape')) {
+            } else if (this.#wasKeyPressed(KEY_CODES.CANCEL)) {
                 enqueueSimulationCommand({ type: COMMANDS.RETURN_MENU });
             }
             return;
         }
 
         if (this.mode === MODES.RESULT) {
-            if (this.#wasKeyPressed('KeyR')) {
+            if (this.#wasKeyPressed(KEY_CODES.RESTART)) {
                 enqueueSimulationCommand({ type: COMMANDS.RESTART });
-            } else if (this.#wasKeyPressed('Escape')) {
+            } else if (this.#wasKeyPressed(KEY_CODES.CANCEL)) {
                 enqueueSimulationCommand({ type: COMMANDS.RETURN_MENU });
             }
             return;
@@ -1726,11 +1583,11 @@ export class TutorialScene extends BaseScene {
         if (this.mode !== MODES.BATTLE) {
             return;
         }
-        if (this.#wasKeyPressed('KeyR')) {
+        if (this.#wasKeyPressed(KEY_CODES.RESTART)) {
             enqueueSimulationCommand({ type: COMMANDS.RESTART });
             return;
         }
-        if (this.#wasKeyPressed('Escape')) {
+        if (this.#wasKeyPressed(KEY_CODES.CANCEL)) {
             enqueueSimulationCommand({ type: COMMANDS.RETURN_MENU });
             return;
         }
@@ -1738,7 +1595,7 @@ export class TutorialScene extends BaseScene {
             return;
         }
 
-        if (this.#wasKeyPressed('Backspace')) {
+        if (this.#wasKeyPressed(KEY_CODES.PATH_BACK)) {
             enqueueSimulationCommand({ type: COMMANDS.PLAN_BACK });
             return;
         }
@@ -1751,12 +1608,13 @@ export class TutorialScene extends BaseScene {
             });
             return;
         }
-        if (this.#wasKeyPressed('Tab') && (this.attackSelected || this.cleanseSelected)) {
+        if (this.#wasKeyPressed(KEY_CODES.TARGET_NEXT)
+            && (this.attackSelected || this.cleanseSelected)) {
             enqueueSimulationCommand({
                 type: COMMANDS.PLAN_STEP,
                 payload: { x: 1, y: 0 }
             });
-        } else if (this.#wasKeyPressed('Enter')) {
+        } else if (this.#wasKeyPressed(KEY_CODES.CONFIRM)) {
             if (this.cleanseSelected) {
                 const target = this.cleanseTargets[this.cleanseTargetIndex];
                 enqueueSimulationCommand({
@@ -1771,21 +1629,21 @@ export class TutorialScene extends BaseScene {
             } else if (this.model.phase === 'move') {
                 enqueueSimulationCommand({ type: COMMANDS.COMMIT_PATH });
             }
-        } else if (this.#wasKeyPressed('Digit1')) {
+        } else if (this.#wasKeyPressed(KEY_CODES.ACTION_MELEE)) {
             enqueueSimulationCommand({
                 type: COMMANDS.SELECT_ATTACK,
                 payload: { weapon: 'melee' }
             });
-        } else if (this.#wasKeyPressed('Digit2')) {
+        } else if (this.#wasKeyPressed(KEY_CODES.ACTION_RANGED)) {
             enqueueSimulationCommand({
                 type: COMMANDS.SELECT_ATTACK,
                 payload: { weapon: 'bow' }
             });
-        } else if (this.#wasKeyPressed('Digit3')) {
+        } else if (this.#wasKeyPressed(KEY_CODES.ACTION_HEAL)) {
             enqueueSimulationCommand({ type: COMMANDS.HEAL });
-        } else if (this.#wasKeyPressed('Digit4')) {
+        } else if (this.#wasKeyPressed(KEY_CODES.ACTION_IDLE)) {
             enqueueSimulationCommand({ type: COMMANDS.IDLE });
-        } else if (this.#wasKeyPressed('Space')) {
+        } else if (this.#wasKeyPressed(KEY_CODES.ALTERNATE_CONFIRM)) {
             enqueueSimulationCommand({ type: COMMANDS.IDLE });
         }
     }
@@ -2022,22 +1880,23 @@ export class TutorialScene extends BaseScene {
      */
     #buildButtons() {
         this.#releaseButtons();
-        if (this.mode === MODES.LOADING) {
+        const buttonGroup = getTutorialModePolicy(this.mode)?.buttons;
+        if (!buttonGroup) {
             return;
         }
         if (this.cutscenes.isOpen()) {
             this.#buildCutsceneButtons();
             return;
         }
-        if (this.mode === MODES.MENU) {
+        if (buttonGroup === 'menu') {
             this.#buildMenuButtons();
-        } else if (this.mode === MODES.STARTER) {
+        } else if (buttonGroup === 'starter') {
             this.#buildStarterButtons();
-        } else if (this.mode === MODES.GALLERY) {
+        } else if (buttonGroup === 'gallery') {
             this.#buildGalleryButtons();
-        } else if (this.mode === MODES.BATTLE) {
+        } else if (buttonGroup === 'battle') {
             this.#buildBattleButtons();
-        } else if (this.mode === MODES.RESULT) {
+        } else if (buttonGroup === 'result') {
             this.#buildResultButtons();
         }
     }
