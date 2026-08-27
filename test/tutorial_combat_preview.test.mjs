@@ -178,8 +178,8 @@ test('활 원거리 공격과 회복·대기의 예상 상태는 실제 행동 �
         state.player.alive = true;
     });
     const heal = comparePreviewWithActual(healModel, 'heal', {}, () => healModel.heal());
-    assert.equal(heal.preview.expected.playerHp, 70);
-    assert.equal(heal.actual.amount, 20);
+    assert.equal(heal.preview.expected.playerHp, 65);
+    assert.equal(heal.actual.amount, 15);
 
     const waitModel = createModel('bow', config);
     seedActionState(waitModel);
@@ -221,7 +221,7 @@ test('낡은 곰인형 사용 전후와 버섯 활성 공격이 실제 피해 �
         () => afterUse.useItem('old-teddy')
     );
     assert.equal(teddy.preview.consumedItemCount, 1);
-    assert.equal(teddy.preview.changes.instability, -30);
+    assert.equal(teddy.preview.changes.instability, -20);
     const after = comparePreviewWithActual(
         afterUse,
         'attack',
@@ -269,6 +269,7 @@ test('오르골 평화와 인형탈 방어를 포함한 로라 의도는 실제 
         { itemId: 'music-box' },
         () => musicModel.useItem('music-box')
     );
+    assert.equal(musicModel.lora.peaceTurns, 1);
     const peaceIntent = assertPurePreview(musicModel, () => musicModel.getLoraIntent());
     assert.equal(peaceIntent.reason, 'peace-active');
     assert.equal(peaceIntent.actionType, 'none');
@@ -287,8 +288,8 @@ test('오르골 평화와 인형탈 방어를 포함한 로라 의도는 실제 
     });
     const mascotIntent = assertPurePreview(mascotModel, () => mascotModel.getLoraIntent());
     assert.equal(mascotIntent.rawDamage, 40);
-    assert.equal(mascotIntent.damageReduction, 10);
-    assert.equal(mascotIntent.finalDamage, 30);
+    assert.equal(mascotIntent.damageReduction, 8);
+    assert.equal(mascotIntent.finalDamage, 32);
     const mascotActual = mascotModel.performLoraTurn();
     assert.equal(mascotActual.damage, mascotIntent.finalDamage);
     assert.equal(mascotModel.player.hp, mascotIntent.playerHpAfter);

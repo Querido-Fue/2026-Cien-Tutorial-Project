@@ -134,8 +134,8 @@ test('기획 데이터의 9×8 좌표와 두 스타터를 고정한다', () => {
     assert.deepEqual(positionTuples(basement.eventTiles, 'type'), [
         ['b1-event-4-a', 'instability-down', 2, 0],
         ['b1-event-4-b', 'instability-down', 6, 0],
-        ['b1-event-4-c', 'instability-down', 2, 1],
-        ['b1-event-4-d', 'instability-down', 6, 1]
+        ['b1-event-4-c', 'damage', 2, 1],
+        ['b1-event-4-d', 'instability-up', 6, 1]
     ]);
     assert.deepEqual(positionTuples(basement.teleports, 'pairId'), [
         ['b1-teleport-a', 'b1-teleport', 7, 3],
@@ -232,12 +232,12 @@ test('피해·이동력 감소·불안정도 증감 이벤트 타일을 적용�
     });
     const damageMove = damageModel.commitPath([{ x: 1, y: 2 }, { x: 0, y: 2 }]);
     assert.equal(damageMove.ok, true);
-    assert.equal(damageModel.player.hp, 90);
+    assert.equal(damageModel.player.hp, 88);
     assert.equal(
         damageMove.events.find(({ type }) => type === 'event-tile-triggered').eventType,
         'damage'
     );
-    assert.equal(damageMove.events.find(({ type }) => type === 'player-damaged').amount, 10);
+    assert.equal(damageMove.events.find(({ type }) => type === 'player-damaged').amount, 12);
 
     const penaltyModel = createModel();
     seedState(penaltyModel, (state) => {
@@ -417,8 +417,8 @@ test('낡은 곰인형은 한 번만 안정시키고 사용 뒤 공격·방어 �
     const afterUse = createTeddyScenario();
     const used = afterUse.useItem('old-teddy');
     assert.equal(used.ok, true);
-    assert.equal(used.effects[0].instabilityChange, -30);
-    assert.equal(afterUse.lora.instability, 40);
+    assert.equal(used.effects[0].instabilityChange, -20);
+    assert.equal(afterUse.lora.instability, 50);
     assert.equal(
         afterUse.getSnapshot().inventory.some(({ itemId }) => itemId === 'old-teddy'),
         false
@@ -427,7 +427,7 @@ test('낡은 곰인형은 한 번만 안정시키고 사용 뒤 공격·방어 �
     const secondUse = afterUse.useItem('old-teddy');
     assert.equal(secondUse.ok, false);
     assert.equal(secondUse.reason, 'item-not-owned');
-    assert.equal(afterUse.lora.instability, 40);
+    assert.equal(afterUse.lora.instability, 50);
 
     const afterUseCheckpoint = afterUse.createCheckpoint();
     assert.equal(afterUse.attack('lora', { weapon: 'melee' }).damage, 50);
@@ -436,7 +436,7 @@ test('낡은 곰인형은 한 번만 안정시키고 사용 뒤 공격·방어 �
     const restored = afterUse.restoreCheckpoint(afterUseCheckpoint);
     assert.equal(restored.usedItems.includes('old-teddy'), true);
     assert.equal(restored.inventory.some(({ itemId }) => itemId === 'old-teddy'), false);
-    assert.equal(restored.lora.instability, 40);
+    assert.equal(restored.lora.instability, 50);
     assert.equal(restored.actionsRemaining, 1);
     assert.equal(afterUse.attack('lora', { weapon: 'melee' }).damage, 50);
 });
@@ -516,8 +516,8 @@ test('사거리 안의 몹은 공격하고 사망 시 정화제를 드롭한다'
     assert.equal(firstAttack.damage, 50);
     assert.equal(firstAttack.defeated, false);
     const firstEnemyCycle = model.completeLoraTurn();
-    assert.deepEqual(firstEnemyCycle.mobAttacks, [{ mobId: 'f1-mob', damage: 10 }]);
-    assert.equal(model.player.hp, 80);
+    assert.deepEqual(firstEnemyCycle.mobAttacks, [{ mobId: 'f1-mob', damage: 12 }]);
+    assert.equal(model.player.hp, 76);
 
     assert.equal(model.commitPath([{ x: 0, y: 5 }]).ok, true);
     const secondAttack = model.attack('f1-mob', { weapon: 'melee' });

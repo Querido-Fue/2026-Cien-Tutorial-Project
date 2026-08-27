@@ -204,8 +204,8 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
             eventTiles: [
                 { id: 'b1-event-4-a', type: 'instability-down', x: 2, y: 0 },
                 { id: 'b1-event-4-b', type: 'instability-down', x: 6, y: 0 },
-                { id: 'b1-event-4-c', type: 'instability-down', x: 2, y: 1 },
-                { id: 'b1-event-4-d', type: 'instability-down', x: 6, y: 1 }
+                { id: 'b1-event-4-c', type: 'damage', x: 2, y: 1 },
+                { id: 'b1-event-4-d', type: 'instability-up', x: 6, y: 1 }
             ],
             teleports: [
                 { id: 'b1-teleport-a', pairId: 'b1-teleport', x: 7, y: 3 },
@@ -226,7 +226,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
             ATTACK_RANGE: 2,
             ATTACK_INSTABILITY: 10,
             CONSECUTIVE_ATTACK_INSTABILITY: 4,
-            HEAL_AMOUNT: 20
+            HEAL_AMOUNT: 15
         },
         LORA: {
             MAX_HP: 100,
@@ -250,7 +250,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
     },
     STARTER_CHOICES: [
         { id: 'bow', label: '활과 화살', description: '전장 어디서든 원거리 공격이 가능하지만 로라가 더 위험해집니다.' },
-        { id: 'mascot-costume', label: '인형탈', description: '받는 피해를 10 줄이고 매 플레이어 턴 종료 시 로라를 안정시킵니다.' }
+        { id: 'mascot-costume', label: '인형탈', description: '받는 피해를 조금 줄이고 매 플레이어 턴 종료 시 로라를 안정시킵니다.' }
     ],
     ITEMS: {
         bow: {
@@ -300,7 +300,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
                     operation: 'reduce-damage-flat',
                     order: 100,
                     conditions: ['target-player'],
-                    value: 10
+                    value: 8
                 },
                 {
                     id: 'mascot-turn-end-instability',
@@ -308,7 +308,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
                     operation: 'change-instability-flat',
                     order: 100,
                     conditions: ['actor-player'],
-                    value: -5,
+                    value: -3,
                     source: 'mascot-costume'
                 }
             ]
@@ -316,7 +316,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         'old-teddy': {
             id: 'old-teddy',
             label: '낡은 곰인형',
-            description: '소지하면 받는 피해와 공격력이 감소하고, 사용하면 로라를 크게 안정시킵니다.',
+            description: '소지하면 받는 피해와 공격력이 감소하고, 사용하면 로라를 안정시킵니다.',
             category: 'interaction',
             passive: true,
             useOnce: true,
@@ -342,7 +342,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
                     trigger: 'onUse',
                     operation: 'change-instability-flat',
                     order: 100,
-                    value: -30,
+                    value: -20,
                     source: 'old-teddy'
                 }
             ]
@@ -350,7 +350,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         'music-box': {
             id: 'music-box',
             label: '오르골',
-            description: '2턴 동안 모두 공격할 수 없는 평화 모드가 됩니다.',
+            description: '1턴 동안 모두 공격할 수 없고 로라의 불안정이 조금 감소합니다.',
             category: 'interaction',
             consumable: true,
             effects: [
@@ -359,7 +359,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
                     trigger: 'onUse',
                     operation: 'set-peace-turns-min',
                     order: 100,
-                    value: 2
+                    value: 1
                 },
                 {
                     id: 'music-box-turn-start-instability',
@@ -367,7 +367,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
                     operation: 'change-instability-flat',
                     order: 200,
                     conditions: ['actor-lora', 'peace-active'],
-                    value: -20,
+                    value: -10,
                     source: 'music-box'
                 }
             ]
@@ -495,7 +495,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         'memory-photo': {
             id: 'memory-photo',
             label: '알파와 같이 찍은 사진',
-            description: '사용하면 로라의 현재 불안정 수치가 절반으로 감소합니다.',
+            description: '사용하면 로라의 현재 불안정 수치가 70%로 감소합니다.',
             category: 'interaction',
             consumable: true,
             effects: [
@@ -504,7 +504,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
                     trigger: 'onUse',
                     operation: 'scale-instability-current',
                     order: 100,
-                    value: 0.5,
+                    value: 0.7,
                     source: 'memory-photo'
                 }
             ]

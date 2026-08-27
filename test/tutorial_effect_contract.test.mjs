@@ -19,6 +19,18 @@ function createExecutor(data = TUTORIAL_GAME_DATA) {
     });
 }
 
+/**
+ * 아이템의 안정 ID 효과를 반환합니다.
+ * @param {string} itemId - 아이템 ID입니다.
+ * @param {string} effectId - 효과 ID입니다.
+ * @returns {object} 선언형 효과입니다.
+ */
+function findItemEffect(itemId, effectId) {
+    const effect = TUTORIAL_GAME_DATA.ITEMS[itemId].effects.find(({ id }) => id === effectId);
+    assert.ok(effect, effectId);
+    return effect;
+}
+
 test('효과 계약·레지스트리·실행기는 파일별 단일 책임과 단방향 의존성을 유지한다', async () => {
     const modules = [
         ['contract', new URL('../project/engine/script/scene/tutorial/_tutorial_effect_contract.js', import.meta.url), 0],
@@ -95,6 +107,46 @@ test('모든 현재 아이템과 네 이벤트 타일이 안정 ID의 effects �
     ]);
 });
 
+test('11턴 보수 튜닝은 핵심 불변식과 명시한 수치·지하 위험 분포를 고정한다', () => {
+    assert.deepEqual(TUTORIAL_GAME_DATA.MAP, { WIDTH: 9, HEIGHT: 8 });
+    assert.equal(TUTORIAL_GAME_DATA.FLOORS.length, 2);
+    assert.equal(TUTORIAL_GAME_DATA.RULES.MAX_TURNS, 12);
+    assert.equal(TUTORIAL_GAME_DATA.RULES.FLOOR_TRANSITION_AFTER_TURN, 6);
+    assert.equal(TUTORIAL_GAME_DATA.ACTORS.PLAYER.MAX_HP, 100);
+    assert.equal(TUTORIAL_GAME_DATA.ACTORS.PLAYER.MOVE_RANGE, 4);
+    assert.equal(TUTORIAL_GAME_DATA.ACTORS.PLAYER.HEAL_AMOUNT, 15);
+    assert.equal(TUTORIAL_GAME_DATA.ACTORS.LORA.MAX_HP, 100);
+
+    assert.equal(findItemEffect(
+        'mascot-costume',
+        'mascot-reduce-player-damage'
+    ).value, 8);
+    assert.equal(findItemEffect(
+        'mascot-costume',
+        'mascot-turn-end-instability'
+    ).value, -3);
+    assert.equal(findItemEffect('old-teddy', 'old-teddy-use-instability').value, -20);
+    assert.equal(findItemEffect('music-box', 'music-box-use-peace').value, 1);
+    assert.equal(findItemEffect(
+        'music-box',
+        'music-box-turn-start-instability'
+    ).value, -10);
+    assert.equal(findItemEffect(
+        'memory-photo',
+        'memory-photo-use-instability'
+    ).value, 0.7);
+
+    assert.deepEqual(
+        TUTORIAL_GAME_DATA.FLOORS[1].eventTiles.map(({ id, type }) => [id, type]),
+        [
+            ['b1-event-4-a', 'instability-down'],
+            ['b1-event-4-b', 'instability-down'],
+            ['b1-event-4-c', 'damage'],
+            ['b1-event-4-d', 'instability-up']
+        ]
+    );
+});
+
 test('모든 아이템 효과는 preview/apply에서 같은 operation 순서와 상태를 만든다', () => {
     const executor = createExecutor();
     for (const [itemId, item] of Object.entries(TUTORIAL_GAME_DATA.ITEMS)) {
@@ -163,8 +215,8 @@ test('피해 감소·버섯 종료와 오카리나 억제를 선언형 조건으
         { baseDamage: 40, playerHp: 100, mushroomActive: true },
         { mode: 'preview' }
     );
-    assert.equal(damage.reduction, 20);
-    assert.equal(damage.finalDamage, 20);
+    assert.equal(damage.reduction, 18);
+    assert.equal(damage.finalDamage, 22);
     assert.equal(damage.mushroomEnds, true);
 
     const instability = executor.calculateInstabilityChange(
