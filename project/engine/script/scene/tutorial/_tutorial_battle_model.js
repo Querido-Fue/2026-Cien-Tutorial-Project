@@ -1,15 +1,12 @@
+import { TutorialCombatRules } from './_tutorial_combat_rules.js';
+import { TutorialLoraIntentPlanner } from './_tutorial_lora_intent_planner.js';
+import { TutorialPlayerActionPreviewer } from './_tutorial_player_action_previewer.js';
+
 const PLAYER_ID = 'player';
 const LORA_ID = 'lora';
 const DEFAULT_STARTER_ITEM_ID = 'mascot-costume';
 const CHECKPOINT_KIND = 'TutorialBattleModelCheckpoint';
 const CHECKPOINT_VERSION = 2;
-const PASSIVE_ITEM_TYPES = new Set([
-    'bow',
-    'mascot-costume',
-    'diamond-pickaxe',
-    'ocarina',
-    'haste'
-]);
 const EVENT_TILE_TYPES = new Set([
     'damage',
     'move-penalty',
@@ -34,6 +31,9 @@ const DIRECTIONS = Object.freeze([
 export class TutorialBattleModel {
     #config;
     #configSignature;
+    #combatRules;
+    #loraIntentPlanner;
+    #playerActionPreviewer;
     #knowledge;
     #loraTurnPerformed;
 
@@ -44,6 +44,21 @@ export class TutorialBattleModel {
     constructor(config, options = {}) {
         this.#config = this.#normalizeConfig(config);
         this.#configSignature = this.#createConfigSignature();
+        this.#combatRules = new TutorialCombatRules({
+            items: this.#config.items,
+            player: this.#config.player
+        });
+        this.#loraIntentPlanner = new TutorialLoraIntentPlanner({
+            rules: this.#combatRules,
+            items: this.#config.items,
+            lora: this.#config.lora,
+            bowInstabilityPerTurn: this.#config.bowInstabilityPerTurn,
+            bowLoraDamageBonus: this.#config.bowLoraDamageBonus
+        });
+        this.#playerActionPreviewer = new TutorialPlayerActionPreviewer({
+            rules: this.#combatRules,
+            items: this.#config.items
+        });
         this.#knowledge = this.#normalizeKnowledge(options.knowledge);
         this.#loraTurnPerformed = false;
         this.reset();
@@ -391,37 +406,10 @@ export class TutorialBattleModel {
      * @returns {Array<object>} 대상 목록입니다.
      */
     getValidTargets(options = {}) {
-        if (!this.#canUseAction() || this.lora.peaceTurns > 0) {
-            return [];
-        }
-        const requestedWeapon = options.weapon ?? 'auto';
-        if (requestedWeapon === 'bow' && !this.#hasItem('bow')) {
-            return [];
-        }
-        const candidates = [];
-        if (this.lora.alive) {
-            candidates.push({ id: LORA_ID, type: 'lora', x: this.lora.x, y: this.lora.y });
-        }
-        for (const mob of this.#getFloor().mobs) {
-            if (mob.alive) {
-                candidates.push({ id: mob.id, type: 'mob', x: mob.x, y: mob.y });
-            }
-        }
-        return candidates.flatMap((target) => {
-            const distance = this.#distance(this.player, target);
-            if (requestedWeapon === 'melee') {
-                return distance <= this.#config.player.attackRange
-                    ? [{ ...target, distance, weapon: 'melee' }]
-                    : [];
-            }
-            if (requestedWeapon === 'bow') {
-                return [{ ...target, distance, weapon: 'bow' }];
-            }
-            if (distance <= this.#config.player.attackRange) {
-                return [{ ...target, distance, weapon: 'melee' }];
-            }
-            return this.#hasItem('bow') ? [{ ...target, distance, weapon: 'bow' }] : [];
-        });
+        return this.#combatRules.getValidTargets(
+            this.#createCombatPlanningState(),
+            options
+        );
     }
 
     /**
@@ -431,52 +419,42 @@ export class TutorialBattleModel {
      * @returns {object} 공격 결과입니다.
      */
     attack(targetId = LORA_ID, options = {}) {
-        if (!this.#canUseAction()) {
-            return this.#actionFailure('attack', 'action-unavailable');
+        const plan = this.#combatRules.getPlayerAttackPlan(
+            this.#createCombatPlanningState(),
+            targetId,
+            options
+        );
+        if (!plan.ok) {
+            return this.#actionFailure('attack', plan.reason);
         }
-        if (this.lora.peaceTurns > 0) {
-            return this.#actionFailure('attack', 'peace-active');
-        }
-        const target = this.getValidTargets({ weapon: options.weapon ?? 'auto' })
-            .find((candidate) => candidate.id === targetId);
-        if (!target) {
-            return this.#actionFailure('attack', 'invalid-target');
-        }
-
-        let damage = target.weapon === 'bow'
-            ? this.#config.items.bow.effect.rangedDamage
-            : this.#config.player.attackDamage;
-        if (this.#hasItem('old-teddy')) {
-            damage -= this.#config.items['old-teddy'].effect.attackDamagePenalty;
-        }
-        if (this.player.mushroomActive) {
-            damage *= this.#config.items.mushroom.effect.attackMultiplier;
-        }
-        damage = Math.max(0, Math.round(damage));
 
         const events = [];
         let appliedDamage = 0;
         let defeated = false;
         let instabilityChange = 0;
-        if (target.type === 'lora') {
-            appliedDamage = Math.min(this.lora.hp, damage);
-            this.lora.hp = Math.max(0, this.lora.hp - damage);
+        if (plan.targetType === 'lora') {
+            appliedDamage = plan.finalDamage;
+            this.lora.hp = plan.targetHpAfter;
             this.lora.alive = this.lora.hp > 0;
-            instabilityChange = this.#changeInstability(
-                this.#config.player.attackInstability
-                    + (this.consecutiveAttackCount * this.#config.player.consecutiveAttackInstability),
+            instabilityChange = this.#applyInstabilityCalculation(
+                plan.instabilityCalculation,
                 'player-attack',
                 events
             );
             events.push(this.#createEvent('lora-damaged', {
                 damage: appliedDamage,
                 hp: this.lora.hp,
-                weapon: target.weapon
+                weapon: plan.weapon
             }));
             defeated = !this.lora.alive;
         } else {
-            const mob = this.#getFloor().mobs.find((candidate) => candidate.id === target.id);
-            const mobResult = this.#damageMob(mob, damage, 'player-attack', events);
+            const mob = this.#getFloor().mobs.find((candidate) => candidate.id === plan.targetId);
+            const mobResult = this.#damageMob(
+                mob,
+                plan.calculatedDamage,
+                'player-attack',
+                events
+            );
             appliedDamage = mobResult.damage;
             defeated = mobResult.defeated;
         }
@@ -484,9 +462,9 @@ export class TutorialBattleModel {
         this.consecutiveAttackCount += 1;
         this.lastPlayerAction = {
             type: 'attack',
-            targetId,
-            targetType: target.type,
-            weapon: target.weapon,
+            targetId: plan.targetId,
+            targetType: plan.targetType,
+            weapon: plan.weapon,
             playerTurn: this.playerTurnSerial
         };
         this.#consumeAction(events);
@@ -497,9 +475,11 @@ export class TutorialBattleModel {
         return {
             ok: true,
             action: 'attack',
-            targetId,
-            targetType: target.type,
-            weapon: target.weapon,
+            targetId: plan.targetId,
+            targetType: plan.targetType,
+            weapon: plan.weapon,
+            rawDamage: plan.rawDamage,
+            calculatedDamage: plan.calculatedDamage,
             damage: appliedDamage,
             defeated,
             instabilityChange,
@@ -513,16 +493,28 @@ export class TutorialBattleModel {
      * @returns {object} 회복 결과입니다.
      */
     heal() {
-        if (!this.#canUseAction()) {
-            return this.#actionFailure('heal', 'action-unavailable');
+        const plan = this.#combatRules.getHealPlan(this.#createCombatPlanningState());
+        if (!plan.ok) {
+            return this.#actionFailure('heal', plan.reason);
         }
         const events = [];
-        const amount = this.#healPlayer(this.#config.player.healAmount, 'player-heal', events);
+        this.player.hp = plan.playerHpAfter;
+        this.player.alive = this.player.hp > 0;
+        events.push(this.#createEvent('player-healed', {
+            amount: plan.amount,
+            hp: this.player.hp,
+            source: 'player-heal'
+        }));
         this.consecutiveAttackCount = 0;
         this.lastPlayerAction = { type: 'heal', playerTurn: this.playerTurnSerial };
         this.#consumeAction(events);
         this.#setLastEvents(events);
-        return { ok: true, action: 'heal', amount, events: this.#copyEvents(events) };
+        return {
+            ok: true,
+            action: 'heal',
+            amount: plan.amount,
+            events: this.#copyEvents(events)
+        };
     }
 
     /**
@@ -530,8 +522,9 @@ export class TutorialBattleModel {
      * @returns {object} 대기 결과입니다.
      */
     wait() {
-        if (!this.#canUseAction()) {
-            return this.#actionFailure('wait', 'action-unavailable');
+        const plan = this.#combatRules.getWaitPlan(this.#createCombatPlanningState());
+        if (!plan.ok) {
+            return this.#actionFailure('wait', plan.reason);
         }
         const events = [this.#createEvent('player-waited')];
         this.consecutiveAttackCount = 0;
@@ -549,87 +542,46 @@ export class TutorialBattleModel {
      * @returns {object} 사용 결과입니다.
      */
     useItem(itemId) {
-        if (!this.#canUseAction()) {
-            return this.#actionFailure('use-item', 'action-unavailable', { itemId });
-        }
-        const item = this.#config.items[itemId];
-        if (!item || !this.#hasItem(itemId)) {
-            return this.#actionFailure('use-item', 'item-not-owned', { itemId });
-        }
-        if (PASSIVE_ITEM_TYPES.has(item.effect.type)) {
-            return this.#actionFailure('use-item', 'passive-item', { itemId });
-        }
-        if (item.effect.type === 'tile-cleanser') {
-            return this.#actionFailure('use-item', 'movement-item', { itemId });
-        }
-        if (item.useOnce && this.usedItems.has(itemId)) {
-            return this.#actionFailure('use-item', 'item-already-used', { itemId });
+        const plan = this.#combatRules.getItemUsePlan(
+            this.#createCombatPlanningState(),
+            itemId
+        );
+        if (!plan.ok) {
+            return this.#actionFailure('use-item', plan.reason, { itemId });
         }
 
+        const item = this.#config.items[itemId];
         const events = [];
-        const effects = [];
-        const effect = item.effect;
-        switch (effect.type) {
-        case 'old-teddy': {
-            const instabilityChange = this.#changeInstability(
-                -effect.instabilityReduction,
-                'old-teddy',
+        if (plan.instabilityCalculation) {
+            this.#applyInstabilityCalculation(
+                plan.instabilityCalculation,
+                plan.effectType,
                 events
             );
-            effects.push({ type: 'stabilize', instabilityChange });
-            break;
         }
-        case 'music-box': {
-            this.lora.peaceTurns = Math.max(this.lora.peaceTurns, effect.durationLoraTurns);
+        if (plan.peaceTurnsAfter !== null) {
+            this.lora.peaceTurns = plan.peaceTurnsAfter;
             events.push(this.#createEvent('peace', {
                 active: true,
                 remainingTurns: this.lora.peaceTurns
             }));
-            effects.push({ type: 'peace', durationLoraTurns: this.lora.peaceTurns });
-            break;
         }
-        case 'eyeliner': {
-            const instabilityChange = this.#changeInstability(
-                -effect.instabilityReduction,
-                'eyeliner',
-                events
-            );
-            effects.push({ type: 'stabilize', instabilityChange });
-            break;
-        }
-        case 'mirror': {
-            this.extraPlayerTurns += effect.extraPlayerTurns;
+        if (plan.extraPlayerTurnsAdded > 0) {
+            this.extraPlayerTurns += plan.extraPlayerTurnsAdded;
             events.push(this.#createEvent('extra-player-turn', {
                 pending: this.extraPlayerTurns
             }));
-            effects.push({ type: 'extra-player-turn', count: effect.extraPlayerTurns });
-            break;
         }
-        case 'mushroom': {
-            this.player.mushroomActive = true;
+        if (plan.mushroomActiveAfter !== null) {
+            this.player.mushroomActive = plan.mushroomActiveAfter;
             events.push(this.#createEvent('mushroom-activated'));
-            effects.push({
-                type: 'mushroom',
-                moveMultiplier: effect.moveMultiplier,
-                attackMultiplier: effect.attackMultiplier
-            });
-            break;
-        }
-        case 'memory-photo': {
-            const amount = this.lora.instability * effect.instabilityRatio;
-            const instabilityChange = this.#changeInstability(-amount, 'memory-photo', events);
-            effects.push({ type: 'stabilize', instabilityChange });
-            break;
-        }
-        default:
-            return this.#actionFailure('use-item', 'unsupported-item-effect', { itemId });
         }
 
         this.usedItems.add(itemId);
         this.#knowledge.discoveredItemIds.add(itemId);
         this.#knowledge.identifiedItemIds.add(itemId);
-        if (item.consumable || item.useOnce) {
-            this.#removeInventory(itemId, 1);
+        if (plan.consumeCount > 0) {
+            this.#removeInventory(itemId, plan.consumeCount);
         }
         events.unshift(this.#createEvent('item-used', { itemId, label: item.label }));
         this.consecutiveAttackCount = 0;
@@ -640,7 +592,7 @@ export class TutorialBattleModel {
             ok: true,
             action: 'use-item',
             itemId,
-            effects,
+            effects: this.#cloneValue(plan.effects),
             events: this.#copyEvents(events)
         };
     }
@@ -737,25 +689,58 @@ export class TutorialBattleModel {
     }
 
     /**
+     * 다음 로라 행동과 예상 피해를 모델 상태 변경 없이 반환합니다.
+     * @returns {object} 상태·대상·피해·reason ID를 가진 의도입니다.
+     */
+    getLoraIntent() {
+        return this.#cloneValue(this.#loraIntentPlanner.getIntent(
+            this.#createCombatPlanningState()
+        ));
+    }
+
+    /**
+     * 플레이어 행동 하나의 최종 예상 상태를 모델 상태 변경 없이 반환합니다.
+     * @param {'attack'|'heal'|'use-item'|'wait'} action - 행동 ID입니다.
+     * @param {object} [options={}] - targetId, weapon 또는 itemId입니다.
+     * @returns {object} 검증 reason과 예상 변경입니다.
+     */
+    previewPlayerAction(action, options = {}) {
+        return this.#cloneValue(this.#playerActionPreviewer.preview(
+            this.#createCombatPlanningState(),
+            action,
+            options
+        ));
+    }
+
+    /**
+     * 현재 가능한 공격·회복·아이템·대기 미리보기를 한 번에 반환합니다.
+     * @returns {object} 행동 종류별 미리보기입니다.
+     */
+    getPlayerActionPreviews() {
+        return this.#cloneValue(this.#playerActionPreviewer.getAll(
+            this.#createCombatPlanningState()
+        ));
+    }
+
+    /**
      * 로라 턴 시작 패시브와 불안정 단계별 행동을 한 번 수행합니다.
      * @returns {object} 로라 행동 결과입니다.
      */
     performLoraTurn() {
-        if (this.turn !== 'lora' || this.phase !== 'lora' || this.result) {
-            return this.#actionFailure('none', 'not-lora-turn');
-        }
-        if (this.#loraTurnPerformed) {
-            return this.#actionFailure('none', 'lora-turn-already-performed');
+        const intent = this.#loraIntentPlanner.getIntent(this.#createCombatPlanningState());
+        if (!intent.ok) {
+            return this.#actionFailure('none', intent.reason);
         }
         this.#loraTurnPerformed = true;
         const events = [];
 
-        if (this.#hasItem('bow')) {
-            this.#changeInstability(this.#config.bowInstabilityPerTurn, 'bow-passive', events);
+        for (const calculation of intent.passiveChanges) {
+            this.#applyInstabilityCalculation(calculation, calculation.source, events);
         }
-        if (this.lora.peaceTurns > 0) {
-            const reduction = this.#config.items['music-box'].effect.instabilityReductionPerTurn;
-            const instabilityChange = this.#changeInstability(-reduction, 'music-box', events);
+        if (intent.executionAction === 'peace') {
+            const instabilityChange = intent.passiveChanges.find(
+                ({ source }) => source === 'music-box'
+            )?.change ?? 0;
             events.push(this.#createEvent('peace', {
                 active: true,
                 remainingTurns: this.lora.peaceTurns
@@ -771,38 +756,37 @@ export class TutorialBattleModel {
             };
         }
 
-        const state = this.getInstabilityState();
-        const adjacent = this.#distance(this.lora, this.player) <= this.#config.lora.meleeRange;
-        const action = adjacent ? 'melee' : 'area';
-        let baseDamage = adjacent ? state.meleeDamage : state.areaDamage;
-        if (baseDamage > 0 && this.#hasItem('bow')) {
-            baseDamage += this.#config.bowLoraDamageBonus;
-        }
-        if (baseDamage <= 0) {
+        const state = this.getInstabilityState(intent.expectedInstability);
+        if (intent.executionAction === 'idle') {
             this.lastLoraAction = {
                 type: 'idle',
-                stateId: state.id,
+                stateId: intent.stateId,
                 loraAction: this.loraActionsCompleted + 1
             };
             events.push(this.#createEvent('lora-attack', {
                 action: 'idle',
                 damage: 0,
-                stateId: state.id
+                stateId: intent.stateId
             }));
             this.#setLastEvents(events);
             return { ok: true, action: 'idle', damage: 0, state, events: this.#copyEvents(events) };
         }
 
-        const playerDamage = this.#damagePlayer(baseDamage, `lora-${action}`, events);
+        const action = intent.executionAction;
+        const playerDamage = this.#applyPlayerDamageCalculation(
+            intent.damageCalculation,
+            `lora-${action}`,
+            events
+        );
         this.lastLoraAction = {
             type: action,
-            stateId: state.id,
+            stateId: intent.stateId,
             loraAction: this.loraActionsCompleted + 1
         };
         events.unshift(this.#createEvent('lora-attack', {
             action,
             damage: playerDamage,
-            stateId: state.id
+            stateId: intent.stateId
         }));
         if (!this.player.alive) {
             this.loraActionsCompleted += 1;
@@ -1023,6 +1007,30 @@ export class TutorialBattleModel {
         });
     }
 
+    /** @returns {object} 순수 전투 계산기에 전달할 읽기 전용 값 스냅샷입니다. @private */
+    #createCombatPlanningState() {
+        return {
+            turn: this.turn,
+            phase: this.phase,
+            result: this.result,
+            movementUsed: this.movementUsed,
+            actionsUsed: this.actionsUsed,
+            actionsPerTurn: this.actionsPerTurn,
+            extraPlayerTurns: this.extraPlayerTurns,
+            playerTurnSerial: this.playerTurnSerial,
+            consecutiveAttackCount: this.consecutiveAttackCount,
+            loraTurnPerformed: this.#loraTurnPerformed,
+            player: { ...this.player },
+            lora: { ...this.lora },
+            inventory: [...this.inventory.entries()].map(([itemId, count]) => ({
+                itemId,
+                count
+            })),
+            usedItems: [...this.usedItems],
+            mobs: this.#getFloor().mobs.map((mob) => ({ ...mob }))
+        };
+    }
+
     /** 현재 층을 반환합니다. @private */
     #getFloor() {
         return this.floorStates[this.floorIndex];
@@ -1033,16 +1041,6 @@ export class TutorialBattleModel {
         return this.turn === 'player'
             && this.phase === 'move'
             && !this.movementUsed
-            && !this.result
-            && this.player.alive;
-    }
-
-    /** 일반 행동을 사용할 수 있는지 확인합니다. @private */
-    #canUseAction() {
-        return this.turn === 'player'
-            && this.phase === 'action'
-            && this.movementUsed
-            && this.actionsUsed < this.actionsPerTurn
             && !this.result
             && this.player.alive;
     }
@@ -1287,7 +1285,7 @@ export class TutorialBattleModel {
         item.collected = true;
         this.#addInventory(item.itemId, 1);
         this.#knowledge.discoveredItemIds.add(item.itemId);
-        if (PASSIVE_ITEM_TYPES.has(this.#config.items[item.itemId]?.effect?.type)) {
+        if (this.#combatRules.isPassiveItem(item.itemId)) {
             this.#knowledge.identifiedItemIds.add(item.itemId);
         }
         events.push(this.#createEvent('item-picked', {
@@ -1367,36 +1365,28 @@ export class TutorialBattleModel {
         return true;
     }
 
-    /** 플레이어 HP를 회복합니다. @private */
-    #healPlayer(amount, source, events) {
-        const applied = Math.min(this.player.maxHp - this.player.hp, Math.max(0, amount));
-        this.player.hp += applied;
-        this.player.alive = this.player.hp > 0;
-        events.push(this.#createEvent('player-healed', { amount: applied, hp: this.player.hp, source }));
-        return applied;
-    }
-
     /** 플레이어에게 고정 감산 패시브를 반영한 피해를 적용합니다. @private */
     #damagePlayer(baseDamage, source, events) {
-        let reduction = 0;
-        if (this.#hasItem('mascot-costume')) {
-            reduction += this.#config.items['mascot-costume'].effect.damageReduction;
-        }
-        if (this.#hasItem('old-teddy')) {
-            reduction += this.#config.items['old-teddy'].effect.damageReduction;
-        }
-        const damage = Math.max(0, Math.round(baseDamage - reduction));
-        const applied = Math.min(this.player.hp, damage);
-        this.player.hp = Math.max(0, this.player.hp - damage);
+        const calculation = this.#combatRules.calculatePlayerDamage(
+            this.#createCombatPlanningState(),
+            baseDamage
+        );
+        return this.#applyPlayerDamageCalculation(calculation, source, events);
+    }
+
+    /** 계산된 플레이어 피해를 상태와 이벤트에 적용합니다. @private */
+    #applyPlayerDamageCalculation(calculation, source, events) {
+        const applied = Math.max(0, Number(calculation?.finalDamage) || 0);
+        this.player.hp = Math.max(0, Number(calculation?.playerHpAfter) || 0);
         this.player.alive = this.player.hp > 0;
-        if (applied > 0 && this.player.mushroomActive) {
+        if (calculation?.mushroomEnds === true) {
             this.player.mushroomActive = false;
             events.push(this.#createEvent('mushroom-ended', { source }));
         }
         events.push(this.#createEvent('player-damaged', {
             amount: applied,
             hp: this.player.hp,
-            reduction,
+            reduction: Math.max(0, Number(calculation?.reduction) || 0),
             source
         }));
         return applied;
@@ -1448,25 +1438,27 @@ export class TutorialBattleModel {
 
     /** 로라 불안정도를 변경하고 오카리나의 증가 무효화를 적용합니다. @private */
     #changeInstability(amount, source, events) {
-        const requested = Number(amount) || 0;
-        const suppressed = requested > 0 && this.#hasItem('ocarina');
-        const appliedRequest = suppressed ? 0 : requested;
-        const before = this.lora.instability;
-        this.lora.instability = this.#clamp(
-            before + appliedRequest,
-            0,
-            this.lora.maxInstability
-        );
-        const change = this.lora.instability - before;
+        const calculation = this.#combatRules.calculateInstabilityChange({
+            instability: this.lora.instability,
+            maxInstability: this.lora.maxInstability,
+            requestedChange: amount,
+            hasOcarina: this.#hasItem('ocarina')
+        });
+        return this.#applyInstabilityCalculation(calculation, source, events);
+    }
+
+    /** 계산된 불안정도 변경을 상태와 이벤트에 적용합니다. @private */
+    #applyInstabilityCalculation(calculation, source, events) {
+        this.lora.instability = calculation.after;
         events.push(this.#createEvent('instability-changed', {
             source,
-            before,
-            after: this.lora.instability,
-            change,
-            requestedChange: requested,
-            suppressed
+            before: calculation.before,
+            after: calculation.after,
+            change: calculation.change,
+            requestedChange: calculation.requestedChange,
+            suppressed: calculation.suppressed
         }));
-        return change;
+        return calculation.change;
     }
 
     /** 종료 조건과 불안정도 기반 결과를 확정합니다. @private */
