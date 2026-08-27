@@ -64,7 +64,9 @@ import {
     toTileKey
 } from './_tutorial_value_utils.js';
 import { TutorialAnimationTimeline } from './_tutorial_animation_timeline.js';
+import { TutorialAchievementBanner } from './_tutorial_achievement_banner.js';
 import { TutorialAssetLoader } from './_tutorial_asset_loader.js';
+import { TutorialAssetPort } from './_tutorial_asset_port.js';
 import { TutorialBattlePresenter } from './_tutorial_battle_presenter.js';
 import { TutorialFeedbackQueue } from './_tutorial_feedback_queue.js';
 import { TutorialBattleFeedbackView } from './view/_tutorial_battle_feedback_view.js';
@@ -72,6 +74,7 @@ import { TutorialBattleHudView } from './view/_tutorial_battle_hud_view.js';
 import { TutorialBattleLayout } from './view/_tutorial_battle_layout.js';
 import { TutorialBattleTutorialView } from './view/_tutorial_battle_tutorial_view.js';
 import { TutorialBattleWorldView } from './view/_tutorial_battle_world_view.js';
+import { TutorialAchievementView } from './view/_tutorial_achievement_view.js';
 import { TutorialButtonHost } from './view/_tutorial_button_host.js';
 import { TutorialCutsceneView } from './view/_tutorial_cutscene_view.js';
 import { TutorialGalleryView } from './view/_tutorial_gallery_view.js';
@@ -81,6 +84,7 @@ import { TutorialResultView } from './view/_tutorial_result_view.js';
 import { TutorialStarterView } from './view/_tutorial_starter_view.js';
 
 const TUTORIAL_GAME_DATA = getData('TUTORIAL_GAME_DATA');
+const TUTORIAL_ASSET_MANIFEST = getData('TUTORIAL_ASSET_MANIFEST');
 
 const PLAYER_ID = 'player';
 const LORA_ID = 'lora';
@@ -149,16 +153,27 @@ export class TutorialScene extends BaseScene {
                 measureWidth: (value) => measureText(value, font)
             })
         });
+        this.assetLoader = new TutorialAssetLoader({
+            onChange: () => this.buttonHost?.invalidate()
+        });
+        this.assetPort = new TutorialAssetPort(
+            this.assetLoader,
+            TUTORIAL_ASSET_MANIFEST
+        );
         this.loadingView = new TutorialLoadingView(tutorialRenderPort);
-        this.menuView = new TutorialMenuView(tutorialRenderPort);
-        this.starterView = new TutorialStarterView(tutorialRenderPort);
+        this.menuView = new TutorialMenuView(tutorialRenderPort, this.assetPort);
+        this.starterView = new TutorialStarterView(tutorialRenderPort, this.assetPort);
         this.galleryView = new TutorialGalleryView(tutorialRenderPort);
         this.resultView = new TutorialResultView(tutorialRenderPort);
         this.cutsceneView = new TutorialCutsceneView(tutorialRenderPort);
-        this.battleTutorialView = new TutorialBattleTutorialView(tutorialRenderPort);
+        this.battleTutorialView = new TutorialBattleTutorialView(
+            tutorialRenderPort,
+            this.assetPort
+        );
         this.battleLayout = new TutorialBattleLayout({
             map: this.data.MAP,
             floors: this.data.FLOORS,
+            mapArtwork: TUTORIAL_ASSET_MANIFEST.MAPS,
             board: this.data.LAYOUT.BOARD,
             hud: this.data.LAYOUT.HUD,
             shakeTileRatio: this.data.ANIMATION.SHAKE_TILE_RATIO
@@ -166,25 +181,23 @@ export class TutorialScene extends BaseScene {
         this.buttonHost = new TutorialButtonHost({
             parent: this,
             onCommand: (type, payload) => this.#queueUiCommand(type, payload),
-            onFocus: (key) => this.#focusBattleControl(key)
-        });
-        this.assetLoader = new TutorialAssetLoader({
-            onChange: () => this.buttonHost.invalidate()
-        });
-        const battleAssetPort = Object.freeze({
-            getItemIcon: (itemId) => this.assetLoader.getAtlasCell('item-icons', itemId),
-            getLoraPortrait: () => this.assetLoader.getImage('lora-portrait'),
-            getLoraSprite: () => this.assetLoader.getImage('lora-sprite')
+            onFocus: (key) => this.#focusBattleControl(key),
+            assetPort: this.assetPort,
+            renderPort: tutorialRenderPort
         });
         this.battleWorldView = new TutorialBattleWorldView(
             tutorialRenderPort,
-            battleAssetPort
+            this.assetPort
         );
         this.battleHudView = new TutorialBattleHudView(
             tutorialRenderPort,
-            battleAssetPort
+            this.assetPort
         );
         this.battleFeedbackView = new TutorialBattleFeedbackView(tutorialRenderPort);
+        this.battleAchievementView = new TutorialAchievementView(
+            tutorialRenderPort,
+            this.assetPort
+        );
         this.battlePresenter = new TutorialBattlePresenter({
             items: this.data.ITEMS,
             animation: this.data.ANIMATION
@@ -198,18 +211,15 @@ export class TutorialScene extends BaseScene {
             particleCount: this.data.ANIMATION.PARTICLE_COUNT,
             particleSeconds: this.data.ANIMATION.PARTICLE_SECONDS
         });
+        this.achievementBanner = new TutorialAchievementBanner({
+            durationSeconds: 3
+        });
         this.presentationTimeline = new TutorialAnimationTimeline({
             animationPort: Object.freeze({ animate, remove }),
             config: this.data.ANIMATION,
             onLockChange: () => this.buttonHost.invalidate()
         });
-        this.assetLoader.loadImage('lora-portrait', this.data.ASSETS.LORA_PORTRAIT);
-        this.assetLoader.loadAtlas(
-            'item-icons',
-            this.data.ASSETS.ITEM_ICON_ATLAS,
-            this.data.SPRITES.ITEM_ATLAS
-        );
-        this.assetLoader.loadImage('lora-sprite', this.data.ASSETS.LORA_SPRITE);
+        this.assetPort.loadAll();
 
         this.elapsedSeconds = 0;
         this.hoveredTile = null;
@@ -277,6 +287,7 @@ export class TutorialScene extends BaseScene {
         this.#handlePointerInput();
         this.#updateLoraTurn(deltaSeconds);
         this.feedbackQueue.update(deltaSeconds);
+        this.achievementBanner.update(deltaSeconds);
         this.#captureKeyboardLatch();
     }
 
@@ -302,6 +313,7 @@ export class TutorialScene extends BaseScene {
             this.battleWorldView.draw(battleViewModel);
             this.battleFeedbackView.draw(battleViewModel);
             this.battleHudView.draw(battleViewModel);
+            this.battleAchievementView.draw(battleViewModel);
             this.battleTutorialView.draw(
                 this.#createBattleTutorialViewModel(battleViewModel)
             );
@@ -455,6 +467,7 @@ export class TutorialScene extends BaseScene {
         this.presentationTimeline.destroy();
         this.assetLoader.destroy();
         this.feedbackQueue.destroy();
+        this.achievementBanner.destroy();
         clearSimulationCommands();
         this.buttonHost.destroy();
         this.cutscenes.close();
@@ -600,6 +613,7 @@ export class TutorialScene extends BaseScene {
         this.plannedPath = [];
         this.lastPresentationSnapshot = null;
         this.feedbackQueue.clear();
+        this.achievementBanner.clear();
         this.buttonHost.invalidate();
     }
 
@@ -638,6 +652,7 @@ export class TutorialScene extends BaseScene {
         this.battleFocus.reset();
         this.guidance.beginRun({ seen: this.meta.combatGuideSeen === true });
         this.feedbackQueue.clear();
+        this.achievementBanner.clear();
         this.lastPresentationSnapshot = cloneCheckpointValue(initialSnapshot);
         this.presentationTimeline.reset({
             floorIndex: Number(this.model.floorIndex) || 0,
@@ -1085,6 +1100,7 @@ export class TutorialScene extends BaseScene {
             }
         });
         this.presentationTimeline.applyCues(orderedCues);
+        this.achievementBanner.enqueueFromEvents(result?.events, this.data.ITEMS);
         this.lastPresentationSnapshot = cloneCheckpointValue(nextSnapshot);
         this.#syncMetaFromModel();
         this.#refreshBattleCache();
@@ -2065,7 +2081,7 @@ export class TutorialScene extends BaseScene {
                 label: item.label || itemId,
                 description: item.description || '효과 확인 중',
                 known: this.#isItemKnown(itemId),
-                hasIcon: this.assetLoader.hasAtlasCell('item-icons', itemId),
+                hasIcon: this.assetPort.hasItemIcon(itemId),
                 usable: this.#isItemUsable(itemId),
                 movementConsumable: item.movementConsumable === true,
                 statusLabel: item.movementConsumable === true
@@ -2191,7 +2207,7 @@ export class TutorialScene extends BaseScene {
                     selectionMinScale: this.data.ANIMATION.SELECTION_MIN_SCALE,
                     actionPlayerScale: this.data.ANIMATION.ACTION_PLAYER_SCALE,
                     actionLoraScale: this.data.ANIMATION.ACTION_LORA_SCALE,
-                    itemAtlas: this.data.SPRITES.ITEM_ATLAS,
+                    itemIcon: this.data.SPRITES.ITEM,
                     loraSprite: this.data.SPRITES.LORA
                 })
             }),
@@ -2219,12 +2235,14 @@ export class TutorialScene extends BaseScene {
                 config: Object.freeze({
                     actions: this.data.LAYOUT.ACTIONS,
                     inventory: this.data.LAYOUT.INVENTORY,
-                    itemAtlas: this.data.SPRITES.ITEM_ATLAS,
+                    itemIcon: this.data.SPRITES.ITEM,
                     text: this.data.TEXT,
                     floorTransitionAfterTurn: this.data.RULES.FLOOR_TRANSITION_AFTER_TURN,
-                    playerMoveRange: this.data.ACTORS.PLAYER.MOVE_RANGE
+                    playerMoveRange: this.data.ACTORS.PLAYER.MOVE_RANGE,
+                    healAmount: this.data.ACTORS.PLAYER.HEAL_AMOUNT
                 })
             }),
+            achievement: this.achievementBanner.getSnapshot(),
             feedback: Object.freeze({
                 floatingTexts: feedback.floatingTexts,
                 particles: feedback.particles
@@ -2387,46 +2405,7 @@ export class TutorialScene extends BaseScene {
                 ...this.battleHudView.getButtonSpecs(battleViewModel),
                 ...this.battleTutorialView.getButtonSpecs(tutorialViewModel)
             ];
-        return specs
-            .map((spec) => {
-                const { iconId, iconWidth, ...resolved } = spec;
-                if (!iconId || !(Number(iconWidth) > 0)) {
-                    return resolved;
-                }
-                return {
-                    ...resolved,
-                    icon: this.#createItemIconChild(iconId, iconWidth)
-                };
-            });
-    }
-
-    /**
-     * 버튼 레이아웃이 그릴 수 있는 atlas 아이콘 자식을 생성합니다.
-     * @param {string} itemId - 아이템 ID입니다.
-     * @param {number} width - 버튼 안에서 차지할 아이콘 폭입니다.
-     * @returns {object|null} 버튼용 아이콘 객체입니다.
-     * @private
-     */
-    #createItemIconChild(itemId, width) {
-        const image = this.assetLoader.getAtlasCell('item-icons', itemId);
-        if (!image || !Number.isFinite(width) || width <= 0) {
-            return null;
-        }
-        return {
-            type: 'tutorial-item-atlas',
-            width,
-            draw: (layer, x, y, w, h, scale, alpha) => {
-                render(layer, {
-                    shape: 'image',
-                    image,
-                    x,
-                    y,
-                    w,
-                    h,
-                    alpha
-                });
-            }
-        };
+        return specs;
     }
 
     /**

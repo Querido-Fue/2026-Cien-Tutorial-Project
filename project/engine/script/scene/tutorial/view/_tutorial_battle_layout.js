@@ -117,8 +117,10 @@ export class TutorialBattleLayout {
             x: Math.sin(Number(elapsedSeconds) * 74) * this.#geometry.tileSide * ratio,
             y: Math.cos(Number(elapsedSeconds) * 61) * this.#geometry.tileSide * ratio
         } : { x: 0, y: 0 });
+        const artworkProjection = this.#createArtworkProjection(floor?.id);
         return Object.freeze({
             ...this.#geometry,
+            ...(artworkProjection || {}),
             heights: floor?.heights || [],
             shake
         });
@@ -138,6 +140,20 @@ export class TutorialBattleLayout {
      */
     static projectTile(frame, x, y) {
         const height = Number(frame?.heights?.[y]?.[x]) || 0;
+        if (frame?.gridAxisX && frame?.gridAxisY) {
+            return {
+                x: Number(frame.isoOriginX)
+                    + (Number(x) * Number(frame.gridAxisX.x))
+                    + (Number(y) * Number(frame.gridAxisY.x))
+                    + Number(frame?.shake?.x || 0),
+                y: Number(frame.isoOriginY)
+                    + (Number(x) * Number(frame.gridAxisX.y))
+                    + (Number(y) * Number(frame.gridAxisY.y))
+                    - (height * Number(frame?.tileElevation))
+                    + Number(frame?.shake?.y || 0),
+                height
+            };
+        }
         return {
             x: Number(frame?.isoOriginX)
                 + ((Number(x) - Number(y)) * Number(frame?.tileWidth) * 0.5)
@@ -162,12 +178,32 @@ export class TutorialBattleLayout {
             return null;
         }
         const candidates = [];
+        const axisX = frame?.gridAxisX;
+        const axisY = frame?.gridAxisY;
+        const determinant = axisX && axisY
+            ? (Number(axisX.x) * Number(axisY.y))
+                - (Number(axisX.y) * Number(axisY.x))
+            : 0;
         for (let y = 0; y < Number(frame?.mapHeight || 0); y++) {
             for (let x = 0; x < Number(frame?.mapWidth || 0); x++) {
                 const point = TutorialBattleLayout.projectTile(frame, x, y);
-                const distance = Math.abs(px - point.x) / (Number(frame.tileWidth) * 0.5)
-                    + Math.abs(py - point.y) / (Number(frame.tileHeight) * 0.5);
-                if (distance <= 1) {
+                let distance;
+                let inside;
+                if (Math.abs(determinant) > 0.0001) {
+                    const dx = px - point.x;
+                    const dy = py - point.y;
+                    const localX = ((dx * Number(axisY.y)) - (dy * Number(axisY.x)))
+                        / determinant;
+                    const localY = ((dy * Number(axisX.x)) - (dx * Number(axisX.y)))
+                        / determinant;
+                    distance = Math.max(Math.abs(localX), Math.abs(localY)) * 2;
+                    inside = Math.abs(localX) <= 0.5 && Math.abs(localY) <= 0.5;
+                } else {
+                    distance = Math.abs(px - point.x) / (Number(frame.tileWidth) * 0.5)
+                        + Math.abs(py - point.y) / (Number(frame.tileHeight) * 0.5);
+                    inside = distance <= 1;
+                }
+                if (inside) {
                     candidates.push({ x, y, distance, depth: x + y });
                 }
             }
@@ -177,5 +213,76 @@ export class TutorialBattleLayout {
         ));
         const hit = candidates[0];
         return hit ? { x: hit.x, y: hit.y } : null;
+    }
+
+    /**
+     * 원본 맵 이미지의 네 격자 꼭짓점을 현재 보드 사각형으로 비율 유지 투영합니다.
+     * @param {string} floorId - 표시할 층 ID입니다.
+     * @returns {object|null} 맵 이미지와 타일 축을 공유하는 투영값입니다.
+     * @private
+     */
+    #createArtworkProjection(floorId) {
+        const profile = this.#config.mapArtwork?.[floorId];
+        const sourceWidth = Number(profile?.sourceDimensions?.width);
+        const sourceHeight = Number(profile?.sourceDimensions?.height);
+        const quad = profile?.gridQuad;
+        if (!(sourceWidth > 0) || !(sourceHeight > 0)
+            || !quad?.top || !quad?.right || !quad?.bottom || !quad?.left) {
+            return null;
+        }
+        const boardRect = this.#geometry.boardRect;
+        const scale = Math.min(boardRect.w / sourceWidth, boardRect.h / sourceHeight);
+        const imageW = Math.max(1, Math.round(sourceWidth * scale));
+        const imageH = Math.max(1, Math.round(sourceHeight * scale));
+        const mapImageRect = Object.freeze({
+            x: Math.round(boardRect.x + ((boardRect.w - imageW) * 0.5)),
+            y: Math.round(boardRect.y + ((boardRect.h - imageH) * 0.5)),
+            w: imageW,
+            h: imageH
+        });
+        const scaleX = imageW / sourceWidth;
+        const scaleY = imageH / sourceHeight;
+        const mapWidth = this.#geometry.mapWidth;
+        const mapHeight = this.#geometry.mapHeight;
+        const sourceAxisX = {
+            x: (((quad.right.x - quad.top.x) + (quad.bottom.x - quad.left.x)) * 0.5)
+                / mapWidth,
+            y: (((quad.right.y - quad.top.y) + (quad.bottom.y - quad.left.y)) * 0.5)
+                / mapWidth
+        };
+        const sourceAxisY = {
+            x: (((quad.left.x - quad.top.x) + (quad.bottom.x - quad.right.x)) * 0.5)
+                / mapHeight,
+            y: (((quad.left.y - quad.top.y) + (quad.bottom.y - quad.right.y)) * 0.5)
+                / mapHeight
+        };
+        const gridAxisX = Object.freeze({
+            x: sourceAxisX.x * scaleX,
+            y: sourceAxisX.y * scaleY
+        });
+        const gridAxisY = Object.freeze({
+            x: sourceAxisY.x * scaleX,
+            y: sourceAxisY.y * scaleY
+        });
+        const originSource = {
+            x: quad.top.x + (sourceAxisX.x * 0.5) + (sourceAxisY.x * 0.5),
+            y: quad.top.y + (sourceAxisX.y * 0.5) + (sourceAxisY.y * 0.5)
+        };
+        const tileWidth = Math.max(2, Math.abs(gridAxisX.x - gridAxisY.x));
+        const tileHeight = Math.max(2, Math.abs(gridAxisX.y + gridAxisY.y));
+        const entityRatio = Number(this.#config.board.ENTITY_SCALE_RATIO) || 0.64;
+        const gapRatio = Math.max(0, Number(this.#config.board.TILE_GAP_RATIO) || 0);
+        return Object.freeze({
+            mapImageRect,
+            gridAxisX,
+            gridAxisY,
+            tileWidth,
+            tileHeight,
+            tileElevation: tileHeight * 0.28,
+            tileSide: tileWidth * entityRatio,
+            tileGap: tileWidth * gapRatio,
+            isoOriginX: mapImageRect.x + (originSource.x * scaleX),
+            isoOriginY: mapImageRect.y + (originSource.y * scaleY)
+        });
     }
 }

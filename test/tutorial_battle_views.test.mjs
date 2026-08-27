@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import { TUTORIAL_GAME_DATA } from '../project/engine/script/data/game/tutorial_game_data.js';
+import { TUTORIAL_ASSET_MANIFEST } from '../project/engine/script/data/game/tutorial_asset_manifest.js';
 import { TutorialBattleHudView } from '../project/engine/script/scene/tutorial/view/_tutorial_battle_hud_view.js';
 import { TutorialBattleLayout } from '../project/engine/script/scene/tutorial/view/_tutorial_battle_layout.js';
 import { TutorialBattleFocusController } from '../project/engine/script/scene/tutorial/_tutorial_battle_focus_controller.js';
@@ -36,6 +37,7 @@ function createLayout() {
     return new TutorialBattleLayout({
         map: TUTORIAL_GAME_DATA.MAP,
         floors: TUTORIAL_GAME_DATA.FLOORS,
+        mapArtwork: TUTORIAL_ASSET_MANIFEST.MAPS,
         board: TUTORIAL_GAME_DATA.LAYOUT.BOARD,
         hud: TUTORIAL_GAME_DATA.LAYOUT.HUD,
         shakeTileRatio: TUTORIAL_GAME_DATA.ANIMATION.SHAKE_TILE_RATIO
@@ -202,6 +204,7 @@ test('전투 뷰는 장면·모델·저장·명령 큐를 직접 import하지 �
         '_tutorial_battle_world_view.js',
         '_tutorial_battle_hud_view.js',
         '_tutorial_battle_feedback_view.js',
+        '_tutorial_achievement_view.js',
         '_tutorial_battle_tutorial_view.js'
     ];
     const sources = await Promise.all(names.map((name) => readFile(new URL(

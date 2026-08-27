@@ -24,6 +24,9 @@ NW.js와 Canvas/WebGL 기반의 2D 턴제 전술 프로토타입입니다. 기�
 npm test
 npm run test:model
 npm run test:balance
+npm run test:assets
+npm run import:assets
+npm run check:assets
 npm run check:repo
 npm run simulate:balance
 ```
@@ -31,14 +34,17 @@ npm run simulate:balance
 - `npm test`: 현재 모델 회귀 테스트와 저장소 정적 검사를 한 번에 실행합니다.
 - `npm run test:model`: 9×8 두 층 전투 모델의 기준 동작을 검사합니다.
 - `npm run test:balance`: 결정론적 밸런스 하네스의 재현성·명령 상한·공개 API 경계를 검사합니다.
+- `npm run test:assets`: 매니페스트, loader crop/fallback, 맵 투영과 픽셀 보간 계약을 검사합니다.
+- `npm run import:assets`: 원본을 보존하며 `project/asset/tutorial/`에 ASCII 런타임 이름으로 안전 복사합니다.
+- `npm run check:assets`: 원본·복사본 PNG 31개의 IHDR 크기와 경로·폴백 계약을 검사합니다.
 - `npm run check:repo`: 데이터 ID, 맵 좌표, 선언된 에셋 경로를 검사합니다.
 - `npm run simulate:balance`: 두 스타터와 네 설명형 전략의 8개 시나리오를 실행하고
   무시되는 `reports/tutorial-balance-report.json`을 갱신합니다. 파일을 쓰지 않고
   JSON만 보려면 `npm run simulate:balance -- --json --no-write`를 사용합니다.
 
-현재 선언 경로에서 찾지 못한 플레이스홀더 에셋은 `check:repo`가 경고로
-보고합니다. 실제 아트·사운드 매니페스트와 엄격한 에셋 검사는 순차 통합의
-후속 단계에서 도입할 예정입니다.
+현재 선언 경로에서 찾지 못한 사운드는 `check:repo`가 경고로 보고합니다.
+아트는 `TUTORIAL_ASSET_MANIFEST`와 `check:assets`가 엄격하게 검사하며,
+사운드 매니페스트는 후속 통합 단계에서 추가합니다.
 
 ## 저장소 구조
 
@@ -51,5 +57,6 @@ npm run simulate:balance
 | `scripts/` | 저장소·에셋 검증 및 공개 모델 API 기반 밸런스 시뮬레이션 도구 |
 | `docs/` | 현재 빌드 기준선과 개발 문서 |
 
-아트·사운드 스테이징 디렉터리와 안전한 런타임 파일명 매핑은 아직 도입하지
-않았습니다. 원본 에셋을 임의로 이동하거나 이름을 바꾸지 마세요.
+아트 원본은 `project/asset/img`과 `project/asset/old`에 보존하고,
+안전한 런타임 복사본은 `project/asset/tutorial`에 둡니다. 매핑과 임의 결정은
+[`docs/tutorial-asset-integration.md`](docs/tutorial-asset-integration.md)에 기록합니다.

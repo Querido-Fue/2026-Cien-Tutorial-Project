@@ -16,7 +16,7 @@ export class TutorialBattleWorldView {
 
     /**
      * @param {{render:Function,renderGL:Function}} renderPort - 렌더 명령 포트입니다.
-     * @param {{getItemIcon?:Function,getLoraSprite?:Function}} assetPort - 읽기 전용 에셋 포트입니다.
+     * @param {{getMapArtwork?:Function,getItemIcon?:Function,getLoraSprite?:Function}} assetPort - 읽기 전용 에셋 포트입니다.
      */
     constructor(renderPort, assetPort = {}) {
         this.#renderPort = renderPort;
@@ -35,6 +35,7 @@ export class TutorialBattleWorldView {
         this.#frame = viewModel;
         try {
             const { boardRect } = viewModel.layout;
+            const mapArtwork = this.#assetPort.getMapArtwork?.(viewModel.floor.id) || null;
             this.#renderPort.renderGL('background', {
                 shape: 'rect',
                 x: boardRect.x + (boardRect.w * 0.5),
@@ -44,15 +45,34 @@ export class TutorialBattleWorldView {
                 fill: viewModel.colors.BoardFrame,
                 alpha: 0.9
             });
-            this.#drawQuarterViewBoard();
+            this.#drawMapArtwork(mapArtwork);
+            this.#drawQuarterViewBoard(Boolean(mapArtwork));
             this.#drawWorldObjects();
         } finally {
             this.#frame = null;
         }
     }
 
-    /** 층 타일과 입력 표식을 그립니다. @private */
-    #drawQuarterViewBoard() {
+    /** 원본 맵 레이어를 왜곡 없이 동일 사각형에 겹쳐 그립니다. @param {object|null} artwork @private */
+    #drawMapArtwork(artwork) {
+        const rect = this.#frame.layout.mapImageRect;
+        if (!artwork || !rect) {
+            return;
+        }
+        for (const image of artwork.layers) {
+            this.#renderPort.renderGL('background', {
+                image,
+                x: Math.round(rect.x),
+                y: Math.round(rect.y),
+                w: Math.round(rect.w),
+                h: Math.round(rect.h),
+                smoothing: false
+            });
+        }
+    }
+
+    /** 층 타일과 입력 표식을 그립니다. @param {boolean} hasMapArtwork @private */
+    #drawQuarterViewBoard(hasMapArtwork) {
         const { colors, layout, snapshot, world } = this.#frame;
         const floorIndex = Number(world.presentation.floorIndex) || 0;
         const baseFill = floorIndex === 0 ? colors.Tile.Low : colors.Tile.High2;
@@ -65,29 +85,31 @@ export class TutorialBattleWorldView {
         boardTiles.sort((left, right) => (
             (left.x + left.y) - (right.x + right.y) || left.x - right.x
         ));
-        for (const tile of boardTiles) {
-            const point = this.#projectTile(tile.x, tile.y);
-            const alternate = (tile.x + tile.y) % 2 === 0;
-            this.#renderPort.renderGL('background', {
-                shape: 'diamond',
-                x: point.x,
-                y: point.y,
-                w: layout.tileWidth - layout.tileGap,
-                h: layout.tileHeight - (layout.tileGap * 0.5),
-                fill: floorIndex === 0
-                    ? (alternate ? baseFill : colors.Tile.High1)
-                    : (alternate ? baseFill : colors.Tile.Side2),
-                alpha: 0.96
-            });
-            this.#renderPort.renderGL('background', {
-                shape: 'diamond',
-                x: point.x,
-                y: point.y,
-                w: (layout.tileWidth - layout.tileGap) * 0.9,
-                h: (layout.tileHeight - (layout.tileGap * 0.5)) * 0.9,
-                fill: baseFill,
-                alpha: 0.9
-            });
+        if (!hasMapArtwork) {
+            for (const tile of boardTiles) {
+                const point = this.#projectTile(tile.x, tile.y);
+                const alternate = (tile.x + tile.y) % 2 === 0;
+                this.#renderPort.renderGL('background', {
+                    shape: 'diamond',
+                    x: point.x,
+                    y: point.y,
+                    w: layout.tileWidth - layout.tileGap,
+                    h: layout.tileHeight - (layout.tileGap * 0.5),
+                    fill: floorIndex === 0
+                        ? (alternate ? baseFill : colors.Tile.High1)
+                        : (alternate ? baseFill : colors.Tile.Side2),
+                    alpha: 0.96
+                });
+                this.#renderPort.renderGL('background', {
+                    shape: 'diamond',
+                    x: point.x,
+                    y: point.y,
+                    w: (layout.tileWidth - layout.tileGap) * 0.9,
+                    h: (layout.tileHeight - (layout.tileGap * 0.5)) * 0.9,
+                    fill: baseFill,
+                    alpha: 0.9
+                });
+            }
         }
 
         if (floorIndex !== (Number(snapshot.floorIndex) || 0)) {
@@ -318,25 +340,26 @@ export class TutorialBattleWorldView {
         const point = this.#projectTile(entry.x, entry.y);
         const known = Boolean(world.itemMetadata[entry.itemId]) || entry.identified === true;
         const glyph = known ? this.#getItemGlyph(entry.itemId) : '?';
-        const itemAtlasLayout = world.config.itemAtlas;
+        const itemIconLayout = world.config.itemIcon;
         const icon = known ? this.#assetPort.getItemIcon?.(entry.itemId) : null;
         this.#renderPort.renderGL('object', {
             shape: 'circle',
             x: point.x,
             y: point.y,
-            w: layout.tileSide * itemAtlasLayout.WORLD_HALO_SIZE_TILE_RATIO,
-            h: layout.tileSide * itemAtlasLayout.WORLD_HALO_SIZE_TILE_RATIO,
+            w: layout.tileSide * itemIconLayout.WORLD_HALO_SIZE_TILE_RATIO,
+            h: layout.tileSide * itemIconLayout.WORLD_HALO_SIZE_TILE_RATIO,
             fill: colors.Entity.Item
         });
         if (icon) {
-            const iconSize = layout.tileSide * itemAtlasLayout.WORLD_ICON_SIZE_TILE_RATIO;
+            const iconSize = layout.tileSide * itemIconLayout.WORLD_ICON_SIZE_TILE_RATIO;
             this.#renderPort.render('texteffect', {
                 shape: 'image',
                 image: icon,
-                x: point.x - (iconSize * 0.5),
-                y: point.y - (iconSize * 0.5),
-                w: iconSize,
-                h: iconSize
+                x: Math.round(point.x - (iconSize * 0.5)),
+                y: Math.round(point.y - (iconSize * 0.5)),
+                w: Math.round(iconSize),
+                h: Math.round(iconSize),
+                smoothing: false
             });
             return;
         }
@@ -484,12 +507,13 @@ export class TutorialBattleWorldView {
             }
             this.#renderPort.renderGL('object', {
                 image: sprite,
-                x: point.x - (spriteSize * 0.5),
-                y: point.y - (spriteSize * 0.5)
-                    + (layout.tileSide * spriteLayout.OFFSET_Y_TILE_RATIO),
-                w: spriteSize,
-                h: spriteSize,
-                alpha
+                x: Math.round(point.x - (spriteSize * 0.5)),
+                y: Math.round(point.y - (spriteSize * 0.5)
+                    + (layout.tileSide * spriteLayout.OFFSET_Y_TILE_RATIO)),
+                w: Math.round(spriteSize),
+                h: Math.round(spriteSize),
+                alpha,
+                smoothing: false
             });
         } else {
             this.#renderPort.renderGL('object', {

@@ -8,6 +8,8 @@ export class TutorialButtonHost {
     #parent;
     #onCommand;
     #onFocus;
+    #assetPort;
+    #renderPort;
     #buttons;
     #signature;
 
@@ -16,11 +18,21 @@ export class TutorialButtonHost {
      * @param {object} options.parent - UI 요소의 부모 객체입니다.
      * @param {Function} options.onCommand - 명령 의도를 씬으로 전달하는 콜백입니다.
      * @param {Function} [options.onFocus] - 포인터 포커스 키를 씬으로 전달하는 콜백입니다.
+     * @param {object} [options.assetPort] - 버튼 배경 에셋 읽기 포트입니다.
+     * @param {object} [options.renderPort] - 아이콘 렌더 포트입니다.
      */
-    constructor({ parent, onCommand, onFocus = () => {} }) {
+    constructor({
+        parent,
+        onCommand,
+        onFocus = () => {},
+        assetPort = {},
+        renderPort = {}
+    }) {
         this.#parent = parent;
         this.#onCommand = onCommand;
         this.#onFocus = onFocus;
+        this.#assetPort = assetPort;
+        this.#renderPort = renderPort;
         this.#buttons = {};
         this.#signature = null;
     }
@@ -88,6 +100,7 @@ export class TutorialButtonHost {
         }
         const enabled = spec.enabled !== false;
         const inspectable = spec.inspectable === true || enabled;
+        const icon = spec.icon || this.#createItemIconChild(spec.iconId, spec.iconWidth);
         const textElement = UIPool.text_element.get();
         textElement.init({
             parent: this.#parent,
@@ -109,10 +122,16 @@ export class TutorialButtonHost {
             y: spec.y,
             width: spec.w,
             height: spec.h,
-            center: spec.icon ? [spec.icon, textElement] : [textElement],
+            center: icon ? [icon, textElement] : [textElement],
             itemSpacing: spec.itemSpacing,
             radius: spec.radius ?? style.defaultRadius,
             shadow: spec.shadow,
+            backgroundImage: spec.backgroundAssetKey
+                ? this.#assetPort.getUiAsset?.(spec.backgroundAssetKey)
+                : null,
+            backgroundImageAlpha: enabled
+                ? (spec.backgroundImageAlpha ?? 1)
+                : (spec.backgroundImageAlpha ?? 1) * 0.32,
             idleColor: enabled || spec.focused
                 ? (spec.active || spec.focused
                     ? style.colors.accent
@@ -138,6 +157,37 @@ export class TutorialButtonHost {
         button.hoverScaleMultiplier = style.hoverScale;
         button.pressScaleMultiplier = style.pressScale;
         this.#buttons[spec.key] = { item: button, text: textElement };
+    }
+
+    /**
+     * 논리 아이템 ID를 버튼 레이아웃이 그릴 수 있는 픽셀 이미지 자식으로 바꿉니다.
+     * @param {string|null} itemId - 아이템 ID입니다.
+     * @param {number} width - 버튼 내부 아이콘 폭입니다.
+     * @returns {object|null} 버튼용 이미지 자식입니다.
+     * @private
+     */
+    #createItemIconChild(itemId, width) {
+        const image = itemId ? this.#assetPort.getItemIcon?.(itemId) : null;
+        if (!image || !Number.isFinite(width) || width <= 0
+            || typeof this.#renderPort.render !== 'function') {
+            return null;
+        }
+        return {
+            type: 'tutorial-item-icon',
+            width,
+            draw: (layer, x, y, w, h, scale, alpha) => {
+                this.#renderPort.render(layer, {
+                    shape: 'image',
+                    image,
+                    x: Math.round(x),
+                    y: Math.round(y),
+                    w: Math.round(w),
+                    h: Math.round(h),
+                    alpha,
+                    smoothing: false
+                });
+            }
+        };
     }
 
     /**

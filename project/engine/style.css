@@ -17,6 +17,7 @@ html {
     position: absolute;
     border-radius: 8px;
     transform-origin: center;
+    image-rendering: pixelated;
 }
 
 #background {

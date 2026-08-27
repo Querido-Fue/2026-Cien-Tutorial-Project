@@ -276,9 +276,9 @@ test('피해·이동력 감소·불안정도 증감 이벤트 타일을 적용�
     seedState(decreaseModel, (state) => {
         state.floorIndex = 1;
         state.player.x = 1;
-        state.player.y = 1;
+        state.player.y = 0;
     });
-    const decreaseMove = decreaseModel.commitPath([{ x: 1, y: 1 }, { x: 2, y: 1 }]);
+    const decreaseMove = decreaseModel.commitPath([{ x: 1, y: 0 }, { x: 2, y: 0 }]);
     assert.equal(decreaseModel.lora.instability, 60);
     assert.equal(
         decreaseMove.events.find(({ type }) => type === 'instability-changed').change,
@@ -486,9 +486,8 @@ test('버섯은 이동력과 근접 공격력을 두 배로 하고 피해를 받
         { x: 0, y: 2 },
         { x: 0, y: 1 },
         { x: 1, y: 1 },
-        { x: 2, y: 1 },
-        { x: 3, y: 1 },
-        { x: 4, y: 1 }
+        { x: 1, y: 0 },
+        { x: 2, y: 0 }
     ]);
     assert.equal(moved.ok, true);
     assert.equal(moved.moveRange, 8);

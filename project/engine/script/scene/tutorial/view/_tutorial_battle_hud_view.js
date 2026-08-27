@@ -6,6 +6,7 @@ import {
     truncateBattleViewText,
     wrapBattleViewText
 } from './_tutorial_battle_view_helpers.js';
+import { drawTutorialPixelAsset } from './_tutorial_asset_view_helpers.js';
 
 /**
  * @class TutorialBattleHudView
@@ -119,7 +120,7 @@ export class TutorialBattleHudView {
                 },
                 {
                     key: 'heal',
-                    label: '3 회복 +20',
+                    label: '3 회복 +' + String(hud.config.healAmount),
                     enabled: controls.actionReady,
                     type: TUTORIAL_COMMANDS.HEAL
                 },
@@ -138,6 +139,10 @@ export class TutorialBattleHudView {
                     w: actionColumnW,
                     h: actionH,
                     label: spec.label,
+                    backgroundAssetKey: spec.key === 'heal' || spec.key === 'idle'
+                        ? 'waitHealButton'
+                        : 'actionButton',
+                    backgroundImageAlpha: 0.88,
                     enabled: spec.enabled,
                     active: spec.active,
                     focused: hud.focusedControlKey === 'battle-' + spec.key,
@@ -176,6 +181,8 @@ export class TutorialBattleHudView {
                 w: primaryRect.w,
                 h: primaryH,
                 label: primaryLabel,
+                backgroundAssetKey: 'actionButton',
+                backgroundImageAlpha: 0.82,
                 enabled: primaryEnabled,
                 idleColor: colors.UI.Primary,
                 hoverColor: colors.UI.PrimaryHover,
@@ -201,6 +208,8 @@ export class TutorialBattleHudView {
                 w: menuRect.w,
                 h: menuH,
                 label: 'Esc  메뉴',
+                backgroundAssetKey: 'mainButton',
+                backgroundImageAlpha: 0.86,
                 enabled: !hud.presentationLocked,
                 idleColor: colors.UI.Card,
                 hoverColor: colors.UI.ButtonHover,
@@ -231,15 +240,15 @@ export class TutorialBattleHudView {
                 - (itemGapY * (inventoryRows - 1))
             ) / inventoryRows;
             const itemH = clampBattleViewNumber(availableItemH, 22, 56);
-            const itemAtlas = hud.config.itemAtlas;
+            const itemIconLayout = hud.config.itemIcon;
             hud.inventory.entries.forEach((entry, index) => {
                 const column = index % inventoryColumns;
                 const row = Math.floor(index / inventoryColumns);
                 const iconWidth = entry.known && entry.hasIcon
-                    ? itemH * itemAtlas.BUTTON_ICON_SIZE_RATIO
+                    ? itemH * itemIconLayout.BUTTON_ICON_SIZE_RATIO
                     : 0;
                 const iconGap = iconWidth > 0
-                    ? this.#uww(itemAtlas.BUTTON_ICON_GAP_UIWW)
+                    ? this.#uww(itemIconLayout.BUTTON_ICON_GAP_UIWW)
                     : 0;
                 const countLabel = ' ×' + String(entry.count);
                 const displayLabel = '[' + entry.statusLabel + '] ' + entry.label;
@@ -262,6 +271,8 @@ export class TutorialBattleHudView {
                     w: inventoryColumnW,
                     h: itemH,
                     label,
+                    backgroundAssetKey: 'mainButton',
+                    backgroundImageAlpha: 0.58,
                     iconId: iconWidth > 0 ? entry.itemId : null,
                     iconWidth,
                     itemSpacing: iconGap,
@@ -324,6 +335,12 @@ export class TutorialBattleHudView {
     #drawBattleStageHeader() {
         const { colors, floor, fonts, hud, layout, snapshot, world } = this.#frame;
         const rect = layout.hudRects.STAGE_HEADER;
+        drawTutorialPixelAsset(this.#renderPort, {
+            layer: 'ui',
+            image: this.#assetPort.getUiAsset?.('turnFrame'),
+            rect,
+            alpha: 0.82
+        });
         const rawStageTitle = Number(world.presentation.floorIndex) === 0
             ? (floor?.label || '1층') + ' · 로라의 방'
             : (floor?.label || '지하층') + ' · 붕괴 지대';
@@ -416,7 +433,7 @@ export class TutorialBattleHudView {
         const { colors, fonts, hud, layout, snapshot, world } = this.#frame;
         const rect = layout.hudRects.LORA_CARD;
         const pad = clampBattleViewNumber(rect.w * 0.035, 10, 18);
-        this.#drawHudCard(rect);
+        this.#drawHudCard(rect, 'loraPanel', 0.82);
         const portraitH = rect.h - (pad * 2);
         const portraitW = portraitH * (200 / 240);
         const portraitX = rect.x + pad;
@@ -425,7 +442,11 @@ export class TutorialBattleHudView {
         if (portrait?.complete && portrait.naturalWidth > 0) {
             this.#renderPort.render('ui', {
                 shape: 'image', image: portrait,
-                x: portraitX, y: portraitY, w: portraitW, h: portraitH
+                x: Math.round(portraitX),
+                y: Math.round(portraitY),
+                w: Math.round(portraitW),
+                h: Math.round(portraitH),
+                smoothing: false
             });
         } else {
             this.#renderPort.render('ui', {
@@ -511,7 +532,7 @@ export class TutorialBattleHudView {
         const intent = hud.readability?.loraIntent || {};
         const preview = hud.readability?.playerPreview || {};
         const inspectedItem = hud.readability?.inspectedItem || null;
-        this.#drawHudCard(rect);
+        this.#drawHudCard(rect, 'itemPanel', 0.58);
         let y = rect.y + pad;
         this.#drawText(
             'ui', 'NEXT LORA' + (intent.forecast ? ' · 현재 기준' : ''),
@@ -697,6 +718,12 @@ export class TutorialBattleHudView {
             ? Math.max(0, Number(preview.expected?.playerHp) || 0)
             : playerHp;
         const gaugeH = clampBattleViewNumber(rect.h * 0.24, 8, 12);
+        drawTutorialPixelAsset(this.#renderPort, {
+            layer: 'ui',
+            image: this.#assetPort.getUiAsset?.('playerPanel'),
+            rect,
+            alpha: 0.72
+        });
         this.#drawText('ui', 'HP', rect.x, rect.y + (rect.h * 0.28), fonts.BODY, colors.UI.Text);
         this.#drawText(
             'ui', this.#formatTransition(playerHp, expectedPlayerHp)
@@ -730,7 +757,7 @@ export class TutorialBattleHudView {
     }
 
     /** 그림자와 테두리가 있는 HUD 카드를 그립니다. @private */
-    #drawHudCard(rect) {
+    #drawHudCard(rect, assetKey = null, assetAlpha = 1) {
         const colors = this.#frame.colors;
         const radius = this.#uwh(1.1);
         this.#renderPort.render('ui', {
@@ -744,6 +771,14 @@ export class TutorialBattleHudView {
             radius, fill: colors.UI.Card,
             stroke: colors.UI.Border, lineWidth: 1
         });
+        if (assetKey) {
+            drawTutorialPixelAsset(this.#renderPort, {
+                layer: 'ui',
+                image: this.#assetPort.getUiAsset?.(assetKey),
+                rect,
+                alpha: assetAlpha
+            });
+        }
     }
 
     /** 현재값과 선택 행동의 예상 구간을 함께 그립니다. @private */

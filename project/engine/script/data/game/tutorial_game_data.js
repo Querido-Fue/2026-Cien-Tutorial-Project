@@ -46,24 +46,8 @@ const LORA_INSTABILITY_STATES = [
  */
 export const TUTORIAL_GAME_DATA = deepFreeze({
     FEATURES: { CUTSCENES: false },
-    ASSETS: {
-        LORA_PORTRAIT: '../asset/ui/tutorial/lora-portrait.png',
-        ITEM_ICON_ATLAS: '../asset/ui/tutorial/item-icons-atlas.png',
-        LORA_SPRITE: '../asset/ui/tutorial/lora-sprite.png'
-    },
     SPRITES: {
-        ITEM_ATLAS: {
-            COLUMNS: 4,
-            ROWS: 2,
-            CELLS: {
-                'music-box': { COLUMN: 0, ROW: 0 },
-                'old-teddy': { COLUMN: 1, ROW: 0 },
-                mirror: { COLUMN: 2, ROW: 0 },
-                eyeliner: { COLUMN: 3, ROW: 0 },
-                bow: { COLUMN: 0, ROW: 1 },
-                'diamond-pickaxe': { COLUMN: 2, ROW: 1 },
-                mushroom: { COLUMN: 3, ROW: 1 }
-            },
+        ITEM: {
             WORLD_HALO_SIZE_TILE_RATIO: 0.45,
             WORLD_ICON_SIZE_TILE_RATIO: 0.64,
             BUTTON_ICON_SIZE_RATIO: 0.66,

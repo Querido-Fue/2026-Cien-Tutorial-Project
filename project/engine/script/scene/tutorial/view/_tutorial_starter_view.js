@@ -8,6 +8,7 @@ import {
     toTutorialUiWidth,
     wrapTutorialText
 } from './_tutorial_nonbattle_view_helpers.js';
+import { drawTutorialPixelAsset } from './_tutorial_asset_view_helpers.js';
 
 /**
  * @class TutorialStarterView
@@ -15,10 +16,12 @@ import {
  */
 export class TutorialStarterView {
     #renderPort;
+    #assetPort;
 
-    /** @param {object} renderPort - 주입된 렌더 의존성입니다. */
-    constructor(renderPort) {
+    /** @param {object} renderPort - 주입된 렌더 의존성입니다. @param {object} assetPort - 에셋 읽기 포트입니다. */
+    constructor(renderPort, assetPort = {}) {
         this.#renderPort = renderPort;
+        this.#assetPort = assetPort;
     }
 
     /**
@@ -108,6 +111,12 @@ export class TutorialStarterView {
                 selected ? colors.UI.PanelStrong : colors.UI.Panel,
                 0.95
             );
+            drawTutorialPixelAsset(this.#renderPort, {
+                layer: 'ui',
+                image: this.#assetPort.getUiAsset?.('starterCard'),
+                rect: scaledRect,
+                alpha: selected ? 1 : 0.76
+            });
             drawTutorialText(this.#renderPort, {
                 text: choice.label,
                 x: card.x + (card.w * 0.5),
@@ -156,6 +165,8 @@ export class TutorialStarterView {
             key: 'starter-' + choice.id,
             ...layout.buttons[index],
             label: (index === viewModel.selectedIndex ? '◆ ' : '') + choice.label,
+            backgroundAssetKey: 'mainButton',
+            backgroundImageAlpha: 0.82,
             active: index === viewModel.selectedIndex,
             command: {
                 type: TUTORIAL_COMMANDS.CHOOSE_STARTER,
@@ -166,6 +177,8 @@ export class TutorialStarterView {
             key: 'starter-back',
             ...layout.buttons[layout.buttons.length - 1],
             label: '메뉴  [Esc]',
+            backgroundAssetKey: 'mainButton',
+            backgroundImageAlpha: 0.82,
             command: { type: TUTORIAL_COMMANDS.RETURN_MENU }
         }];
     }

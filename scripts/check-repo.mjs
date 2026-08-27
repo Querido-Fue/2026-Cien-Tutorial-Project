@@ -3,6 +3,7 @@ import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { TUTORIAL_GAME_DATA } from '../project/engine/script/data/game/tutorial_game_data.js';
+import { TUTORIAL_ASSET_MANIFEST } from '../project/engine/script/data/game/tutorial_asset_manifest.js';
 import { SOUND_CONSTANTS } from '../project/engine/script/data/sound/sound_constants.js';
 
 const SCRIPT_DIRECTORY = dirname(fileURLToPath(import.meta.url));
@@ -97,7 +98,7 @@ function checkAssetPath(label, assetPath) {
         if (STRICT_ASSETS) {
             fail(message);
         } else {
-            warnings.push(`${message} Turn 12의 에셋 매니페스트 통합 전까지 경고로 처리합니다.`);
+            warnings.push(`${message} --strict-assets 사용 시 오류로 처리합니다.`);
         }
     }
 }
@@ -176,8 +177,10 @@ function checkTutorialData() {
  * 현재 코드가 선언한 런타임 에셋 경로를 검사합니다.
  */
 function checkDeclaredAssets() {
-    for (const [key, assetPath] of Object.entries(TUTORIAL_GAME_DATA.ASSETS ?? {})) {
-        checkAssetPath(`TUTORIAL_GAME_DATA.ASSETS.${key}`, assetPath);
+    for (const entry of TUTORIAL_ASSET_MANIFEST.ENTRIES) {
+        if (entry.type === 'image/png') {
+            checkAssetPath(`TUTORIAL_ASSET_MANIFEST.${entry.id}`, entry.runtimePath);
+        }
     }
 
     const soundPaths = [];

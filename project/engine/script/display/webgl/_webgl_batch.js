@@ -117,7 +117,7 @@ export class WebGLBatch {
             u1 = textureInfo.u1;
             v1 = textureInfo.v1;
         } else if (options.image) {
-            texture = this.#getTexture(options.image);
+            texture = this.#getTexture(options.image, options.smoothing !== false);
         } else {
             return;
         }
@@ -292,28 +292,39 @@ export class WebGLBatch {
      * @private
      * 이미지에서 텍스처를 가져옵니다.
      * @param {CanvasImageSource} image - 소스 이미지입니다.
+     * @param {boolean} smoothing - 선형 보간 사용 여부입니다.
      * @returns {WebGLTexture} 생성된 텍스처입니다.
      */
-    #getTexture(image) {
-        if (this.textureCache.has(image)) {
-            return this.textureCache.get(image);
+    #getTexture(image, smoothing) {
+        const variantKey = smoothing ? 'linear' : 'nearest';
+        let variants = this.textureCache.get(image);
+        if (variants?.[variantKey]) {
+            return variants[variantKey];
         }
 
         const gl = this.gl;
         const texture = gl.createTexture();
+        const filter = smoothing ? gl.LINEAR : gl.NEAREST;
         gl.bindTexture(gl.TEXTURE_2D, texture);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
 
-        if (image.complete && image.naturalWidth > 0) {
+        const imageWidth = Number(image.naturalWidth || image.videoWidth || image.width);
+        const imageHeight = Number(image.naturalHeight || image.videoHeight || image.height);
+        const ready = image.complete !== false && imageWidth > 0 && imageHeight > 0;
+        if (ready) {
             gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
         } else {
             gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, TRANSPARENT_TEXTURE_PIXEL);
         }
 
-        this.textureCache.set(image, texture);
+        if (!variants) {
+            variants = {};
+            this.textureCache.set(image, variants);
+        }
+        variants[variantKey] = texture;
         return texture;
     }
 

@@ -145,7 +145,10 @@ test('피드백 큐는 cue 순서와 수명을 소유하고 오디오를 별도�
     );
     const active = queue.getSnapshot();
     assert.equal(active.floatingTexts.length, 2);
-    assert.equal(active.particles.length, 4);
+    const expectedParticleCount = cues
+        .filter((cue) => cue.type === TUTORIAL_PRESENTATION_CUE_TYPES.PATH_PARTICLES)
+        .reduce((total, cue) => total + (Number(cue.count) || 4), 0);
+    assert.equal(active.particles.length, expectedParticleCount);
     assert.ok(active.screenShakeSeconds > 0);
     assert.ok(active.flashSeconds > 0);
     assert.ok(active.stabilizeSeconds > 0);
@@ -229,7 +232,7 @@ test('애니메이션 타임라인은 겹친 연출이 모두 끝날 때까지 �
     timeline.destroy();
 });
 
-test('에셋 로더는 주입 팩토리로 readiness, atlas, 실패와 destroy를 관리한다', () => {
+test('에셋 로더는 주입 팩토리로 준비 상태, 크기 검증, 실패와 destroy를 관리한다', () => {
     const images = [];
     class FakeImage {
         constructor() {
@@ -256,43 +259,29 @@ test('에셋 로더는 주입 팩토리로 readiness, atlas, 실패와 destroy�
             this.onerror?.();
         }
     }
-    const drawCalls = [];
-    const canvasFactory = () => ({
-        width: 0,
-        height: 0,
-        getContext: () => ({
-            imageSmoothingEnabled: false,
-            clearRect() {},
-            drawImage(...args) {
-                drawCalls.push(args);
-            }
-        })
-    });
     const loader = new TutorialAssetLoader({
-        imageFactory: () => new FakeImage(),
-        canvasFactory
+        imageFactory: () => new FakeImage()
     });
-    loader.loadImage('portrait', 'portrait.png');
-    loader.loadAtlas('items', 'items.png', {
-        COLUMNS: 2,
-        ROWS: 1,
-        CELLS: {
-            first: { COLUMN: 0, ROW: 0 },
-            second: { COLUMN: 1, ROW: 0 }
-        }
+    loader.loadImage('portrait', 'portrait.png', {
+        expectedDimensions: { width: 20, height: 20 }
     });
     loader.loadImage('failed', 'missing.png');
+    loader.loadImage('mismatch', 'mismatch.png', {
+        expectedDimensions: { width: 40, height: 20 }
+    });
     assert.equal(loader.getStatus('portrait'), 'loading');
     images[0].succeed(20, 20);
-    images[1].succeed(40, 20);
-    images[2].fail();
+    images[1].fail();
+    images[2].succeed(20, 20);
     assert.equal(loader.isReady('portrait'), true);
-    assert.equal(loader.hasAtlasCell('items', 'first'), true);
-    assert.equal(loader.hasAtlasCell('items', 'second'), true);
-    assert.equal(drawCalls.length, 2);
     assert.equal(loader.getStatus('failed'), 'failed');
     assert.equal(loader.getImage('failed'), null);
-    assert.equal(loader.getSnapshot().items.atlasCellCount, 2);
+    assert.equal(loader.getStatus('mismatch'), 'failed');
+    assert.equal(loader.getSnapshot().mismatch.error, 'image-dimensions-mismatch');
+    assert.deepEqual(loader.getSnapshot().mismatch.actualDimensions, {
+        width: 20,
+        height: 20
+    });
 
     loader.destroy();
     assert.equal(images.every((image) => image.onload === null && image.onerror === null), true);

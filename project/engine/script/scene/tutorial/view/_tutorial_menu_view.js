@@ -7,6 +7,7 @@ import {
     toTutorialUiHeight,
     toTutorialUiWidth
 } from './_tutorial_nonbattle_view_helpers.js';
+import { drawTutorialPixelAsset } from './_tutorial_asset_view_helpers.js';
 
 /**
  * @class TutorialMenuView
@@ -14,10 +15,12 @@ import {
  */
 export class TutorialMenuView {
     #renderPort;
+    #assetPort;
 
-    /** @param {object} renderPort - 주입된 렌더 의존성입니다. */
-    constructor(renderPort) {
+    /** @param {object} renderPort - 주입된 렌더 의존성입니다. @param {object} assetPort - 에셋 읽기 포트입니다. */
+    constructor(renderPort, assetPort = {}) {
         this.#renderPort = renderPort;
+        this.#assetPort = assetPort;
     }
 
     /**
@@ -63,14 +66,37 @@ export class TutorialMenuView {
     draw(viewModel) {
         const layout = this.getLayout(viewModel);
         const { colors, fonts, viewport } = viewModel;
-        drawTutorialText(this.#renderPort, {
-            text: viewModel.title,
-            x: layout.centerX,
-            y: toTutorialUiHeight(viewport, 24),
-            font: fonts.TITLE,
-            fill: colors.UI.Text,
-            align: 'center'
+        drawTutorialPixelAsset(this.#renderPort, {
+            layer: 'ui',
+            image: this.#assetPort.getUiAsset?.('mainCameraOverlay'),
+            rect: {
+                x: viewport.UIOffsetX,
+                y: 0,
+                w: viewport.UIWW,
+                h: viewport.WH
+            },
+            alpha: 0.72
         });
+        const titleDrawn = drawTutorialPixelAsset(this.#renderPort, {
+            layer: 'ui',
+            image: this.#assetPort.getUiAsset?.('mainTitle'),
+            rect: {
+                x: layout.centerX - toTutorialUiWidth(viewport, 18),
+                y: toTutorialUiHeight(viewport, 10),
+                w: toTutorialUiWidth(viewport, 36),
+                h: toTutorialUiHeight(viewport, 18)
+            }
+        });
+        if (!titleDrawn) {
+            drawTutorialText(this.#renderPort, {
+                text: viewModel.title,
+                x: layout.centerX,
+                y: toTutorialUiHeight(viewport, 24),
+                font: fonts.TITLE,
+                fill: colors.UI.Text,
+                align: 'center'
+            });
+        }
         drawTutorialText(this.#renderPort, {
             text: viewModel.subtitle,
             x: layout.centerX,
@@ -118,6 +144,8 @@ export class TutorialMenuView {
             key: 'menu-start',
             ...rect,
             label: '게임 시작  [Enter]',
+            backgroundAssetKey: 'mainButton',
+            backgroundImageAlpha: 0.95,
             command: { type: TUTORIAL_COMMANDS.START }
         }];
     }

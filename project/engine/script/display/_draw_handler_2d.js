@@ -2,12 +2,12 @@ import {
     createDrawArrowPath,
     renderDrawArrow,
     renderDrawCircle,
-    renderDrawImage,
     renderDrawLine,
     renderDrawRect,
     renderDrawRoundRect,
     renderDrawText
 } from './draw_2d_shapes.js';
+import { renderDrawImage } from './draw_2d_image.js';
 import {
     applyDraw2DStyles,
     applyDrawLayerTransform,

@@ -110,15 +110,6 @@ export function renderDrawLine(context, options) {
 }
 
 /**
- * 이미지를 렌더링합니다.
- * @param {CanvasRenderingContext2D} context - 대상 컨텍스트입니다.
- * @param {object} options - 렌더링 옵션입니다.
- */
-export function renderDrawImage(context, options) {
-    context.drawImage(options.image, options.x, options.y, options.w, options.h);
-}
-
-/**
  * 텍스트를 렌더링합니다.
  * @param {CanvasRenderingContext2D} context - 대상 컨텍스트입니다.
  * @param {object} options - 렌더링 옵션입니다.

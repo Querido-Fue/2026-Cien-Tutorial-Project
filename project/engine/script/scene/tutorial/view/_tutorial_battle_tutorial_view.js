@@ -4,6 +4,7 @@ import {
     drawBattleViewText,
     wrapBattleViewText
 } from './_tutorial_battle_view_helpers.js';
+import { drawTutorialPixelAsset } from './_tutorial_asset_view_helpers.js';
 
 /**
  * @class TutorialBattleTutorialView
@@ -11,10 +12,12 @@ import {
  */
 export class TutorialBattleTutorialView {
     #renderPort;
+    #assetPort;
 
-    /** @param {{render:Function,wrapText:Function}} renderPort - UI 렌더 포트입니다. */
-    constructor(renderPort) {
+    /** @param {{render:Function,wrapText:Function}} renderPort - UI 렌더 포트입니다. @param {object} assetPort - 에셋 읽기 포트입니다. */
+    constructor(renderPort, assetPort = {}) {
         this.#renderPort = renderPort;
+        this.#assetPort = assetPort;
     }
 
     /** @param {object} viewModel - 장면이 조립한 안내 표시 모델입니다. */
@@ -54,6 +57,12 @@ export class TutorialBattleTutorialView {
             fill: colors.UI.Card,
             stroke: colors.UI.Border,
             lineWidth: 1
+        });
+        drawTutorialPixelAsset(this.#renderPort, {
+            layer: 'ui',
+            image: this.#assetPort.getUiAsset?.('tutorialPopup'),
+            rect,
+            alpha: 0.72
         });
         let y = rect.y + pad;
         this.#drawText(copy.title, rect.x + pad, y, fonts.HEADING, colors.UI.Primary);
@@ -114,6 +123,8 @@ export class TutorialBattleTutorialView {
             w: buttonW,
             h: buttonH,
             label: '확인  [Enter]',
+            backgroundAssetKey: 'mainButton',
+            backgroundImageAlpha: 0.9,
             idleColor: viewModel.colors.UI.Primary,
             hoverColor: viewModel.colors.UI.PrimaryHover,
             textColor: viewModel.colors.UI.OnPrimary,

@@ -58,6 +58,8 @@ export class ButtonElement extends BaseUIElement {
 
         this.idleColor = properties.idleColor || ColorSchemes.Overlay.Control.Inactive;
         this.hoverColor = properties.hoverColor || ColorSchemes.Overlay.Control.Hover;
+        this.backgroundImage = properties.backgroundImage || null;
+        this.backgroundImageAlpha = properties.backgroundImageAlpha ?? 1;
 
         if (properties.color) this.color = properties.color;
 
@@ -76,6 +78,8 @@ export class ButtonElement extends BaseUIElement {
         this.onHover = () => { };
         this.activateOnPress = false;
         this.pressClickHandled = false;
+        this.backgroundImage = null;
+        this.backgroundImageAlpha = 1;
     }
 
     /**
@@ -159,6 +163,28 @@ export class ButtonElement extends BaseUIElement {
             fill: this.currentColor,
             alpha: this.alpha
         });
+
+        const imageWidth = Number(
+            this.backgroundImage?.naturalWidth || this.backgroundImage?.width
+        );
+        const imageHeight = Number(
+            this.backgroundImage?.naturalHeight || this.backgroundImage?.height
+        );
+        if (imageWidth > 0 && imageHeight > 0) {
+            const imageScale = Math.min(scaledW / imageWidth, scaledH / imageHeight);
+            const drawW = Math.max(1, Math.round(imageWidth * imageScale));
+            const drawH = Math.max(1, Math.round(imageHeight * imageScale));
+            render(this.layer, {
+                shape: 'image',
+                image: this.backgroundImage,
+                x: Math.round(cx - (drawW * 0.5)),
+                y: Math.round(cy - (drawH * 0.5)),
+                w: drawW,
+                h: drawH,
+                alpha: this.alpha * this.backgroundImageAlpha,
+                smoothing: false
+            });
+        }
 
 
         // 자식 요소들의 스케일 적용된 간격
