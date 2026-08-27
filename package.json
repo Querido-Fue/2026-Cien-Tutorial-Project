@@ -2,10 +2,12 @@
   "name": "cien-tutorial-project",
   "private": true,
   "scripts": {
-    "test": "npm run test:model && npm run test:contracts && npm run test:presentation && npm run check:repo",
+    "test": "npm run test:model && npm run test:balance && npm run test:contracts && npm run test:presentation && npm run check:repo",
     "test:model": "node --experimental-default-type=module --test test/tutorial_battle_model.test.mjs test/tutorial_combat_preview.test.mjs",
+    "test:balance": "node --experimental-default-type=module --test test/tutorial_balance_simulation.test.mjs",
     "test:contracts": "node --experimental-default-type=module --test test/tutorial_source_contract.test.mjs test/tutorial_scene_seams.test.mjs test/tutorial_nonbattle_views.test.mjs test/tutorial_battle_views.test.mjs",
     "test:presentation": "node --experimental-default-type=module --test test/tutorial_presentation.test.mjs",
-    "check:repo": "node --experimental-default-type=module scripts/check-repo.mjs"
+    "check:repo": "node --experimental-default-type=module scripts/check-repo.mjs",
+    "simulate:balance": "node --experimental-default-type=module scripts/simulate-tutorial-balance.mjs"
   }
 }
