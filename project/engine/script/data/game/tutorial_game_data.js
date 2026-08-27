@@ -371,7 +371,6 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         HUD: {
             STAGE_HEADER: { X_UIWW: 4.5, Y_WH: 4.8, WIDTH_UIWW: 21.5, HEIGHT_WH: 12 },
             MENU: { X_UIWW: 27, Y_WH: 3.6, WIDTH_UIWW: 7, HEIGHT_WH: 4.8 },
-            UNDO: { X_UIWW: 27, Y_WH: 9.2, WIDTH_UIWW: 7, HEIGHT_WH: 4.8 },
             LORA_CARD: { X_UIWW: 69.5, Y_WH: 4.5, WIDTH_UIWW: 27.5, HEIGHT_WH: 21 },
             MISSION_CARD: { X_UIWW: 76, Y_WH: 30, WIDTH_UIWW: 21, HEIGHT_WH: 36 },
             PLAYER_STATUS: { X_UIWW: 4, Y_WH: 59.5, WIDTH_UIWW: 27, HEIGHT_WH: 5 },
@@ -395,8 +394,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         STABILIZE_SECONDS: 0.9,
         TELEPORT_OUT_SECONDS: 0.14,
         TELEPORT_IN_SECONDS: 0.22,
-        UNDO_SECONDS_PER_TILE: 0.12,
-        UNDO_FADE_SECONDS: 0.18,
+        FLOOR_FADE_SECONDS: 0.18,
         SELECTION_SECONDS: 0.24,
         GAUGE_SECONDS: 0.34,
         PARTICLE_COUNT: 12,
@@ -424,7 +422,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         OBJECTIVE: '로라 행동 12회가 끝나기 전에 불안정도를 낮추며 로라의 HP를 0으로 만드세요.',
         CORE_LOOP: '이동 → 행동 → 로라 → 몹',
         TURN_SUMMARY: '두 개의 맵 · 로라 행동 최대 12회',
-        CONTROLS: '인접 타일/방향키 경로 추가 · Backspace 취소 · Enter 이동 확정 · Ctrl+Z 되돌리기',
+        CONTROLS: '인접 타일/방향키 경로 추가 · Backspace 취소 · Enter 이동 확정',
         ACTIONS: {
             MOVE_CONFIRM: '이동 확정',
             ATTACK: '공격',
@@ -433,10 +431,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
             USE_ITEM: '아이템 사용',
             CLEANSE: '타일 정화',
             STAY: '제자리 이동',
-            RESTART: '다시 시작',
-            UNDO: '되돌리기',
-            UNDO_SHORT: 'Ctrl+Z',
-            UNDO_EVENT: '직전 행동을 되돌렸습니다.'
+            RESTART: '스타터 다시 선택'
         }
     }
 });

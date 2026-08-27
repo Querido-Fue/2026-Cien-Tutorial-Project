@@ -62,8 +62,8 @@ node --experimental-default-type=module --test test/tutorial_battle_model.test.m
 
 - `TutorialScene`이 메뉴, 전투, 결과, 갤러리, 입력, 저장, 렌더링과 에셋
   로딩을 함께 담당하는 5천 줄 이상의 거대 모듈입니다.
-- 사용자용 Ctrl+Z/되돌리기 명령, 버튼, 문구와 체크포인트 상태가 여러 위치에
-  흩어져 있습니다.
+- 입력, 재시작, 장면 전환 책임이 `TutorialScene` 한 곳에 집중되어 있어 이후
+  구조 분리가 필요합니다.
 - `SoundSystem`과 `SOUND_CONSTANTS`는 단일 BGM 및 진단 샘플 중심이며 장면,
   사건, UI 버스가 없습니다.
 - `FEATURES.CUTSCENES`는 `false`이고 호환 데이터와 컨트롤러만 남아 있습니다.

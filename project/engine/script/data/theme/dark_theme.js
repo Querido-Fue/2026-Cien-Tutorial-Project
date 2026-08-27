@@ -114,8 +114,6 @@ const DARK_TACTICS_THEME = Object.freeze({
         Accent: '#52dbff',
         Primary: '#EC6565',
         PrimaryHover: '#F17A7A',
-        Undo: '#526b83',
-        UndoHover: '#6685a3',
         OnPrimary: '#ffffff',
         Card: '#0d2136',
         CardHeader: '#183047',

@@ -628,7 +628,7 @@ export class TutorialBattleModel {
         this.usedItems.add(itemId);
         this.#knowledge.discoveredItemIds.add(itemId);
         this.#knowledge.identifiedItemIds.add(itemId);
-        if (item.consumable) {
+        if (item.consumable || item.useOnce) {
             this.#removeInventory(itemId, 1);
         }
         events.unshift(this.#createEvent('item-used', { itemId, label: item.label }));
@@ -896,7 +896,7 @@ export class TutorialBattleModel {
     }
 
     /**
-     * Undo용 전투 체크포인트를 생성합니다.
+     * 테스트·저장·디버그용 전투 체크포인트를 생성합니다.
      * @returns {object} 독립 체크포인트입니다.
      */
     createCheckpoint() {

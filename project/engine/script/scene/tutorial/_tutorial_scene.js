@@ -56,7 +56,6 @@ const COMMANDS = Object.freeze({
     STARTER_SHIFT: 'tutorial/starter-shift',
     CHOOSE_STARTER: 'tutorial/choose-starter',
     RESTART: 'tutorial/restart',
-    UNDO: 'tutorial/undo',
     GALLERY_SHIFT: 'tutorial/gallery-shift',
     GALLERY_PLAY: 'tutorial/gallery-play',
     CUTSCENE_NEXT: 'tutorial/cutscene-next',
@@ -92,14 +91,9 @@ const WATCHED_KEY_CODES = Object.freeze([
     'Digit4',
     'Backspace',
     'KeyR',
-    'KeyZ',
-    'ControlLeft',
-    'ControlRight',
     'Tab',
     'Escape'
 ]);
-
-const CONTROL_KEY_CODES = Object.freeze(['ControlLeft', 'ControlRight']);
 
 const KEY_DIRECTIONS = Object.freeze([
     Object.freeze({ codes: Object.freeze(['ArrowUp', 'KeyW']), x: 0, y: -1 }),
@@ -265,7 +259,6 @@ export class TutorialScene extends BaseScene {
         this.resultRecorded = false;
         this.destroyed = false;
         this.saveSequence = Promise.resolve();
-        this.undoHistory = [];
         this.timelineRevision = 0;
         this.ownedAnimationIds = new Set();
         this.animationSlots = new Map();
@@ -349,20 +342,6 @@ export class TutorialScene extends BaseScene {
         this.keyboardLatch = new Map();
         this.keyboardPressObserved = new Map();
         this.frameKeyEdges = new Set();
-        this.pendingUndoShortcut = false;
-        this.undoShortcutKeyDownHandler = (event) => {
-            if (event?.code !== 'KeyZ'
-                || event.ctrlKey !== true) {
-                return;
-            }
-            event.preventDefault?.();
-            if (event.repeat !== true) {
-                this.pendingUndoShortcut = true;
-            }
-        };
-        if (typeof window !== 'undefined') {
-            window.addEventListener('keydown', this.undoShortcutKeyDownHandler, true);
-        }
         const initialEventTime = Number(getKeyboardSnapshot()?.lastEvent?.timeStamp);
         this.lastKeyboardEventTimestamp = Number.isFinite(initialEventTime)
             ? initialEventTime
@@ -477,9 +456,6 @@ export class TutorialScene extends BaseScene {
                 case COMMANDS.RESTART:
                     this.#applyRestart();
                     break;
-                case COMMANDS.UNDO:
-                    this.#applyUndo();
-                    break;
                 case COMMANDS.GALLERY_SHIFT:
                     this.#applyGalleryShift(command.payload);
                     break;
@@ -532,7 +508,7 @@ export class TutorialScene extends BaseScene {
                     break;
             }
 
-            // Undo/재시작처럼 타임라인을 교체한 뒤에는 같은 drain의 명령이 모두 구식입니다.
+            // 재시작이나 화면 전환으로 타임라인이 바뀌면 같은 drain의 남은 명령은 구식입니다.
             if (this.timelineRevision !== revisionBeforeCommand) {
                 break;
             }
@@ -572,10 +548,6 @@ export class TutorialScene extends BaseScene {
         this.destroyed = true;
         this.timelineRevision += 1;
         this.#clearOwnedAnimations();
-        if (typeof window !== 'undefined') {
-            window.removeEventListener('keydown', this.undoShortcutKeyDownHandler, true);
-        }
-        this.pendingUndoShortcut = false;
         if (this.itemAtlasImage) {
             this.itemAtlasImage.onload = null;
             this.itemAtlasImage.onerror = null;
@@ -596,7 +568,6 @@ export class TutorialScene extends BaseScene {
         this.loraTurnState = null;
         this.floorView = null;
         this.floorActorView = null;
-        this.undoHistory = [];
     }
 
     /**
@@ -712,26 +683,7 @@ export class TutorialScene extends BaseScene {
         if (this.mode === MODES.LOADING) {
             return;
         }
-        this.#commitStagedMeta();
-        this.timelineRevision += 1;
-        this.#clearOwnedAnimations();
-        this.undoHistory = [];
-        this.cutscenes.close();
-        this.pendingCutscenes = [];
-        this.cutsceneReturnMode = MODES.MENU;
-        this.model = null;
-        this.floorView = null;
-        this.floorActorView = null;
-        this.mode = MODES.MENU;
-        this.resultData = null;
-        this.loraTurnState = null;
-        this.attackSelected = false;
-        this.cleanseSelected = false;
-        this.cleanseTargets = [];
-        this.hoveredTile = null;
-        this.reachability.clear();
-        this.actionTargets = [];
-        this.plannedPath = [];
+        this.#leaveRun(MODES.MENU);
     }
 
     /**
@@ -773,18 +725,53 @@ export class TutorialScene extends BaseScene {
         this.#beginRun(this.data.STARTER_CHOICES[choiceIndex].id);
     }
 
-    /**
-     * 같은 스타터로 현재 플레이를 초기화합니다.
-     * @private
-     */
+    /** 전투를 중단하거나 결과를 닫고 스타터 선택으로 돌아갑니다. @private */
     #applyRestart() {
         if (this.mode !== MODES.BATTLE && this.mode !== MODES.RESULT) {
             return;
         }
+        this.#leaveRun(MODES.STARTER);
+    }
+
+    /**
+     * 현재 런을 정리하고 지정한 비전투 화면으로 전환합니다.
+     * @param {'menu'|'starter'} nextMode - 정리 후 표시할 모드입니다.
+     * @private
+     */
+    #leaveRun(nextMode) {
         this.#commitStagedMeta();
+        this.timelineRevision += 1;
+        this.#clearOwnedAnimations();
         this.cutscenes.close();
         this.pendingCutscenes = [];
-        this.#beginRun(this.starterItemId);
+        this.runCutsceneIds.clear();
+        this.cutsceneReturnMode = nextMode;
+        this.model = null;
+        this.floorView = null;
+        this.floorActorView = null;
+        this.mode = nextMode;
+        this.resultData = null;
+        this.resultRecorded = false;
+        this.loraTurnState = null;
+        this.attackSelected = false;
+        this.attackWeapon = 'melee';
+        this.targetIndex = 0;
+        this.cleanseSelected = false;
+        this.cleanseTargets = [];
+        this.cleanseTargetIndex = 0;
+        this.inventoryPage = 0;
+        this.hoveredTile = null;
+        this.hoveredTileKey = '';
+        this.reachability.clear();
+        this.actionTargets = [];
+        this.plannedPath = [];
+        this.eventLog = [];
+        this.floatingTexts = [];
+        this.particles = [];
+        this.screenShakeSeconds = 0;
+        this.stabilizeSeconds = 0;
+        this.flashSeconds = 0;
+        this.buttonSignature = '';
     }
 
     /**
@@ -795,7 +782,6 @@ export class TutorialScene extends BaseScene {
     #beginRun(starterItemId) {
         this.timelineRevision += 1;
         this.#clearOwnedAnimations();
-        this.undoHistory = [];
         this.metaStaging = true;
         this.starterItemId = starterItemId;
         const knowledge = {
@@ -1011,20 +997,17 @@ export class TutorialScene extends BaseScene {
         if (normalizedPath.length === 0) {
             return;
         }
-        const { result, entry } = this.#performUndoableModelCommand(
-            'move',
-            () => this.model.commitPath(normalizedPath)
-        );
+        const result = this.model.commitPath(normalizedPath);
+        const resultPath = this.#normalizePath(result?.path);
+        const teleportSegments = toList(result?.events)
+            .filter((event) => event?.type === 'teleported')
+            .map((event) => ({
+                from: cloneTile(event.from),
+                to: cloneTile(event.to)
+            }))
+            .filter((segment) => segment.from && segment.to);
         if (result?.ok) {
-            entry.resultPath = this.#normalizePath(result.path);
-            entry.teleportSegments = toList(result.events)
-                .filter((event) => event?.type === 'teleported')
-                .map((event) => ({
-                    from: cloneTile(event.from),
-                    to: cloneTile(event.to)
-                }))
-                .filter((segment) => segment.from && segment.to);
-            this.#spawnPathParticles(entry.resultPath);
+            this.#spawnPathParticles(resultPath);
             this.cleanseSelected = false;
             this.cleanseTargets = [];
             this.#resetPlannedPath();
@@ -1032,8 +1015,8 @@ export class TutorialScene extends BaseScene {
         this.#afterModelChange(result);
         if (result?.ok) {
             this.#startPlayerPathPresentation(
-                entry.resultPath,
-                entry.teleportSegments
+                resultPath,
+                teleportSegments
             );
         }
     }
@@ -1080,10 +1063,7 @@ export class TutorialScene extends BaseScene {
         if (!this.actionTargets.some((target) => target.id === targetId)) {
             return;
         }
-        const { result } = this.#performUndoableModelCommand(
-            'attack',
-            () => this.model.attack(targetId, { weapon: this.attackWeapon })
-        );
+        const result = this.model.attack(targetId, { weapon: this.attackWeapon });
         this.attackSelected = false;
         this.#afterModelChange(result);
         this.#startActionPresentation(result);
@@ -1099,10 +1079,7 @@ export class TutorialScene extends BaseScene {
             || this.model.actionUsed) {
             return;
         }
-        const { result } = this.#performUndoableModelCommand(
-            'heal',
-            () => this.model.heal()
-        );
+        const result = this.model.heal();
         this.attackSelected = false;
         this.#afterModelChange(result);
         this.#startActionPresentation(result);
@@ -1118,10 +1095,7 @@ export class TutorialScene extends BaseScene {
             || this.model.actionUsed) {
             return;
         }
-        const { result } = this.#performUndoableModelCommand(
-            'wait',
-            () => this.model.wait()
-        );
+        const result = this.model.wait();
         this.attackSelected = false;
         this.cleanseSelected = false;
         this.#afterModelChange(result);
@@ -1166,10 +1140,7 @@ export class TutorialScene extends BaseScene {
         if (!target) {
             return;
         }
-        const { result } = this.#performUndoableModelCommand(
-            'cleanse-event-tile',
-            () => this.model.cleanseEventTile(target)
-        );
+        const result = this.model.cleanseEventTile(target);
         this.cleanseSelected = false;
         this.cleanseTargets = [];
         this.#afterModelChange(result);
@@ -1191,219 +1162,10 @@ export class TutorialScene extends BaseScene {
         if (typeof itemId !== 'string') {
             return;
         }
-        const { result } = this.#performUndoableModelCommand(
-            'use-item',
-            () => this.model.useItem(itemId)
-        );
+        const result = this.model.useItem(itemId);
         this.attackSelected = false;
         this.#afterModelChange(result);
         this.#startActionPresentation(result);
-    }
-
-    /**
-     * 성공할 때만 남는 플레이어 모델 명령 체크포인트를 생성하고 실행합니다.
-     * @param {string} action - 기록할 행동 ID입니다.
-     * @param {Function} execute - 모델 명령 실행 함수입니다.
-     * @returns {{result:object,entry:object|null}} 모델 결과와 기록 항목입니다.
-     * @private
-     */
-    #performUndoableModelCommand(action, execute) {
-        const entry = {
-            action,
-            checkpoint: this.#createSceneCheckpoint(),
-            resultPath: [],
-            teleportSegments: []
-        };
-        this.undoHistory.push(entry);
-        let result;
-        try {
-            result = execute();
-        } catch (error) {
-            this.undoHistory.pop();
-            throw error;
-        }
-        if (result?.ok !== true) {
-            this.undoHistory.pop();
-            this.buttonSignature = '';
-            return { result, entry: null };
-        }
-        this.buttonSignature = '';
-        return { result, entry };
-    }
-
-    /**
-     * 모델과 씬 런 상태를 하나의 방어 복제 체크포인트로 묶습니다.
-     * @returns {object} Undo용 체크포인트입니다.
-     * @private
-     */
-    #createSceneCheckpoint() {
-        if (!this.model || typeof this.model.createCheckpoint !== 'function') {
-            throw new Error('TutorialScene: 모델 체크포인트 API를 사용할 수 없습니다.');
-        }
-        return {
-            model: this.model.createCheckpoint(),
-            mode: this.mode,
-            resultData: cloneCheckpointValue(this.resultData),
-            resultRecorded: this.resultRecorded,
-            meta: cloneCheckpointValue(this.meta),
-            metaStaging: this.metaStaging,
-            cutscene: cloneCheckpointValue(this.cutscenes.getState()),
-            cutsceneReturnMode: this.cutsceneReturnMode,
-            pendingCutscenes: cloneCheckpointValue(this.pendingCutscenes),
-            runCutsceneIds: [...this.runCutsceneIds],
-            eventLog: [...this.eventLog],
-            loraTurnState: cloneCheckpointValue(this.loraTurnState),
-            attackSelected: this.attackSelected,
-            attackWeapon: this.attackWeapon,
-            targetIndex: this.targetIndex,
-            cleanseSelected: this.cleanseSelected,
-            cleanseTargets: cloneCheckpointValue(this.cleanseTargets),
-            cleanseTargetIndex: this.cleanseTargetIndex,
-            inventoryPage: this.inventoryPage,
-            hoveredTile: cloneTile(this.hoveredTile),
-            hoveredTileKey: this.hoveredTileKey,
-            plannedPath: cloneCheckpointValue(this.plannedPath),
-            reachability: cloneCheckpointValue(this.reachability),
-            actionTargets: cloneCheckpointValue(this.actionTargets),
-            floatingTexts: cloneCheckpointValue(this.floatingTexts),
-            particles: cloneCheckpointValue(this.particles),
-            screenShakeSeconds: this.screenShakeSeconds,
-            stabilizeSeconds: this.stabilizeSeconds,
-            flashSeconds: this.flashSeconds,
-            floorView: cloneCheckpointValue(this.floorView),
-            floorActorView: cloneCheckpointValue(this.floorActorView),
-            presentation: cloneCheckpointValue(this.presentation)
-        };
-    }
-
-    /**
-     * 가장 최근 플레이어 행동과 그 행동이 유발한 자동 진행을 함께 복원합니다.
-     * @private
-     */
-    #applyUndo() {
-        if (!this.#canUndo()) {
-            return;
-        }
-        const entry = this.undoHistory.pop();
-        const previousPresentation = cloneCheckpointValue(this.presentation);
-        const rawPreviousFloorIndex = Number(previousPresentation?.floorIndex);
-        const previousFloorIndex = Number.isFinite(rawPreviousFloorIndex)
-            ? rawPreviousFloorIndex
-            : (Number(this.model?.floorIndex) || 0);
-        const previousFloorView = cloneCheckpointValue(this.floorView);
-        const previousFloorActorView = cloneCheckpointValue(this.floorActorView);
-        this.timelineRevision += 1;
-        this.#clearOwnedAnimations();
-        try {
-            const targetPresentation = this.#restoreSceneCheckpoint(entry.checkpoint);
-            const targetFloorIndex = Number(this.model?.floorIndex) || 0;
-            const targetFloorView = cloneCheckpointValue(this.floorView);
-            const targetFloorActorView = cloneCheckpointValue(this.floorActorView);
-            if (previousFloorIndex !== targetFloorIndex) {
-                this.floorView = previousFloorView;
-                this.floorActorView = previousFloorActorView;
-            }
-            this.presentation = {
-                ...targetPresentation,
-                ...previousPresentation,
-                floorIndex: previousFloorIndex
-            };
-            this.presentationLocked = false;
-            this.#appendEvent(this.data.TEXT.ACTIONS.UNDO_EVENT);
-            this.#startUndoPresentation(
-                entry,
-                targetPresentation,
-                previousFloorIndex,
-                targetFloorView,
-                targetFloorActorView
-            );
-        } catch (error) {
-            this.undoHistory.push(entry);
-            console.warn('행동 되돌리기 오류:', error);
-        }
-        this.buttonSignature = '';
-    }
-
-    /**
-     * 씬 체크포인트를 복원하고 애니메이션 목표 표현 상태를 반환합니다.
-     * @param {object} checkpoint - 복원할 씬 체크포인트입니다.
-     * @returns {object} 복원 목표 표현 상태입니다.
-     * @private
-     */
-    #restoreSceneCheckpoint(checkpoint) {
-        if (!checkpoint || typeof this.model?.restoreCheckpoint !== 'function') {
-            throw new TypeError('TutorialScene: 복원할 체크포인트가 올바르지 않습니다.');
-        }
-        this.model.restoreCheckpoint(checkpoint.model);
-        this.mode = checkpoint.mode;
-        this.resultData = cloneCheckpointValue(checkpoint.resultData);
-        this.resultRecorded = checkpoint.resultRecorded === true;
-        this.meta = cloneCheckpointValue(checkpoint.meta);
-        this.metaStaging = checkpoint.metaStaging === true;
-        this.cutsceneReturnMode = checkpoint.cutsceneReturnMode;
-        this.pendingCutscenes = cloneCheckpointValue(checkpoint.pendingCutscenes);
-        this.runCutsceneIds = new Set(checkpoint.runCutsceneIds || []);
-        this.eventLog = [...(checkpoint.eventLog || [])];
-        this.loraTurnState = cloneCheckpointValue(checkpoint.loraTurnState);
-        this.attackSelected = checkpoint.attackSelected === true;
-        this.attackWeapon = checkpoint.attackWeapon === 'bow' ? 'bow' : 'melee';
-        this.targetIndex = Number(checkpoint.targetIndex) || 0;
-        this.cleanseSelected = checkpoint.cleanseSelected === true;
-        this.cleanseTargets = cloneCheckpointValue(checkpoint.cleanseTargets) || [];
-        this.cleanseTargetIndex = Number(checkpoint.cleanseTargetIndex) || 0;
-        this.inventoryPage = Number(checkpoint.inventoryPage) || 0;
-        this.hoveredTile = cloneTile(checkpoint.hoveredTile);
-        this.hoveredTileKey = String(checkpoint.hoveredTileKey || '');
-        this.plannedPath = cloneCheckpointValue(checkpoint.plannedPath) || [];
-        this.reachability = cloneCheckpointValue(checkpoint.reachability) || new Map();
-        this.actionTargets = cloneCheckpointValue(checkpoint.actionTargets) || [];
-        this.floatingTexts = cloneCheckpointValue(checkpoint.floatingTexts) || [];
-        this.particles = cloneCheckpointValue(checkpoint.particles) || [];
-        this.screenShakeSeconds = Number(checkpoint.screenShakeSeconds) || 0;
-        this.stabilizeSeconds = Number(checkpoint.stabilizeSeconds) || 0;
-        this.flashSeconds = Number(checkpoint.flashSeconds) || 0;
-        this.#restoreCutsceneState(checkpoint.cutscene);
-        this.floorView = cloneCheckpointValue(checkpoint.floorView)
-            || this.model.getCurrentFloorState();
-        this.floorActorView = cloneCheckpointValue(checkpoint.floorActorView)
-            || this.#captureFloorActorView();
-        return cloneCheckpointValue(checkpoint.presentation);
-    }
-
-    /**
-     * 공개 컨트롤러 API만으로 컷씬 ID와 카드 위치를 복원합니다.
-     * @param {object} state - 저장된 컷씬 상태입니다.
-     * @private
-     */
-    #restoreCutsceneState(state) {
-        this.cutscenes = new TutorialCutsceneController(this.data.CUTSCENES);
-        if (!state?.open || typeof state.cutsceneId !== 'string') {
-            return;
-        }
-        const opened = this.cutscenes.open(state.cutsceneId);
-        if (!opened.ok) {
-            return;
-        }
-        const targetIndex = Math.max(0, Number(state.cardIndex) || 0);
-        for (let index = 0; index < targetIndex; index++) {
-            const transition = this.cutscenes.next();
-            if (!transition.ok || transition.closed) {
-                break;
-            }
-        }
-    }
-
-    /**
-     * 현재 모드나 표현 잠금과 무관하게 되돌릴 기록이 있는지 확인합니다.
-     * @returns {boolean} Undo 가능 여부입니다.
-     * @private
-     */
-    #canUndo() {
-        return Boolean(this.model
-            && this.undoHistory.length > 0
-            && (this.mode === MODES.BATTLE
-                || this.mode === MODES.RESULT
-                || this.cutscenes.isOpen()));
     }
 
     /**
@@ -1593,10 +1355,7 @@ export class TutorialScene extends BaseScene {
         }
     }
 
-    /**
-     * Undo 경계 안에서 쌓인 메타 변경을 확정 경계에서 한 번만 저장합니다.
-     * @private
-     */
+    /** 현재 런에서 쌓인 메타 변경을 이탈 경계에서 한 번만 저장합니다. @private */
     #commitStagedMeta() {
         if (!this.metaStaging) {
             return;
@@ -1895,12 +1654,7 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #handleKeyboardInput() {
-        const undoShortcutPressed = this.#consumeUndoShortcut();
         if (this.mode === MODES.LOADING) {
-            return;
-        }
-        if (undoShortcutPressed && this.#canUndo()) {
-            enqueueSimulationCommand({ type: COMMANDS.UNDO });
             return;
         }
         if (this.presentationLocked) {
@@ -2169,34 +1923,6 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * DOM에서 포착한 Ctrl+Z를 우선 소비하고 프레임 에지와 현재 modifier로 보완합니다.
-     * @returns {boolean} Undo 단축키 입력 여부입니다.
-     * @private
-     */
-    #consumeUndoShortcut() {
-        const capturedShortcut = this.pendingUndoShortcut;
-        this.pendingUndoShortcut = false;
-        if (capturedShortcut) {
-            return true;
-        }
-        if (!this.#wasKeyPressed('KeyZ')) {
-            return false;
-        }
-        const modifierDown = CONTROL_KEY_CODES.some(
-            (code) => getKeyboardCodeInput(code) === true
-        );
-        if (!modifierDown) {
-            return false;
-        }
-        const modifierEdge = this.#wasAnyKeyPressed(CONTROL_KEY_CODES);
-        const modifierObserved = CONTROL_KEY_CODES.some((code) => (
-            this.keyboardPressObserved.get(code) === true
-                || this.keyboardLatch.get(code) === true
-        ));
-        return modifierEdge || modifierObserved;
-    }
-
-    /**
      * 현재 눌림과 빠른 탭을 상승 에지 집합으로 합칩니다.
      * @private
      */
@@ -2285,7 +2011,6 @@ export class TutorialScene extends BaseScene {
             String(this.cleanseTargetIndex),
             this.plannedPath.map((point) => toTileKey(point.x, point.y)).join('>'),
             String(this.inventoryPage),
-            String(this.#canUndo()),
             String(this.presentationLocked),
             inventory
         ].join('/');
@@ -2536,23 +2261,6 @@ export class TutorialScene extends BaseScene {
             shadow: { blur: 8, color: colors.UI.CardShadow },
             onClick: () => this.#queueUiCommand(COMMANDS.RETURN_MENU)
         });
-        const undoRect = this.hudRects.UNDO;
-        const undoH = Math.min(undoRect.h, clampNumber(this.#uwh(4.2), 32, 48));
-        this.#createButton('battle-undo', {
-            x: undoRect.x,
-            y: undoRect.y + ((undoRect.h - undoH) * 0.5),
-            w: undoRect.w,
-            h: undoH,
-            label: this.data.TEXT.ACTIONS.UNDO_SHORT,
-            enabled: this.#canUndo(),
-            idleColor: colors.UI.Undo,
-            hoverColor: colors.UI.UndoHover,
-            textColor: colors.UI.OnPrimary,
-            radius: this.#uwh(1),
-            shadow: { blur: 8, color: colors.UI.CardShadow },
-            onClick: () => this.#queueUiCommand(COMMANDS.UNDO)
-        });
-
         const paging = this.#getInventoryPaging();
         this.inventoryPage = paging.page;
         const inventoryRect = this.hudRects.INVENTORY_CARD;
@@ -2664,32 +2372,21 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #buildResultButtons() {
-        const w = this.#uww(15);
+        const w = this.#uww(18);
         const h = this.#uwh(5.5);
+        const gap = this.#uww(2);
         const centerX = this.UIOffsetX + (this.UIWW * 0.5);
-        this.#createButton('result-undo', {
-            x: centerX - (w * 1.5) - this.#uww(2),
-            y: this.#uwh(72),
-            w,
-            h,
-            label: this.data.TEXT.ACTIONS.UNDO + '  [Ctrl+Z]',
-            enabled: this.#canUndo(),
-            idleColor: ColorSchemes.Tactics.UI.Undo,
-            hoverColor: ColorSchemes.Tactics.UI.UndoHover,
-            textColor: ColorSchemes.Tactics.UI.OnPrimary,
-            onClick: () => this.#queueUiCommand(COMMANDS.UNDO)
-        });
         this.#createButton('result-retry', {
-            x: centerX - (w * 0.5),
+            x: centerX - w - (gap * 0.5),
             y: this.#uwh(72),
             w,
             h,
-            label: '다시 시작  [R]',
+            label: '스타터 선택  [R]',
             enabled: !this.presentationLocked,
             onClick: () => this.#queueUiCommand(COMMANDS.RESTART)
         });
         this.#createButton('result-menu', {
-            x: centerX + (w * 0.5) + this.#uww(2),
+            x: centerX + (gap * 0.5),
             y: this.#uwh(72),
             w,
             h,
@@ -2725,19 +2422,6 @@ export class TutorialScene extends BaseScene {
             enabled: !this.presentationLocked,
             onClick: () => this.#queueUiCommand(COMMANDS.CUTSCENE_CLOSE)
         });
-        if (this.#canUndo()) {
-            this.#createButton('cutscene-undo', {
-                x: modal.x + (modal.w * 0.36),
-                y: modal.y + modal.h - h - this.#uwh(2.2),
-                w: modal.w * 0.2,
-                h,
-                label: this.data.TEXT.ACTIONS.UNDO_SHORT,
-                idleColor: ColorSchemes.Tactics.UI.Undo,
-                hoverColor: ColorSchemes.Tactics.UI.UndoHover,
-                textColor: ColorSchemes.Tactics.UI.OnPrimary,
-                onClick: () => this.#queueUiCommand(COMMANDS.UNDO)
-            });
-        }
     }
 
     /**
@@ -3352,14 +3036,14 @@ export class TutorialScene extends BaseScene {
                 this.presentation,
                 'playerAlpha',
                 0,
-                this.data.ANIMATION.UNDO_FADE_SECONDS
+                this.data.ANIMATION.FLOOR_FADE_SECONDS
             ),
             this.#animateSlot(
                 'player-scale',
                 this.presentation,
                 'playerScale',
                 this.data.ANIMATION.TELEPORT_MIN_SCALE,
-                this.data.ANIMATION.UNDO_FADE_SECONDS
+                this.data.ANIMATION.FLOOR_FADE_SECONDS
             )
         ]);
         if (revision !== this.timelineRevision) {
@@ -3414,101 +3098,6 @@ export class TutorialScene extends BaseScene {
         ).then(() => {
             this.#finishPresentationLock(revision);
         });
-    }
-
-    /**
-     * Undo 대상 경로를 역재생하고 게이지를 복원값까지 보간합니다.
-     * @param {object} entry - Undo 기록 항목입니다.
-     * @param {object} targetPresentation - 체크포인트 표현 상태입니다.
-     * @param {number} previousFloorIndex - Undo 직전 층입니다.
-     * @param {object} targetFloorView - 복원할 층 표현 스냅샷입니다.
-     * @param {object} targetFloorActorView - 복원할 인물 표현 스냅샷입니다.
-     * @private
-     */
-    #startUndoPresentation(
-        entry,
-        targetPresentation,
-        previousFloorIndex,
-        targetFloorView,
-        targetFloorActorView
-    ) {
-        const revision = this.timelineRevision;
-        const targetFloorIndex = Number(this.model?.floorIndex) || 0;
-        this.presentationLocked = true;
-        this.buttonSignature = '';
-        const gaugePromises = this.#animateHudToModel();
-        let playerPromise;
-        if (previousFloorIndex !== targetFloorIndex) {
-            const playerTarget = cloneTile(this.model.player);
-            playerPromise = this.#animateFloorSwapTo(
-                playerTarget,
-                targetFloorIndex,
-                targetFloorView,
-                targetFloorActorView,
-                revision
-            );
-        } else {
-            this.presentation.playerAlpha = 1;
-            this.presentation.playerScale = 1;
-            const reversePath = this.#buildUndoRoute(entry.resultPath);
-            playerPromise = this.#animatePlayerRoute(
-                reversePath,
-                revision,
-                this.data.ANIMATION.UNDO_SECONDS_PER_TILE,
-                entry.teleportSegments
-            );
-        }
-        void Promise.all([...gaugePromises, playerPromise]).then(() => {
-            if (revision !== this.timelineRevision) {
-                return;
-            }
-            this.floorView = cloneCheckpointValue(targetFloorView);
-            this.floorActorView = cloneCheckpointValue(targetFloorActorView);
-            this.presentation = {
-                ...this.presentation,
-                ...cloneCheckpointValue(targetPresentation),
-                floorIndex: targetFloorIndex,
-                playerX: Number(this.model.player?.x) || 0,
-                playerY: Number(this.model.player?.y) || 0,
-                playerAlpha: 1,
-                playerScale: 1,
-                playerHp: Number(this.model.player?.hp) || 0,
-                loraHp: Number(this.model.lora?.hp) || 0,
-                instability: Number(this.model.lora?.instability) || 0
-            };
-            this.#startSelectionAnimation(this.attackSelected ? 'attack' : 'path');
-            this.#finishPresentationLock(revision);
-        });
-    }
-
-    /**
-     * 현재 표시 위치에서 가장 가까운 실제 이동 경로 지점부터 역방향 경로를 만듭니다.
-     * @param {*} path - 성공 결과에 기록된 실제 경로입니다.
-     * @returns {Array<{x:number,y:number}>} Undo 재생 경로입니다.
-     * @private
-     */
-    #buildUndoRoute(path) {
-        const reversePath = this.#normalizePath(path).reverse();
-        const target = cloneTile(this.model?.player);
-        if (reversePath.length === 0) {
-            return target ? [target] : [];
-        }
-        let closestIndex = 0;
-        let closestDistance = Number.POSITIVE_INFINITY;
-        reversePath.forEach((tile, index) => {
-            const dx = tile.x - Number(this.presentation.playerX);
-            const dy = tile.y - Number(this.presentation.playerY);
-            const distance = (dx * dx) + (dy * dy);
-            if (distance < closestDistance) {
-                closestDistance = distance;
-                closestIndex = index;
-            }
-        });
-        const route = reversePath.slice(closestIndex);
-        if (target && !route.some((tile) => tile.x === target.x && tile.y === target.y)) {
-            route.push(target);
-        }
-        return route;
     }
 
     /**

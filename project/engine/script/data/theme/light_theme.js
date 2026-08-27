@@ -115,8 +115,6 @@ const LIGHT_TACTICS_THEME = Object.freeze({
         Accent: '#008eb8',
         Primary: '#EC6565',
         PrimaryHover: '#F17A7A',
-        Undo: '#61758a',
-        UndoHover: '#71889f',
         OnPrimary: '#ffffff',
         Card: '#ffffff',
         CardHeader: '#d9d9d9',

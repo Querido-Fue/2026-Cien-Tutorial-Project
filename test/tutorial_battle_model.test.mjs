@@ -387,6 +387,79 @@ test('오카리나는 공격과 활 패시브의 불안정도 증가를 모두 �
     assert.equal(model.lora.instability, 70);
 });
 
+test('낡은 곰인형은 한 번만 안정시키고 사용 뒤 공격·방어 페널티를 남기지 않는다', () => {
+    const config = cloneGameData();
+    config.ACTORS.LORA.MAX_HP = 500;
+    for (const state of config.ACTORS.LORA.INSTABILITY_STATES) {
+        state.meleeDamage = 40;
+        state.areaDamage = 20;
+    }
+
+    const createTeddyScenario = () => {
+        const model = createModel('bow', config);
+        seedState(model, (state) => {
+            state.player.x = 4;
+            state.player.y = 2;
+            state.inventory.set('old-teddy', 1);
+            state.inventory.set('haste', 1);
+            state.actionsPerTurn = 2;
+            state.actionUsed = false;
+        });
+        assert.equal(model.commitPath([{ x: 4, y: 2 }]).ok, true);
+        return model;
+    };
+
+    const beforeUse = createTeddyScenario();
+    assert.equal(beforeUse.attack('lora', { weapon: 'melee' }).damage, 30);
+    assert.equal(beforeUse.heal().ok, true);
+    assert.equal(beforeUse.performLoraTurn().damage, 35);
+
+    const afterUse = createTeddyScenario();
+    const used = afterUse.useItem('old-teddy');
+    assert.equal(used.ok, true);
+    assert.equal(used.effects[0].instabilityChange, -30);
+    assert.equal(afterUse.lora.instability, 40);
+    assert.equal(
+        afterUse.getSnapshot().inventory.some(({ itemId }) => itemId === 'old-teddy'),
+        false
+    );
+
+    const secondUse = afterUse.useItem('old-teddy');
+    assert.equal(secondUse.ok, false);
+    assert.equal(secondUse.reason, 'item-not-owned');
+    assert.equal(afterUse.lora.instability, 40);
+
+    const afterUseCheckpoint = afterUse.createCheckpoint();
+    assert.equal(afterUse.attack('lora', { weapon: 'melee' }).damage, 50);
+    assert.equal(afterUse.performLoraTurn().damage, 45);
+
+    const restored = afterUse.restoreCheckpoint(afterUseCheckpoint);
+    assert.equal(restored.usedItems.includes('old-teddy'), true);
+    assert.equal(restored.inventory.some(({ itemId }) => itemId === 'old-teddy'), false);
+    assert.equal(restored.lora.instability, 40);
+    assert.equal(restored.actionsRemaining, 1);
+    assert.equal(afterUse.attack('lora', { weapon: 'melee' }).damage, 50);
+});
+
+test('reset은 활과 인형탈 스타터를 각각 독립된 새 플레이로 초기화한다', () => {
+    const model = createModel('bow');
+    seedState(model, (state) => {
+        state.inventory.set('old-teddy', 1);
+        state.usedItems.add('old-teddy');
+        state.player.hp = 37;
+    });
+
+    const mascotReset = model.reset({ starterItemId: 'mascot-costume' });
+    assert.deepEqual(mascotReset.inventory, [{ itemId: 'mascot-costume', count: 1 }]);
+    assert.deepEqual(mascotReset.usedItems, []);
+    assert.equal(mascotReset.player.hp, 100);
+
+    const bowReset = model.reset({ starterItemId: 'bow' });
+    assert.deepEqual(bowReset.inventory, [{ itemId: 'bow', count: 1 }]);
+    assert.deepEqual(bowReset.usedItems, []);
+    assert.equal(bowReset.player.hp, 100);
+});
+
 test('버섯은 이동력과 근접 공격력을 두 배로 하고 피해를 받으면 종료된다', () => {
     const config = cloneGameData();
     config.ACTORS.LORA.MAX_HP = 500;
