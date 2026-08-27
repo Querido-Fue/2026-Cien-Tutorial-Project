@@ -20,7 +20,6 @@ import { getDelta } from 'engine/time_handler.js';
 import { animate, remove } from 'animation/animation_system.js';
 import { getData } from 'data/data_handler.js';
 import { createFontString, wrapTextByCharacters } from 'util/font_util.js';
-import { UIPool, releaseUIItem } from 'ui/_ui_pool.js';
 import {
     clearSimulationCommands,
     enqueueSimulationCommand
@@ -60,6 +59,13 @@ import {
     toList,
     toTileKey
 } from './_tutorial_value_utils.js';
+import { TutorialButtonHost } from './view/_tutorial_button_host.js';
+import { TutorialCutsceneView } from './view/_tutorial_cutscene_view.js';
+import { TutorialGalleryView } from './view/_tutorial_gallery_view.js';
+import { TutorialLoadingView } from './view/_tutorial_loading_view.js';
+import { TutorialMenuView } from './view/_tutorial_menu_view.js';
+import { TutorialResultView } from './view/_tutorial_result_view.js';
+import { TutorialStarterView } from './view/_tutorial_starter_view.js';
 
 const TUTORIAL_GAME_DATA = getData('TUTORIAL_GAME_DATA');
 
@@ -135,6 +141,27 @@ export class TutorialScene extends BaseScene {
         };
         this.hoveredTileKey = '';
 
+        const nonbattleRenderPort = Object.freeze({
+            render,
+            renderGL,
+            measureText,
+            wrapText: (text, font, maxWidth, maxLines) => wrapTextByCharacters(text, {
+                maxWidth,
+                maxLines,
+                measureWidth: (value) => measureText(value, font)
+            })
+        });
+        this.loadingView = new TutorialLoadingView(nonbattleRenderPort);
+        this.menuView = new TutorialMenuView(nonbattleRenderPort);
+        this.starterView = new TutorialStarterView(nonbattleRenderPort);
+        this.galleryView = new TutorialGalleryView(nonbattleRenderPort);
+        this.resultView = new TutorialResultView(nonbattleRenderPort);
+        this.cutsceneView = new TutorialCutsceneView(nonbattleRenderPort);
+        this.buttonHost = new TutorialButtonHost({
+            parent: this,
+            onCommand: (type, payload) => this.#queueUiCommand(type, payload)
+        });
+
         this.elapsedSeconds = 0;
         this.hoveredTile = null;
         this.plannedPath = [];
@@ -171,7 +198,7 @@ export class TutorialScene extends BaseScene {
             this.itemAtlasImage.onerror = () => {
                 if (!this.destroyed) {
                     this.itemIconCanvases.clear();
-                    this.buttonSignature = '';
+                    this.buttonHost.invalidate();
                 }
             };
             this.itemAtlasImage.src = this.data.ASSETS.ITEM_ICON_ATLAS;
@@ -191,8 +218,6 @@ export class TutorialScene extends BaseScene {
             this.loraSprite.src = this.data.ASSETS.LORA_SPRITE;
         }
 
-        this.buttons = {};
-        this.buttonSignature = '';
         this.uiActionHandled = false;
         this.keyboardLatch = new Map();
         this.keyboardPressObserved = new Map();
@@ -238,7 +263,7 @@ export class TutorialScene extends BaseScene {
         this.uiActionHandled = false;
 
         this.#ensureButtons();
-        this.#updateButtons();
+        this.buttonHost.update();
         this.#prepareKeyboardEdges();
         this.#handleKeyboardInput();
         this.#updatePointerState();
@@ -258,23 +283,23 @@ export class TutorialScene extends BaseScene {
         const view = getTutorialModePolicy(this.mode)?.view;
 
         if (view === 'loading') {
-            this.#drawLoading();
+            this.loadingView.draw(this.#createLoadingViewModel());
         } else if (view === 'menu') {
-            this.#drawMenu();
+            this.menuView.draw(this.#createMenuViewModel());
         } else if (view === 'starter') {
-            this.#drawStarterSelect();
+            this.starterView.draw(this.#createStarterViewModel());
         } else if (view === 'gallery') {
-            this.#drawGallery();
+            this.galleryView.draw(this.#createGalleryViewModel());
         } else if (view === 'battle') {
             this.#drawBattle();
         } else if (view === 'result') {
-            this.#drawResult();
+            this.resultView.draw(this.#createResultViewModel());
         }
 
         if (this.cutscenes.isOpen()) {
-            this.#drawCutscene();
+            this.cutsceneView.draw(this.#createCutsceneViewModel());
         }
-        this.#drawButtons();
+        this.buttonHost.draw();
     }
 
     /**
@@ -369,7 +394,7 @@ export class TutorialScene extends BaseScene {
                 break;
             }
         }
-        this.buttonSignature = '';
+        this.buttonHost.invalidate();
     }
 
     /**
@@ -415,7 +440,7 @@ export class TutorialScene extends BaseScene {
         this.itemIconCanvases.clear();
         this.loraSpriteReady = false;
         clearSimulationCommands();
-        this.#releaseButtons();
+        this.buttonHost.destroy();
         this.cutscenes.close();
         this.pendingCutscenes = [];
         this.runCutsceneIds.clear();
@@ -446,7 +471,7 @@ export class TutorialScene extends BaseScene {
         this.itemIconCanvases.clear();
         if (!this.#isImageReady(this.itemAtlasImage)
             || typeof document === 'undefined') {
-            this.buttonSignature = '';
+            this.buttonHost.invalidate();
             return;
         }
         const atlasData = this.data.SPRITES.ITEM_ATLAS;
@@ -489,7 +514,7 @@ export class TutorialScene extends BaseScene {
             );
             this.itemIconCanvases.set(itemId, canvas);
         }
-        this.buttonSignature = '';
+        this.buttonHost.invalidate();
     }
 
     /**
@@ -627,7 +652,7 @@ export class TutorialScene extends BaseScene {
         this.screenShakeSeconds = 0;
         this.stabilizeSeconds = 0;
         this.flashSeconds = 0;
-        this.buttonSignature = '';
+        this.buttonHost.invalidate();
     }
 
     /**
@@ -1828,16 +1853,109 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
+     * 비전투 뷰가 공유하는 직렬화 가능 표시 프레임을 만듭니다.
+     * @returns {object} 뷰포트·글꼴·색상 스냅샷입니다.
+     * @private
+     */
+    #createNonbattleViewFrame() {
+        return Object.freeze({
+            viewport: Object.freeze({
+                WW: this.WW,
+                WH: this.WH,
+                UIWW: this.UIWW,
+                UIOffsetX: this.UIOffsetX
+            }),
+            fonts: Object.freeze({ ...this.fonts }),
+            colors: Object.freeze({
+                UI: Object.freeze({ ...ColorSchemes.Tactics.UI })
+            })
+        });
+    }
+
+    /** @returns {object} 로딩 뷰 모델입니다. @private */
+    #createLoadingViewModel() {
+        return Object.freeze({
+            ...this.#createNonbattleViewFrame(),
+            message: '진행도 불러오는 중…'
+        });
+    }
+
+    /** @returns {object} 메인 메뉴 뷰 모델입니다. @private */
+    #createMenuViewModel() {
+        return Object.freeze({
+            ...this.#createNonbattleViewFrame(),
+            title: this.data.TEXT.TITLE,
+            subtitle: this.data.TEXT.SUBTITLE,
+            playCount: Number(this.meta?.playCount) || 0,
+            bestScore: Number(this.meta?.bestScore) || 0
+        });
+    }
+
+    /** @returns {object} 스타터 선택 뷰 모델입니다. @private */
+    #createStarterViewModel() {
+        return Object.freeze({
+            ...this.#createNonbattleViewFrame(),
+            choices: Object.freeze(this.data.STARTER_CHOICES.map((choice) => Object.freeze({
+                id: choice.id,
+                label: choice.label,
+                description: choice.description
+            }))),
+            selectedIndex: this.starterIndex,
+            selectionProgress: Number(this.presentation.menuSelectionProgress) || 0,
+            selectionMinScale: Number(this.data.ANIMATION.SELECTION_MIN_SCALE) || 0.72
+        });
+    }
+
+    /** @returns {object} 갤러리 뷰 모델입니다. @private */
+    #createGalleryViewModel() {
+        return Object.freeze({
+            ...this.#createNonbattleViewFrame(),
+            entries: Object.freeze(this.galleryEntries.map((entry) => Object.freeze({
+                id: entry.id,
+                title: entry.title,
+                cardCount: Array.isArray(entry.cards) ? entry.cards.length : 0,
+                unlocked: this.#isCutsceneUnlocked(entry.id)
+            }))),
+            selectedIndex: this.galleryIndex,
+            selectionProgress: Number(this.presentation.menuSelectionProgress) || 0,
+            selectionMinScale: Number(this.data.ANIMATION.SELECTION_MIN_SCALE) || 0.72
+        });
+    }
+
+    /** @returns {object} 결과 뷰 모델입니다. @private */
+    #createResultViewModel() {
+        return Object.freeze({
+            ...this.#createNonbattleViewFrame(),
+            result: Object.freeze({ ...(this.resultData || {}) }),
+            bestScore: Number(this.meta?.bestScore) || 0,
+            presentationLocked: this.presentationLocked
+        });
+    }
+
+    /** @returns {object} 컷씬 카드 뷰 모델입니다. @private */
+    #createCutsceneViewModel() {
+        return Object.freeze({
+            ...this.#createNonbattleViewFrame(),
+            state: Object.freeze({ ...this.cutscenes.getState() }),
+            card: Object.freeze({ ...(this.cutscenes.getCurrentCard() || {}) }),
+            presentationLocked: this.presentationLocked
+        });
+    }
+
+    /**
      * 현재 모드와 전투 상태가 달라졌을 때 버튼을 다시 만듭니다.
      * @private
      */
     #ensureButtons() {
         const signature = this.#getButtonSignature();
-        if (signature === this.buttonSignature) {
+        if (this.buttonHost.isCurrent(signature)) {
             return;
         }
-        this.buttonSignature = signature;
-        this.#buildButtons();
+        this.buttonHost.setButtons(
+            signature,
+            this.#getButtonSpecs(),
+            this.#createButtonHostStyle()
+        );
     }
 
     /**
@@ -1878,130 +1996,76 @@ export class TutorialScene extends BaseScene {
      * 현재 화면에 필요한 풀 기반 버튼을 구성합니다.
      * @private
      */
-    #buildButtons() {
-        this.#releaseButtons();
+    #getButtonSpecs() {
         const buttonGroup = getTutorialModePolicy(this.mode)?.buttons;
         if (!buttonGroup) {
-            return;
+            return [];
         }
         if (this.cutscenes.isOpen()) {
-            this.#buildCutsceneButtons();
-            return;
+            return this.cutsceneView.getButtonSpecs(this.#createCutsceneViewModel());
         }
         if (buttonGroup === 'menu') {
-            this.#buildMenuButtons();
-        } else if (buttonGroup === 'starter') {
-            this.#buildStarterButtons();
-        } else if (buttonGroup === 'gallery') {
-            this.#buildGalleryButtons();
-        } else if (buttonGroup === 'battle') {
-            this.#buildBattleButtons();
-        } else if (buttonGroup === 'result') {
-            this.#buildResultButtons();
+            return this.menuView.getButtonSpecs(this.#createMenuViewModel());
         }
+        if (buttonGroup === 'starter') {
+            return this.starterView.getButtonSpecs(this.#createStarterViewModel());
+        }
+        if (buttonGroup === 'gallery') {
+            return this.galleryView.getButtonSpecs(this.#createGalleryViewModel());
+        }
+        if (buttonGroup === 'battle') {
+            return this.#getBattleButtonSpecs();
+        }
+        if (buttonGroup === 'result') {
+            return this.resultView.getButtonSpecs(this.#createResultViewModel());
+        }
+        return [];
     }
 
     /**
-     * 메뉴 버튼을 구성합니다.
+     * 버튼 호스트가 현재 테마와 해상도로 사용할 스타일을 만듭니다.
+     * @returns {object} 버튼 공통 스타일입니다.
      * @private
      */
-    #buildMenuButtons() {
-        const w = this.#uww(24);
-        const h = this.#uwh(6);
-        const x = this.UIOffsetX + ((this.UIWW - w) * 0.5);
-        this.#createButton('menu-start', {
-            x,
-            y: this.#uwh(58),
-            w,
-            h,
-            label: '게임 시작  [Enter]',
-            onClick: () => this.#queueUiCommand(COMMANDS.START)
-        });
-    }
-
-    /**
-     * 스타터 선택 버튼을 구성합니다.
-     * @private
-     */
-    #buildStarterButtons() {
-        const w = this.#uww(27);
-        const h = this.#uwh(11);
-        const gap = this.#uww(3);
-        const startX = this.UIOffsetX + ((this.UIWW - ((w * 2) + gap)) * 0.5);
-        this.data.STARTER_CHOICES.forEach((choice, index) => {
-            this.#createButton('starter-' + choice.id, {
-                x: startX + (index * (w + gap)),
-                y: this.#uwh(55),
-                w,
-                h,
-                label: (index === this.starterIndex ? '◆ ' : '') + choice.label,
-                active: index === this.starterIndex,
-                onClick: () => this.#queueUiCommand(COMMANDS.CHOOSE_STARTER, {
-                    itemId: choice.id
-                })
-            });
-        });
-        this.#createButton('starter-back', {
-            x: this.UIOffsetX + this.#uww(4),
-            y: this.#uwh(88),
-            w: this.#uww(14),
-            h: this.#uwh(5),
-            label: '메뉴  [Esc]',
-            onClick: () => this.#queueUiCommand(COMMANDS.RETURN_MENU)
-        });
-    }
-
-    /**
-     * 갤러리 조작 버튼을 구성합니다.
-     * @private
-     */
-    #buildGalleryButtons() {
-        const centerX = this.UIOffsetX + (this.UIWW * 0.5);
-        const entry = this.galleryEntries[this.galleryIndex];
-        const unlocked = entry && this.#isCutsceneUnlocked(entry.id);
-        this.#createButton('gallery-prev', {
-            x: centerX - this.#uww(31),
-            y: this.#uwh(78),
-            w: this.#uww(14),
-            h: this.#uwh(5),
-            label: '◀ 이전',
-            onClick: () => this.#queueUiCommand(COMMANDS.GALLERY_SHIFT, { delta: -1 })
-        });
-        this.#createButton('gallery-play', {
-            x: centerX - this.#uww(8),
-            y: this.#uwh(78),
-            w: this.#uww(16),
-            h: this.#uwh(5),
-            label: unlocked ? '재생  [Enter]' : '잠김',
-            enabled: Boolean(unlocked),
-            onClick: () => this.#queueUiCommand(COMMANDS.GALLERY_PLAY)
-        });
-        this.#createButton('gallery-next', {
-            x: centerX + this.#uww(17),
-            y: this.#uwh(78),
-            w: this.#uww(14),
-            h: this.#uwh(5),
-            label: '다음 ▶',
-            onClick: () => this.#queueUiCommand(COMMANDS.GALLERY_SHIFT, { delta: 1 })
-        });
-        this.#createButton('gallery-back', {
-            x: this.UIOffsetX + this.#uww(4),
-            y: this.#uwh(88),
-            w: this.#uww(14),
-            h: this.#uwh(5),
-            label: '메뉴  [Esc]',
-            onClick: () => this.#queueUiCommand(COMMANDS.RETURN_MENU)
-        });
+    #createButtonHostStyle() {
+        const colors = ColorSchemes.Tactics;
+        return {
+            font: {
+                family: this.data.TYPOGRAPHY.BUTTON.FAMILY,
+                weight: this.data.TYPOGRAPHY.BUTTON.WEIGHT,
+                size: clampNumber(
+                    this.UIWW * (this.data.TYPOGRAPHY.BUTTON.SIZE_UIWW / 100),
+                    this.data.TYPOGRAPHY.BUTTON.MIN,
+                    this.data.TYPOGRAPHY.BUTTON.MAX
+                )
+            },
+            defaultRadius: this.#uwh(this.data.LAYOUT.ACTIONS.BUTTON_RADIUS_WH),
+            hoverScale: Number(this.data.ANIMATION.BUTTON_HOVER_SCALE) || 1.035,
+            pressScale: Number(this.data.ANIMATION.BUTTON_PRESS_SCALE) || 0.965,
+            colors: {
+                text: colors.UI.Text,
+                muted: colors.UI.Muted,
+                accent: colors.UI.Accent,
+                idle: colors.UI.ButtonIdle,
+                hover: colors.UI.ButtonHover,
+                disabled: colors.UI.ButtonDisabled
+            }
+        };
     }
 
     /**
      * 전투 행동과 인벤토리 버튼을 구성합니다.
      * @private
      */
-    #buildBattleButtons() {
+    #getBattleButtonSpecs() {
         if (!this.model) {
-            return;
+            return [];
         }
+        const specs = [];
+        const add = (key, options) => {
+            const { onClick, ...definition } = options;
+            specs.push({ key, ...definition, onActivate: onClick });
+        };
         const colors = ColorSchemes.Tactics;
         const ready = this.#canAcceptBattleInput();
         const actionRect = this.hudRects.SECONDARY_ACTIONS;
@@ -2054,7 +2118,7 @@ export class TutorialScene extends BaseScene {
             }
         ];
         actionSpecs.forEach((spec, index) => {
-            this.#createButton('battle-' + spec.key, {
+            add('battle-' + spec.key, {
                 x: actionRect.x + (index * (actionColumnW + gapX)),
                 y: actionY,
                 w: actionColumnW,
@@ -2088,7 +2152,7 @@ export class TutorialScene extends BaseScene {
                     + String(Number(this.model.actionsPerTurn) || 1)
                     + '  [Space]'
                 : '로라와 몹 행동 중';
-        this.#createButton('battle-end', {
+        add('battle-end', {
             x: primaryRect.x,
             y: primaryRect.y + ((primaryRect.h - primaryH) * 0.5),
             w: primaryRect.w,
@@ -2106,7 +2170,7 @@ export class TutorialScene extends BaseScene {
         });
         const menuRect = this.hudRects.MENU;
         const menuH = Math.min(menuRect.h, clampNumber(this.#uwh(4.2), 32, 48));
-        this.#createButton('battle-menu', {
+        add('battle-menu', {
             x: menuRect.x,
             y: menuRect.y + ((menuRect.h - menuH) * 0.5),
             w: menuRect.w,
@@ -2177,7 +2241,7 @@ export class TutorialScene extends BaseScene {
                     - itemIconGap
                     - measureText(countLabel, this.fonts.BUTTON)
             ) + countLabel;
-            this.#createButton('item-' + entry.itemId, {
+            add('item-' + entry.itemId, {
                 x: inventoryRect.x
                     + inventoryPad
                     + (column * (inventoryColumnW + inventoryGapX)),
@@ -2203,7 +2267,7 @@ export class TutorialScene extends BaseScene {
             const navW = clampNumber(inventoryRect.w * 0.09, 28, 42);
             const navGap = this.#uww(0.35);
             const right = inventoryRect.x + inventoryRect.w - inventoryPad;
-            this.#createButton('inventory-prev', {
+            add('inventory-prev', {
                 x: right - (navW * 2) - navGap,
                 y: inventoryRect.y + ((headerH - navH) * 0.5),
                 w: navW,
@@ -2213,7 +2277,7 @@ export class TutorialScene extends BaseScene {
                 hoverColor: colors.UI.ButtonHover,
                 onClick: () => this.#changeInventoryPage(-1)
             });
-            this.#createButton('inventory-next', {
+            add('inventory-next', {
                 x: right - navW,
                 y: inventoryRect.y + ((headerH - navH) * 0.5),
                 w: navW,
@@ -2224,125 +2288,7 @@ export class TutorialScene extends BaseScene {
                 onClick: () => this.#changeInventoryPage(1)
             });
         }
-    }
-
-    /**
-     * 결과 화면 버튼을 구성합니다.
-     * @private
-     */
-    #buildResultButtons() {
-        const w = this.#uww(18);
-        const h = this.#uwh(5.5);
-        const gap = this.#uww(2);
-        const centerX = this.UIOffsetX + (this.UIWW * 0.5);
-        this.#createButton('result-retry', {
-            x: centerX - w - (gap * 0.5),
-            y: this.#uwh(72),
-            w,
-            h,
-            label: '스타터 선택  [R]',
-            enabled: !this.presentationLocked,
-            onClick: () => this.#queueUiCommand(COMMANDS.RESTART)
-        });
-        this.#createButton('result-menu', {
-            x: centerX + (gap * 0.5),
-            y: this.#uwh(72),
-            w,
-            h,
-            label: '메뉴  [Esc]',
-            enabled: !this.presentationLocked,
-            onClick: () => this.#queueUiCommand(COMMANDS.RETURN_MENU)
-        });
-    }
-
-    /**
-     * 컷씬 진행과 닫기 버튼을 구성합니다.
-     * @private
-     */
-    #buildCutsceneButtons() {
-        const state = this.cutscenes.getState();
-        const modal = this.#getCutsceneRect();
-        const h = this.#uwh(5);
-        this.#createButton('cutscene-next', {
-            x: modal.x + (modal.w * 0.61),
-            y: modal.y + modal.h - h - this.#uwh(2.2),
-            w: modal.w * 0.27,
-            h,
-            label: state.hasNextCard ? '다음  [Enter]' : '완료  [Enter]',
-            enabled: !this.presentationLocked,
-            onClick: () => this.#queueUiCommand(COMMANDS.CUTSCENE_NEXT)
-        });
-        this.#createButton('cutscene-close', {
-            x: modal.x + (modal.w * 0.12),
-            y: modal.y + modal.h - h - this.#uwh(2.2),
-            w: modal.w * 0.2,
-            h,
-            label: '닫기  [Esc]',
-            enabled: !this.presentationLocked,
-            onClick: () => this.#queueUiCommand(COMMANDS.CUTSCENE_CLOSE)
-        });
-    }
-
-    /**
-     * 텍스트와 선택적 아이콘을 중앙 배치한 풀 기반 버튼을 만듭니다.
-     * @param {string} key - 버튼 키입니다.
-     * @param {object} options - 버튼 구성값입니다.
-     * @private
-     */
-    #createButton(key, options) {
-        const colors = ColorSchemes.Tactics;
-        const enabled = options.enabled !== false;
-        const textElement = UIPool.text_element.get();
-        textElement.init({
-            parent: this,
-            layer: 'ui',
-            text: options.label,
-            font: this.data.TYPOGRAPHY.BUTTON.FAMILY,
-            fontWeight: this.data.TYPOGRAPHY.BUTTON.WEIGHT,
-            size: clampNumber(
-                this.UIWW * (this.data.TYPOGRAPHY.BUTTON.SIZE_UIWW / 100),
-                this.data.TYPOGRAPHY.BUTTON.MIN,
-                this.data.TYPOGRAPHY.BUTTON.MAX
-            ),
-            color: enabled ? (options.textColor || colors.UI.Text) : colors.UI.Muted,
-            align: 'center'
-        });
-        const button = UIPool.button.get();
-        const centerItems = options.icon
-            ? [options.icon, textElement]
-            : [textElement];
-        button.init({
-            parent: this,
-            layer: 'ui',
-            x: options.x,
-            y: options.y,
-            width: options.w,
-            height: options.h,
-            center: centerItems,
-            itemSpacing: options.itemSpacing,
-            radius: options.radius ?? this.#uwh(
-                this.data.LAYOUT.ACTIONS.BUTTON_RADIUS_WH
-            ),
-            shadow: options.shadow,
-            idleColor: enabled
-                ? (options.idleColor
-                    || (options.active ? colors.UI.Accent : colors.UI.ButtonIdle))
-                : colors.UI.ButtonDisabled,
-            hoverColor: enabled
-                ? (options.hoverColor || colors.UI.ButtonHover)
-                : colors.UI.ButtonDisabled,
-            color: colors.UI.Text,
-            clickAble: enabled,
-            onClick: options.onClick
-        });
-        button.clickAble = enabled;
-        button.hoverScaleMultiplier = Number(
-            this.data.ANIMATION.BUTTON_HOVER_SCALE
-        ) || 1.035;
-        button.pressScaleMultiplier = Number(
-            this.data.ANIMATION.BUTTON_PRESS_SCALE
-        ) || 0.965;
-        this.buttons[key] = { item: button, text: textElement };
+        return specs;
     }
 
     /**
@@ -2372,37 +2318,6 @@ export class TutorialScene extends BaseScene {
                 });
             }
         };
-    }
-
-    /**
-     * 모든 풀 기반 버튼을 반납합니다.
-     * @private
-     */
-    #releaseButtons() {
-        for (const button of Object.values(this.buttons)) {
-            releaseUIItem(button?.item);
-        }
-        this.buttons = {};
-    }
-
-    /**
-     * 버튼 상호작용을 갱신합니다.
-     * @private
-     */
-    #updateButtons() {
-        for (const button of Object.values(this.buttons)) {
-            button.item.update();
-        }
-    }
-
-    /**
-     * 버튼을 그립니다.
-     * @private
-     */
-    #drawButtons() {
-        for (const button of Object.values(this.buttons)) {
-            button.item.draw();
-        }
     }
 
     /**
@@ -2462,7 +2377,7 @@ export class TutorialScene extends BaseScene {
         this.inventoryPage = (
             paging.page + Math.sign(delta) + paging.pageCount
         ) % paging.pageCount;
-        this.buttonSignature = '';
+        this.buttonHost.invalidate();
     }
 
     /**
@@ -2564,7 +2479,7 @@ export class TutorialScene extends BaseScene {
                 h: this.#uwh(layout.HEIGHT_WH)
             }]))
         );
-        this.buttonSignature = '';
+        this.buttonHost.invalidate();
         this.#ensureButtons();
     }
 
@@ -2716,7 +2631,7 @@ export class TutorialScene extends BaseScene {
         const revision = this.timelineRevision;
         this.presentationLocked = true;
         this.presentation.actionPulse = 1;
-        this.buttonSignature = '';
+        this.buttonHost.invalidate();
         void this.#animateSlot(
             'action-pulse',
             this.presentation,
@@ -2739,7 +2654,7 @@ export class TutorialScene extends BaseScene {
         const route = this.#normalizePath(path);
         const revision = this.timelineRevision;
         this.presentationLocked = true;
-        this.buttonSignature = '';
+        this.buttonHost.invalidate();
         if (route.length <= 1) {
             const stayScale = Number(this.data.ANIMATION.STAY_SCALE) || 0.86;
             this.presentation.playerScale = stayScale;
@@ -2947,7 +2862,7 @@ export class TutorialScene extends BaseScene {
         const targetFloorView = this.model.getCurrentFloorState();
         const targetFloorActorView = this.#captureFloorActorView();
         this.presentationLocked = true;
-        this.buttonSignature = '';
+        this.buttonHost.invalidate();
         void this.#animateFloorSwapTo(
             target,
             targetFloorIndex,
@@ -2993,7 +2908,7 @@ export class TutorialScene extends BaseScene {
             return;
         }
         this.presentationLocked = false;
-        this.buttonSignature = '';
+        this.buttonHost.invalidate();
     }
 
     /**
@@ -3099,187 +3014,6 @@ export class TutorialScene extends BaseScene {
             h: this.WH,
             fill: ColorSchemes.Tactics.Backdrop
         });
-    }
-
-    /**
-     * 메타 로딩 화면을 그립니다.
-     * @private
-     */
-    #drawLoading() {
-        const colors = ColorSchemes.Tactics;
-        const x = this.UIOffsetX + (this.UIWW * 0.5);
-        this.#drawText('ui', '진행도 불러오는 중…', x, this.WH * 0.5, this.fonts.HEADING, colors.UI.Text, 'center');
-    }
-
-    /**
-     * 메인 메뉴를 그립니다.
-     * @private
-     */
-    #drawMenu() {
-        const colors = ColorSchemes.Tactics;
-        const centerX = this.UIOffsetX + (this.UIWW * 0.5);
-        this.#drawText('ui', this.data.TEXT.TITLE, centerX, this.#uwh(24), this.fonts.TITLE, colors.UI.Text, 'center');
-        this.#drawText('ui', this.data.TEXT.SUBTITLE, centerX, this.#uwh(31), this.fonts.SUBTITLE, colors.UI.Muted, 'center');
-        renderGL('background', {
-            shape: 'rect',
-            x: centerX,
-            y: this.#uwh(44),
-            w: this.#uww(38),
-            h: this.#uwh(12),
-            fill: colors.UI.Panel,
-            alpha: 0.9
-        });
-        this.#drawText(
-            'ui',
-            '플레이 ' + String(this.meta.playCount) + '회  ·  최고 점수 ' + String(this.meta.bestScore),
-            centerX,
-            this.#uwh(41.5),
-            this.fonts.BODY,
-            colors.UI.Text,
-            'center'
-        );
-        this.#drawText(
-            'ui',
-            '이동 4칸 지정 → 행동 → 로라 → 몹 · 총 12회',
-            centerX,
-            this.#uwh(47),
-            this.fonts.SMALL,
-            colors.UI.Muted,
-            'center'
-        );
-        this.#drawText('ui', 'Enter 시작', centerX, this.#uwh(82), this.fonts.SMALL, colors.UI.Muted, 'center');
-    }
-
-    /**
-     * 스타터 선택 화면을 그립니다.
-     * @private
-     */
-    #drawStarterSelect() {
-        const colors = ColorSchemes.Tactics;
-        const centerX = this.UIOffsetX + (this.UIWW * 0.5);
-        this.#drawText('ui', '출발 장비 선택', centerX, this.#uwh(18), this.fonts.TITLE, colors.UI.Text, 'center');
-        this.#drawText(
-            'ui',
-            '매 턴 이동 경로를 먼저 확정한 뒤 행동합니다. 출발 장비를 고르세요.',
-            centerX,
-            this.#uwh(25),
-            this.fonts.BODY,
-            colors.UI.Muted,
-            'center'
-        );
-        const w = this.#uww(27);
-        const gap = this.#uww(3);
-        const startX = this.UIOffsetX + ((this.UIWW - ((w * 2) + gap)) * 0.5);
-        this.data.STARTER_CHOICES.forEach((choice, index) => {
-            const x = startX + (index * (w + gap));
-            const selected = index === this.starterIndex;
-            const minScale = Number(this.data.ANIMATION.SELECTION_MIN_SCALE) || 0.72;
-            const selectedScale = selected
-                ? minScale + ((1 - minScale) * this.presentation.menuSelectionProgress)
-                : 1;
-            renderGL('background', {
-                shape: 'rect',
-                x: x + (w * 0.5),
-                y: this.#uwh(42),
-                w: w * selectedScale,
-                h: this.#uwh(22) * selectedScale,
-                fill: selected ? colors.UI.PanelStrong : colors.UI.Panel,
-                alpha: 0.95
-            });
-            this.#drawText('ui', choice.label, x + (w * 0.5), this.#uwh(36), this.fonts.HEADING, colors.UI.Text, 'center');
-            const lines = this.#wrapText(choice.description, this.fonts.SMALL, w * 0.8, 3);
-            lines.forEach((line, lineIndex) => {
-                this.#drawText(
-                    'ui',
-                    line,
-                    x + (w * 0.5),
-                    this.#uwh(42) + (lineIndex * this.#uwh(2.7)),
-                    this.fonts.SMALL,
-                    colors.UI.Muted,
-                    'center'
-                );
-            });
-        });
-        this.#drawText('ui', '방향키/WASD 선택 · Enter 확정', centerX, this.#uwh(73), this.fonts.SMALL, colors.UI.Muted, 'center');
-    }
-
-    /**
-     * 컷씬 갤러리를 잠금 상태와 함께 그립니다.
-     * @private
-     */
-    #drawGallery() {
-        const colors = ColorSchemes.Tactics;
-        const centerX = this.UIOffsetX + (this.UIWW * 0.5);
-        this.#drawText('ui', '컷씬 갤러리', centerX, this.#uwh(12), this.fonts.TITLE, colors.UI.Text, 'center');
-        const listX = this.UIOffsetX + this.#uww(12);
-        const listY = this.#uwh(23);
-        const rowH = this.#uwh(5.7);
-        this.galleryEntries.forEach((entry, index) => {
-            const unlocked = this.#isCutsceneUnlocked(entry.id);
-            const selected = index === this.galleryIndex;
-            const minScale = Number(this.data.ANIMATION.SELECTION_MIN_SCALE) || 0.72;
-            const selectedScale = selected
-                ? minScale + ((1 - minScale) * this.presentation.menuSelectionProgress)
-                : 1;
-            renderGL('background', {
-                shape: 'rect',
-                x: listX + this.#uww(17),
-                y: listY + (index * rowH),
-                w: this.#uww(34) * selectedScale,
-                h: rowH * 0.82 * selectedScale,
-                fill: selected ? colors.UI.PanelStrong : colors.UI.Panel,
-                alpha: selected ? 1 : 0.72
-            });
-            this.#drawText(
-                'ui',
-                (unlocked ? '◆ ' : '◇ ') + (unlocked ? entry.title : '잠긴 기록'),
-                listX + this.#uww(1.2),
-                listY + (index * rowH),
-                this.fonts.BODY,
-                unlocked ? colors.UI.Text : colors.UI.Muted
-            );
-        });
-        const entry = this.galleryEntries[this.galleryIndex];
-        const unlocked = entry && this.#isCutsceneUnlocked(entry.id);
-        const cardX = this.UIOffsetX + this.#uww(55);
-        renderGL('background', {
-            shape: 'rect',
-            x: cardX + this.#uww(16),
-            y: this.#uwh(44),
-            w: this.#uww(32),
-            h: this.#uwh(38),
-            fill: colors.UI.Panel,
-            alpha: 0.96
-        });
-        this.#drawText(
-            'ui',
-            unlocked ? entry.title : '잠긴 컷씬',
-            cardX + this.#uww(16),
-            this.#uwh(34),
-            this.fonts.HEADING,
-            unlocked ? colors.UI.Text : colors.UI.Muted,
-            'center'
-        );
-        this.#drawText(
-            'ui',
-            unlocked
-                ? String(entry.cards.length) + '장 · Enter로 재생'
-                : '플레이 중 조건을 달성하고 마지막 카드까지 확인하세요.',
-            cardX + this.#uww(16),
-            this.#uwh(46),
-            this.fonts.BODY,
-            colors.UI.Muted,
-            'center'
-        );
-        this.#drawText(
-            'ui',
-            String(this.galleryIndex + 1) + ' / ' + String(this.galleryEntries.length),
-            centerX,
-            this.#uwh(70),
-            this.fonts.MONO,
-            colors.UI.Muted,
-            'center'
-        );
     }
 
     /**
@@ -4414,165 +4148,6 @@ export class TutorialScene extends BaseScene {
                 1 - ratio
             );
         }
-    }
-
-    /**
-     * 결과 화면을 종료 사유, 무력화 여부, 점수와 불안정도와 함께 그립니다.
-     * @private
-     */
-    #drawResult() {
-        const colors = ColorSchemes.Tactics;
-        const centerX = this.UIOffsetX + (this.UIWW * 0.5);
-        const rect = {
-            x: centerX - this.#uww(22),
-            y: this.#uwh(20),
-            w: this.#uww(44),
-            h: this.#uwh(58)
-        };
-        renderGL('background', {
-            shape: 'rect',
-            x: rect.x + (rect.w * 0.5),
-            y: rect.y + (rect.h * 0.5),
-            w: rect.w,
-            h: rect.h,
-            fill: colors.UI.PanelStrong,
-            alpha: 0.98
-        });
-        this.#drawText('ui', '작전 결과', centerX, rect.y + this.#uwh(8), this.fonts.TITLE, colors.UI.Text, 'center');
-        this.#drawText(
-            'ui',
-            this.resultData?.label || '작전 종료',
-            centerX,
-            rect.y + this.#uwh(19),
-            this.fonts.HEADING,
-            colors.UI.Accent,
-            'center'
-        );
-        this.#drawText(
-            'ui',
-            this.resultData?.neutralized ? '로라 무력화 성공' : '로라 무력화 실패',
-            centerX,
-            rect.y + this.#uwh(26),
-            this.fonts.BODY,
-            this.resultData?.neutralized ? colors.UI.Success : colors.UI.Danger,
-            'center'
-        );
-        const reasonLabels = {
-            'lora-neutralized': '종료 사유 · 로라 HP 0',
-            'player-defeated': '종료 사유 · 플레이어 HP 0',
-            'turn-limit': '종료 사유 · 로라 행동 12회 완료'
-        };
-        this.#drawText(
-            'ui',
-            reasonLabels[this.resultData?.reason] || '종료 사유 · 작전 판정',
-            centerX,
-            rect.y + this.#uwh(32),
-            this.fonts.BODY,
-            colors.UI.Muted,
-            'center'
-        );
-        this.#drawText(
-            'ui',
-            '로라 행동  ' + String(this.resultData?.loraActionsCompleted || 0)
-                + '/12  ·  최종 불안정도  '
-                + String(this.resultData?.instability || 0),
-            centerX,
-            rect.y + this.#uwh(38),
-            this.fonts.BODY,
-            colors.UI.Muted,
-            'center'
-        );
-        this.#drawText(
-            'ui',
-            '점수  ' + String(this.resultData?.score || 0)
-                + '  ·  최고 ' + String(this.meta.bestScore),
-            centerX,
-            rect.y + this.#uwh(46),
-            this.fonts.HEADING,
-            colors.UI.Text,
-            'center'
-        );
-    }
-
-    /**
-     * 현재 고정 카드 컷씬을 모달로 그립니다.
-     * @private
-     */
-    #drawCutscene() {
-        const colors = ColorSchemes.Tactics;
-        const state = this.cutscenes.getState();
-        const card = this.cutscenes.getCurrentCard();
-        const modal = this.#getCutsceneRect();
-        render('ui', {
-            shape: 'rect',
-            x: 0,
-            y: 0,
-            w: this.WW,
-            h: this.WH,
-            fill: colors.UI.OverlayDim,
-            alpha: 0.78
-        });
-        render('ui', {
-            shape: 'roundRect',
-            x: modal.x,
-            y: modal.y,
-            w: modal.w,
-            h: modal.h,
-            radius: this.#uwh(1.5),
-            fill: colors.UI.PanelStrong,
-            alpha: 0.99
-        });
-        const centerX = modal.x + (modal.w * 0.5);
-        this.#drawText('ui', state.title, centerX, modal.y + this.#uwh(5), this.fonts.HEADING, colors.UI.Text, 'center');
-        this.#drawText(
-            'ui',
-            String(state.cardIndex + 1) + ' / ' + String(state.cardCount),
-            modal.x + modal.w - this.#uww(2),
-            modal.y + this.#uwh(5),
-            this.fonts.MONO,
-            colors.UI.Muted,
-            'right'
-        );
-        this.#drawText(
-            'ui',
-            card?.speaker || '',
-            modal.x + this.#uww(4),
-            modal.y + this.#uwh(11),
-            this.fonts.BODY,
-            colors.UI.Accent
-        );
-        const lines = this.#wrapText(
-            card?.text || '',
-            this.fonts.BODY,
-            modal.w - this.#uww(8),
-            5
-        );
-        lines.forEach((line, index) => {
-            this.#drawText(
-                'ui',
-                line,
-                modal.x + this.#uww(4),
-                modal.y + this.#uwh(17) + (index * this.#uwh(3.8)),
-                this.fonts.BODY,
-                colors.UI.Text
-            );
-        });
-    }
-
-    /**
-     * 컷씬 모달 사각형을 반환합니다.
-     * @returns {{x:number,y:number,w:number,h:number}} 모달 영역입니다.
-     * @private
-     */
-    #getCutsceneRect() {
-        const w = this.#uww(52);
-        const h = this.#uwh(48);
-        return {
-            x: this.UIOffsetX + ((this.UIWW - w) * 0.5),
-            y: (this.WH - h) * 0.5,
-            w,
-            h
-        };
     }
 
     /**

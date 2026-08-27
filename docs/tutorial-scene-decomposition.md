@@ -6,18 +6,19 @@
 장면은 최종적으로 `BaseScene` 생명주기와 명령 조율만 소유하고, 입력·뷰·버튼·표현·에셋은
 각각 한 책임을 가진 모듈로 이동한다.
 
-| 항목 | 분리 전 기준 | Turn 03 결과 |
-| --- | ---: | ---: |
-| 기준 커밋 | `253507b` | Turn 03 작업 트리 |
-| `_tutorial_scene.js` 줄 수 | 5,024 | 4,883 |
-| private 메서드 수 | 136 | 136 |
-| `this.*` 상태 이름 수 | 73 | 73 |
-| 장면 내부 모드·명령·키 상수 | 있음 | 제거 |
-| 장면 내부 좌표·복제 유틸 | 있음 | 제거 |
+| 항목 | 분리 전 기준 | Turn 03 결과 | Turn 04 결과 |
+| --- | ---: | ---: | ---: |
+| 기준 커밋 | `253507b` | `1f0711e` | Turn 04 작업 트리 |
+| `_tutorial_scene.js` 줄 수 | 5,024 | 4,883 | 4,458 |
+| private 메서드 수 | 136 | 136 | 128 |
+| 장면 내부 모드·명령·키 상수 | 있음 | 제거 | 제거 유지 |
+| 장면 내부 좌표·복제 유틸 | 있음 | 제거 | 제거 유지 |
+| 장면 내부 비전투 draw 구현 | 6개 | 6개 | 0개 |
+| 장면의 UI 풀 소유 | 있음 | 있음 | 제거 |
 
-메서드와 상태 수가 아직 큰 이유는 이번 턴이 분리의 안전한 경계만 만들고 실제 뷰와
-프레젠터 이동은 Turn 04~06에서 수행하기 때문이다. 다음 불변 조건은 모든 분리 단계에서
-유지한다.
+전투 월드·HUD와 프레젠터가 아직 장면에 남아 있어 파일은 크지만, Turn 04에서 비전투
+렌더링과 버튼 풀 수명주기를 실제 클래스로 이동했다. 전투 뷰와 프레젠터 이동은
+Turn 05~06에서 이어간다. 다음 불변 조건은 모든 분리 단계에서 유지한다.
 
 - 전투 판정은 `TutorialBattleModel`과 `TUTORIAL_GAME_DATA`만 결정한다.
 - `update()`는 입력 의도를 명령 큐에 넣고, 상태 변경은 `applySimulationCommands()`에서 한다.
@@ -128,8 +129,10 @@ import하지 않고, 모드 정책만 모드 상수를 참조한다.
 
 - viewport·투영: `#syncViewport`, `#uww`, `#uwh`, `#getBoardShake`, `#projectTile`,
   `#getCurrentFloor`
-- 비전투: `#drawBackdrop`, `#drawLoading`, `#drawMenu`, `#drawStarterSelect`,
-  `#drawGallery`, `#drawResult`, `#drawCutscene`, `#getCutsceneRect`
+- 공통 배경: `#drawBackdrop`
+- 비전투 view model: `#createNonbattleViewFrame`, `#createLoadingViewModel`,
+  `#createMenuViewModel`, `#createStarterViewModel`, `#createGalleryViewModel`,
+  `#createResultViewModel`, `#createCutsceneViewModel`
 - 전투 월드: `#drawBattle`, `#drawQuarterViewBoard`, `#drawWorldObjects`, `#drawWall`,
   `#drawWorldItem`, `#drawEventTile`, `#drawTeleport`, `#drawMob`, `#drawPlayer`,
   `#drawLora`, `#drawShadow`, `#drawWorldHp`, `#drawWorldGlyph`, `#getItemGlyph`,
@@ -154,15 +157,13 @@ import하지 않고, 모드 정책만 모드 상수를 참조한다.
 
 ### 3.8 버튼 메서드와 상태
 
-- 수명·dispatch: `#ensureButtons`, `#getButtonSignature`, `#buildButtons`,
-  `#releaseButtons`, `#updateButtons`, `#drawButtons`, `#changeInventoryPage`
-- 화면별 구성: `#buildMenuButtons`, `#buildStarterButtons`, `#buildGalleryButtons`,
-  `#buildBattleButtons`, `#buildResultButtons`, `#buildCutsceneButtons`
-- 생성: `#createButton`, `#createItemIconChild`
+- 장면 조율: `#ensureButtons`, `#getButtonSignature`, `#getButtonSpecs`,
+  `#createButtonHostStyle`, `#getBattleButtonSpecs`, `#changeInventoryPage`
+- 전투 atlas 어댑터: `#createItemIconChild`
 
-`buttons`, `buttonSignature`, `inventoryPage`, `uiActionHandled`를 쓰고 `UIPool`을 소유한다.
-화면 모듈은 앞으로 button spec과 `onCommand(type, payload)` 의도만 제공하며, 실제 풀
-반납과 command enqueue는 `TutorialButtonHost`가 담당한다.
+`TutorialButtonHost`가 `UIPool` 획득·갱신·그리기·반납과 구성 서명을 소유한다. 비전투
+화면은 직렬화 가능한 command button spec만 반환하고, 호스트가 `onCommand(type, payload)`로
+씬에 전달한다. 씬은 전투 버튼 사양과 `inventoryPage`, `uiActionHandled`만 조율한다.
 
 ## 4. 목표 모듈과 이동 순서
 
@@ -186,7 +187,7 @@ import하지 않고, 모드 정책만 모드 상수를 참조한다.
 `TutorialScene`은 위 모듈을 조립하되 모듈 전체가 다시 장면을 받는 God context는 만들지
 않는다. 각 생성자/메서드에는 필요한 작은 포트와 읽기 전용 값만 전달한다.
 
-## 5. 이번 턴에서 바꾸지 않는 부분
+## 5. Turn 03에서 바꾸지 않은 부분
 
 - `TutorialBattleModel` 공개 API, 체크포인트 형식과 전투 밸런스
 - `TUTORIAL_GAME_DATA`, 테마 색상, 레이아웃 수치와 콘텐츠 문구
@@ -197,3 +198,27 @@ import하지 않고, 모드 정책만 모드 상수를 참조한다.
 
 내부 모듈 이름과 정책 필드명은 현재 코드 책임을 기준으로 정했다. 기획 콘텐츠나 미확정
 점수·이름을 새로 확정한 결정은 없으므로 외부 회의 문서 조회는 필요하지 않았다.
+
+## 6. Turn 04 비전투 뷰 결과
+
+```text
+TutorialScene
+├──> TutorialLoadingView
+├──> TutorialMenuView ─────┐
+├──> TutorialStarterView ──┤
+├──> TutorialGalleryView ──┼──> nonbattle view helpers
+├──> TutorialResultView ───┤
+├──> TutorialCutsceneView ─┘
+└──> TutorialButtonHost ───────> UIPool
+```
+
+- 여섯 뷰 클래스는 파일당 하나이며 모델, 메타 저장, 시뮬레이션 명령 큐와 장면을 import하지
+  않는다. 상수 모듈과 순수 공통 레이아웃/렌더 도우미만 참조한다.
+- 장면이 전달하는 뷰 모델은 뷰포트·글꼴·테마 색상과 화면별 표시값으로 제한하며 모두
+  직렬화 가능한 값이다. 렌더 함수는 생성자 포트로 별도 주입한다.
+- 비전투 버튼 사양은 좌표, 표시 상태와 `{ type, payload }` 명령 의도만 포함한다. 실제
+  mouse consume과 enqueue는 장면의 `#queueUiCommand()` 경계를 유지한다.
+- `TutorialButtonHost`는 전투와 비전투 버튼의 풀 수명주기를 함께 소유하지만 전투 모델,
+  저장, 명령 큐를 알지 못한다.
+- 화면 문구, 좌표 비율, 테마 키, 기능 플래그와 전투 규칙은 변경하지 않았다. 외부 기획
+  자료가 필요한 새 콘텐츠 결정도 없었다.
