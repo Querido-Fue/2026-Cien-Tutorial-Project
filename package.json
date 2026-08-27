@@ -1,0 +1,9 @@
+{
+  "name": "cien-tutorial-project",
+  "private": true,
+  "scripts": {
+    "test": "npm run test:model && npm run check:repo",
+    "test:model": "node --experimental-default-type=module --test test/tutorial_battle_model.test.mjs",
+    "check:repo": "node --experimental-default-type=module scripts/check-repo.mjs"
+  }
+}
