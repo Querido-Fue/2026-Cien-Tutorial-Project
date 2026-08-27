@@ -69,6 +69,10 @@ import { TutorialAssetLoader } from './_tutorial_asset_loader.js';
 import { TutorialAssetPort } from './_tutorial_asset_port.js';
 import { TutorialBattlePresenter } from './_tutorial_battle_presenter.js';
 import { TutorialFeedbackQueue } from './_tutorial_feedback_queue.js';
+import { TutorialSpriteAnimator } from './_tutorial_sprite_animator.js';
+import { TutorialSpriteClipResolver } from './_tutorial_sprite_clip_resolver.js';
+import { TutorialSpriteCueRouter } from './_tutorial_sprite_cue_router.js';
+import { TutorialSpriteRoster } from './_tutorial_sprite_roster.js';
 import { TutorialBattleFeedbackView } from './view/_tutorial_battle_feedback_view.js';
 import { TutorialBattleHudView } from './view/_tutorial_battle_hud_view.js';
 import { TutorialBattleLayout } from './view/_tutorial_battle_layout.js';
@@ -85,6 +89,7 @@ import { TutorialStarterView } from './view/_tutorial_starter_view.js';
 
 const TUTORIAL_GAME_DATA = getData('TUTORIAL_GAME_DATA');
 const TUTORIAL_ASSET_MANIFEST = getData('TUTORIAL_ASSET_MANIFEST');
+const TUTORIAL_SPRITE_CLIPS = getData('TUTORIAL_SPRITE_CLIPS');
 
 const PLAYER_ID = 'player';
 const LORA_ID = 'lora';
@@ -211,6 +216,15 @@ export class TutorialScene extends BaseScene {
             particleCount: this.data.ANIMATION.PARTICLE_COUNT,
             particleSeconds: this.data.ANIMATION.PARTICLE_SECONDS
         });
+        const spriteClipResolver = new TutorialSpriteClipResolver(TUTORIAL_SPRITE_CLIPS);
+        this.spriteAnimator = new TutorialSpriteAnimator({
+            resolver: spriteClipResolver
+        });
+        this.spriteRoster = new TutorialSpriteRoster(this.spriteAnimator);
+        this.spriteCueRouter = new TutorialSpriteCueRouter({
+            animator: this.spriteAnimator,
+            onCue: (cue) => this.feedbackQueue.enqueue([cue])
+        });
         this.achievementBanner = new TutorialAchievementBanner({
             durationSeconds: 3
         });
@@ -286,6 +300,9 @@ export class TutorialScene extends BaseScene {
         this.#updatePointerState();
         this.#handlePointerInput();
         this.#updateLoraTurn(deltaSeconds);
+        this.#syncSpriteRoster();
+        this.spriteCueRouter.update(deltaSeconds);
+        this.#enterResultIfNeeded();
         this.feedbackQueue.update(deltaSeconds);
         this.achievementBanner.update(deltaSeconds);
         this.#captureKeyboardLatch();
@@ -465,6 +482,7 @@ export class TutorialScene extends BaseScene {
         this.destroyed = true;
         this.timelineRevision += 1;
         this.presentationTimeline.destroy();
+        this.spriteCueRouter.destroy();
         this.assetLoader.destroy();
         this.feedbackQueue.destroy();
         this.achievementBanner.destroy();
@@ -586,6 +604,7 @@ export class TutorialScene extends BaseScene {
         this.#commitStagedMeta();
         this.timelineRevision += 1;
         this.presentationTimeline.cancel();
+        this.spriteCueRouter.reset();
         this.cutscenes.close();
         this.pendingCutscenes = [];
         this.runCutsceneIds.clear();
@@ -625,6 +644,7 @@ export class TutorialScene extends BaseScene {
     #beginRun(starterItemId) {
         this.timelineRevision += 1;
         this.presentationTimeline.cancel();
+        this.spriteCueRouter.reset();
         this.metaStaging = true;
         this.starterItemId = starterItemId;
         const knowledge = {
@@ -672,6 +692,7 @@ export class TutorialScene extends BaseScene {
         this.hoveredTileKey = '';
         this.#resetPlannedPath();
         this.#refreshBattleCache();
+        this.#syncSpriteRoster();
         this.#appendEvent('전투 시작 · 이동 경로를 지정하고 확정한 뒤 행동하세요.');
     }
 
@@ -1081,7 +1102,8 @@ export class TutorialScene extends BaseScene {
             failureReason: result?.ok === false ? result.reason : ''
         });
         const layout = this.#createBattleLayoutFrame();
-        const orderedCues = this.feedbackQueue.enqueue(cues, {
+        const routedCues = this.spriteCueRouter.route(cues);
+        const orderedCues = this.feedbackQueue.enqueue(routedCues, {
             actors: {
                 player: nextSnapshot?.player,
                 lora: nextSnapshot?.lora
@@ -1169,6 +1191,9 @@ export class TutorialScene extends BaseScene {
         const snapshot = this.#getSnapshot();
         const rawResult = this.model.result || snapshot?.result;
         if (!rawResult) {
+            return;
+        }
+        if (this.spriteCueRouter.isBusy()) {
             return;
         }
         const endingSource = rawResult.endingId
@@ -2172,6 +2197,7 @@ export class TutorialScene extends BaseScene {
             world: Object.freeze({
                 elapsedSeconds: this.elapsedSeconds,
                 presentation,
+                spriteAnimations: this.spriteAnimator.getSnapshot(),
                 floorActors: this.floorActorView
                     ? Object.freeze(cloneCheckpointValue(this.floorActorView))
                     : null,
@@ -2649,6 +2675,20 @@ export class TutorialScene extends BaseScene {
             this.presentationTimeline.getState().floorIndex
         ) || 0;
         return this.model.floorStates?.[floorIndex] || null;
+    }
+
+    /** 현재 표시 층 배우를 스프라이트 재생기 roster와 맞춥니다. @private */
+    #syncSpriteRoster() {
+        if (this.mode !== MODES.BATTLE || !this.model) {
+            this.spriteAnimator.syncActors([]);
+            return;
+        }
+        this.spriteRoster.sync({
+            floor: this.#getCurrentFloor(),
+            floorActors: this.floorActorView,
+            snapshot: this.#getSnapshot(),
+            presentation: this.presentationTimeline.getState()
+        });
     }
 
     /**

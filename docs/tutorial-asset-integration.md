@@ -9,14 +9,15 @@
 
 ## 2. 런타임 계약
 
-`project/engine/script/data/game/tutorial_asset_manifest.js`가 다음 네 도메인을 조합한다.
+`project/engine/script/data/game/tutorial_asset_manifest.js`가 다음 다섯 도메인을 조합한다.
 
 | 도메인 | 데이터 모듈 | 런타임 정책 |
 | --- | --- | --- |
 | 두 층 맵 | `_tutorial_map_asset_entries.js` | 배경+격자가 모두 준비되면 분리 레이어를 사용하고, 하나라도 실패하면 `full` 합성본으로 폴백 |
 | 메뉴·HUD·팝업 | `_tutorial_ui_asset_entries.js` | 투명 여백은 manifest `sourceRect`로 한 번 crop하고 빈 도안 위 문구·수치는 런타임 한글 텍스트로 표시 |
 | 아이템 | `_tutorial_item_asset_entries.js` | 16×16 개별 PNG를 월드와 인벤토리가 같은 논리 ID로 사용 |
-| 정적 로라 | `_tutorial_legacy_asset_entries.js` | 초상화와 정적 월드 이미지만 사용하며 캐릭터 애니메이션은 13턴 범위로 남김 |
+| 캐릭터 스프라이트 | `_tutorial_sprite_asset_entries.js` | 플레이어 5개, 로라 1개, 슬라임 2개 시트를 원본 크기로 보존하고 `TUTORIAL_SPRITE_CLIPS`가 source rect를 선택 |
+| 레거시 | `_tutorial_legacy_asset_entries.js` | 초상화와 기존 정적 로라 이미지를 비스프라이트 표시용 호환 자산으로 유지 |
 
 로더는 PNG 자연 크기가 계약과 다르면 `image-dimensions-mismatch`로 실패시키며, crop canvas와 2D/WebGL 확대 모두 nearest-neighbor를 사용한다. 뷰는 실제 경로나 `Image.onload`를 알지 않고 `TutorialAssetPort`만 조회한다.
 
@@ -63,7 +64,7 @@ Google Drive의 UI 폴더에 있는 `ingame_item_*.png` 파일명과 `시스템 
   표시하는 세션 한정 `발견 업적` 알림으로 임시 연결했다. 정식 조건·저장은 기획 확정 시
   `TutorialAchievementBanner` 정책만 교체해야 한다.
 - 메인 타이틀처럼 글자가 포함된 완성 로고는 그대로 쓰되, 버튼·턴·상태·아이템 설명·튜토리얼·업적의 빈 프레임에는 현재 상태에서 계산한 한글 텍스트를 얹는다.
-- 13턴 전까지 로라는 기존 정적 PNG로만 표시한다. 캐릭터 시트 프레임 분할과 상태 애니메이션은 이 통합에 포함하지 않는다.
+- 캐릭터 시트의 프레임 해석과 누락 동작 폴백은 `docs/tutorial-sprite-animation.md`를 단일 기준으로 삼는다. 기존 정적 로라 이미지는 초상화·호환 폴백 외에는 전투 배우 렌더에 사용하지 않는다.
 - 사운드는 14턴 범위이므로 이번 매니페스트와 로더가 오디오 파일을 읽지 않는다.
 
 ## 6. 검증 명령
@@ -79,7 +80,7 @@ npm test
 
 ### 2026-08-28 검증 기록
 
-- 전체 `npm test`와 PNG 31개 원본/복사본 검사는 통과했다.
+- 전체 `npm test`와 PNG 39개 원본/복사본 검사는 통과했다.
 - 지정된 Drive의 기획·회의록·UI 폴더를 확인했다. 아이템 파일명 대응은 자료와 일치했고,
   업적의 구체 규칙은 여전히 미확정이어서 위 임시 정책을 유지했다.
 - 저장소와 PATH에 NW.js 실행 파일이 없어 NW 전용 런타임은 실행하지 못했다.

@@ -25,7 +25,9 @@ Turn 04에서 비전투 렌더링과 버튼 풀 수명주기를 이동했고, Tu
 피드백 큐, 애니메이션 타임라인, 이미지·atlas 수명주기를 각각 전용 모듈로 옮겼다. 장면에
 남은 큰 책임은 입력 변환, 모델 명령 조율, 메타 저장, view model 조립이다. Turn 12에서는
 개별 PNG 매니페스트와 논리 에셋 포트를 도입하고 더 이상 사용하지 않는 atlas 책임을
-로더에서 제거했다. 다음 불변 조건은 모든 분리 단계에서 유지한다.
+로더에서 제거했다. Turn 13에서는 월드 뷰의 배우 렌더를 `TutorialBattleActorView`로 옮기고,
+스프라이트 clip 해석·재생·roster·cue 연결을 각각 한 책임의 클래스로 분리했다. 다음 불변
+조건은 모든 분리 단계에서 유지한다.
 
 - 전투 판정은 `TutorialBattleModel`과 `TUTORIAL_GAME_DATA`만 결정한다.
 - `update()`는 입력 의도를 명령 큐에 넣고, 상태 변경은 `applySimulationCommands()`에서 한다.
@@ -63,6 +65,7 @@ import하지 않고, 모드 정책만 모드 상수를 참조한다.
 | 모델 조율 | `model`, 계획 경로, 선택 상태, 캐시 | 모델 공개 API를 통한 상태 변경, 캐시, 결과 진입 | `TutorialBattleModel` 공개 API |
 | 저장·메타 | `meta`, 모델 snapshot, 결과 | `meta`, `committedMeta`, `metaStaging`, `saveSequence` | `_tutorial_meta_progress.js` |
 | 프레젠테이션 | 모델 결과·전후 snapshot, cue, floor view | 장면은 floor snapshot 교체만 조율 | presenter, feedback queue, animation timeline |
+| 배우 스프라이트 | 표시 층 배우·actor-animation cue·clip 데이터 | 장면은 roster 동기화와 snapshot 전달만 조율 | clip resolver, sprite animator, cue router, actor view |
 | 렌더·레이아웃 | 읽기 전용 모델/표현 상태, viewport, 데이터 | viewport 파생값과 렌더 명령만 | display, theme, font util |
 | 에셋 | 데이터의 asset 경로 | 장면은 loader 생성·조회·정리만 조율 | `TutorialAssetLoader`, asset port |
 | 버튼 | 모드·모델·선택·인벤토리, viewport | 풀 소유 목록, 서명, page, UI 소비 플래그 | `UIPool`, `releaseUIItem` |
@@ -122,13 +125,16 @@ import하지 않고, 모드 정책만 모드 상수를 참조한다.
 
 - 장면 조율: `#afterModelChange`, `#startFloorTransitionPresentation`, `#appendEvent`
 - event→cue: `TutorialBattlePresenter`
+- cue→배우 클립·impact 예약: `TutorialSpriteCueRouter`
+- 표시 층 actor 투영·델타 재생: `TutorialSpriteRoster`, `TutorialSpriteAnimator`
 - cue 순서·수명·오디오 대기열: `TutorialFeedbackQueue`
 - 표시 상태·animation slot·입력 잠금: `TutorialAnimationTimeline`
 
-장면은 모델 결과와 전후 snapshot을 프레젠터에 전달하고, 생성된 cue를 큐와 타임라인에
-순서대로 전달한다. 이벤트 문구·피해/회복·불안정도 해석, 일시적 피드백 배열, 애니메이션
-ID와 잠금 토큰은 장면이 소유하지 않는다. 층 전환의 `floorView`/`floorActorView` 교체만 모델
-캐시와 연결되는 작은 callback으로 남긴다. 전체 계약은 `tutorial-presentation-cues.md`에 둔다.
+장면은 모델 결과와 전후 snapshot을 프레젠터에 전달하고, 생성된 cue를 스프라이트 라우터,
+피드백 큐와 타임라인에 순서대로 전달한다. 이벤트 문구·피해/회복·불안정도 해석, 일시적
+피드백 배열, clip 프레임, 애니메이션 ID와 잠금 토큰은 장면이 소유하지 않는다. 층 전환의
+`floorView`/`floorActorView` 교체만 모델 캐시와 연결되는 작은 callback으로 남긴다. cue 계약은
+`tutorial-presentation-cues.md`, clip 계약은 `tutorial-sprite-animation.md`에 둔다.
 
 ### 3.6 렌더·레이아웃 메서드
 
@@ -140,9 +146,10 @@ ID와 잠금 토큰은 장면이 소유하지 않는다. 층 전환의 `floorVie
 - 전투 view model: `#createBattleLayoutFrame`, `#createBattleViewModel`
 
 장면은 viewport를 `TutorialBattleLayout.resize()`에 전달하고, 같은 레이아웃 프레임을
-월드 렌더링·피드백·마우스 히트테스트에 사용한다. 전투 월드 draw는
-`TutorialBattleWorldView`, HUD draw와 버튼 사양은 `TutorialBattleHudView`, 입자와 떠오르는
-텍스트는 `TutorialBattleFeedbackView`가 각각 소유한다. 뷰는 장면이나 모델을 변경하지 않는다.
+월드 렌더링·피드백·마우스 히트테스트에 사용한다. 전투 오브젝트 정렬은
+`TutorialBattleWorldView`, 배우 스프라이트·도형 폴백은 `TutorialBattleActorView`, HUD draw와
+버튼 사양은 `TutorialBattleHudView`, 입자와 떠오르는 텍스트는
+`TutorialBattleFeedbackView`가 각각 소유한다. 뷰는 장면이나 모델을 변경하지 않는다.
 
 ### 3.7 에셋 메서드와 상태
 
@@ -150,7 +157,7 @@ ID와 잠금 토큰은 장면이 소유하지 않는다. 층 전환의 `floorVie
   정리한다.
 - loader 소유: 매니페스트 PNG 로드, 원본 크기 검증, source rect 크롭, 이미지 캐시,
   `onload`/`onerror`, 실패 상태와 cleanup
-- 포트 소유: UI·아이템·로라의 의미 기반 조회와 1F/B1 분리 레이어 우선·합성본 폴백 정책
+- 포트 소유: UI·아이템·스프라이트의 의미 기반 조회와 1F/B1 분리 레이어 우선·합성본 폴백 정책
 - 뷰 연결: `getUiAsset()`/`getItemIcon()`/`getMapArtwork()` 등 작은 의미 기반 asset port
 
 장면에는 `new Image()`, DOM canvas 생성, source rect 크롭 또는 이미지 콜백이 없다.
@@ -192,6 +199,11 @@ ID와 잠금 토큰은 장면이 소유하지 않는다. 층 전환의 `floorVie
 | Turn 12 | `TutorialAssetPort` | 논리 ID 조회와 맵 레이어 선택 정책 | loader, asset manifest |
 | Turn 12 | `TutorialAchievementBanner` | 런 단위 최초 발견 배너의 큐와 수명 | item ID, delta |
 | Turn 12 | `TutorialAchievementView` | 업적 배너 렌더 | read-only view model, render/asset port |
+| Turn 13 | `TutorialSpriteClipResolver` | 동작·방향·색상 variant와 명시적 폴백 해석 | clip 데이터 |
+| Turn 13 | `TutorialSpriteAnimator` | actor별 델타 프레임·우선순위·이벤트·수명 | clip resolver |
+| Turn 13 | `TutorialSpriteRoster` | 표시 층 배우를 animator 입력으로 투영 | animator |
+| Turn 13 | `TutorialSpriteCueRouter` | actor cue 실행, impact 예약, 발걸음 cue 파생 | animator, cue callback |
+| Turn 13 | `TutorialBattleActorView` | 배우 스프라이트와 도형 폴백 렌더 | battle view model, render/asset port |
 
 `TutorialScene`은 위 모듈을 조립하되 모듈 전체가 다시 장면을 받는 God context는 만들지
 않는다. 각 생성자/메서드에는 필요한 작은 포트와 읽기 전용 값만 전달한다.
@@ -318,3 +330,35 @@ item-picked event ──> TutorialAchievementBanner ──> TutorialAchievementV
   노출로 구현했다. `TutorialAchievementBanner`가 규칙·시간을, 뷰가 렌더링만 소유한다.
 - `TutorialAssetLoader`에서 사용되지 않는 atlas API와 셀 캐시를 제거했다. 아이템마다 독립된
   PNG를 사용하므로 로더는 이미지 수명과 검증 책임에만 집중한다.
+
+## 10. Turn 13 스프라이트 애니메이션 결과
+
+```text
+TutorialBattlePresenter cues
+             │
+             v
+ TutorialSpriteCueRouter ── impact delay ──> TutorialFeedbackQueue
+             │
+             v
+  TutorialSpriteAnimator <── TutorialSpriteRoster
+             │ read-only frame snapshot
+             v
+ TutorialBattleActorView ──> WebGL sourceRect UV
+             ^
+             │
+ TutorialSpriteClipResolver <── TUTORIAL_SPRITE_CLIPS
+```
+
+- 플레이어 5개, 로라 1개, 슬라임 2개 원본 시트를 매니페스트에 추가해 현재 PNG 계약은
+  39개다. 논리 32×32 frame과 실제 64/74픽셀 source rect를 분리해 원본 파일은 재가공하지 않는다.
+- clip resolver는 제공되지 않은 Range·Breathing·로라 action sheet를 숨기지 않고 데이터의
+  `available: false`와 비순환 `fallbackClipId`로 표현한다. 폴백 결정과 근거는
+  `tutorial-sprite-animation.md`에 기록한다.
+- animator는 delta 기반 루프, 비루프 완료, impact·footstep 1회 이벤트, 우선순위 중단과
+  terminal 수명을 소유한다. cue router가 피해 표시를 공격 impact에 맞춰 예약하며 reset과
+  destroy가 남은 예약과 트랙을 함께 정리한다. 전투 결과 화면은 router의 예약·비루프 동작이
+  모두 끝난 다음 열려 마지막 피격·사망 프레임을 생략하지 않는다.
+- 월드 뷰에서 플레이어·로라·몹 렌더를 배우 뷰로 옮겼다. 배우 뷰는 정수 크기·위치,
+  nearest-neighbor, 발 앵커와 다중 레이어 합성을 적용하고 이미지 실패 때만 기존 도형을 그린다.
+- 전체 74개 테스트, PNG 39개 감사와 저장소 검사가 통과했다. 저장소 검사의 미연결 오디오
+  경고 2개는 Turn 14 사운드 통합 범위로 남긴다.

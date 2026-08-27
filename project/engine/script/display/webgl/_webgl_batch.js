@@ -8,6 +8,7 @@ import { getData } from 'data/data_handler.js';
 import { colorUtil } from 'util/color_util.js';
 import { ShapeGeometryBuilder } from './_shape_geometry_builder.js';
 import { ShapeTextureCache } from './_shape_texture_cache.js';
+import { resolveImageTextureCoordinates } from './_image_texture_coordinates.js';
 
 const GLOBAL_CONSTANTS = getData('GLOBAL_CONSTANTS');
 const WEBGL_CONSTANTS = getData('WEBGL_CONSTANTS');
@@ -118,6 +119,15 @@ export class WebGLBatch {
             v1 = textureInfo.v1;
         } else if (options.image) {
             texture = this.#getTexture(options.image, options.smoothing !== false);
+            const textureCoordinates = resolveImageTextureCoordinates(
+                options.image,
+                options.sourceRect,
+                { flipX: options.flipX, flipY: options.flipY }
+            );
+            u0 = textureCoordinates.u0;
+            v0 = textureCoordinates.v0;
+            u1 = textureCoordinates.u1;
+            v1 = textureCoordinates.v1;
         } else {
             return;
         }

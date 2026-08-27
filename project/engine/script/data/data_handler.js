@@ -32,6 +32,7 @@ import { DISPLAY_SURFACE_DATA } from 'data/display/display_surface_data.js';
 import { MOUSE_BUTTON_INPUT_DATA } from 'data/input/mouse_button_input_data.js';
 import { TUTORIAL_GAME_DATA } from 'data/game/tutorial_game_data.js';
 import { TUTORIAL_ASSET_MANIFEST } from 'data/game/tutorial_asset_manifest.js';
+import { TUTORIAL_SPRITE_CLIPS } from 'data/game/tutorial_sprite_clips.js';
 
 const DATA_REGISTRY = Object.freeze({
     GLOBAL_CONSTANTS,
@@ -63,7 +64,8 @@ const DATA_REGISTRY = Object.freeze({
     DISPLAY_SURFACE_DATA,
     MOUSE_BUTTON_INPUT_DATA,
     TUTORIAL_GAME_DATA,
-    TUTORIAL_ASSET_MANIFEST
+    TUTORIAL_ASSET_MANIFEST,
+    TUTORIAL_SPRITE_CLIPS
 });
 
 /**

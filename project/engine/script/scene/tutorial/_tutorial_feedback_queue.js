@@ -24,6 +24,7 @@ export class TutorialFeedbackQueue {
     #floatingTexts;
     #particles;
     #audioCues;
+    #delayedCues;
     #screenShakeSeconds;
     #stabilizeSeconds;
     #flashSeconds;
@@ -40,6 +41,7 @@ export class TutorialFeedbackQueue {
         this.#floatingTexts = [];
         this.#particles = [];
         this.#audioCues = [];
+        this.#delayedCues = [];
         this.#screenShakeSeconds = 0;
         this.#stabilizeSeconds = 0;
         this.#flashSeconds = 0;
@@ -62,7 +64,16 @@ export class TutorialFeedbackQueue {
                 sequence: this.#sequence++
             });
             ordered.push(queued);
-            this.#applyCue(queued, context);
+            const delaySeconds = Math.max(0, toFiniteNumber(queued.delaySeconds));
+            if (delaySeconds > 0) {
+                this.#delayedCues.push({
+                    cue: queued,
+                    context,
+                    remaining: delaySeconds
+                });
+            } else {
+                this.#applyCue(queued, context);
+            }
         }
         return Object.freeze(ordered);
     }
@@ -122,6 +133,18 @@ export class TutorialFeedbackQueue {
         this.#particles = this.#particles.filter(
             (entry) => entry.seconds < entry.duration
         );
+        if (delta > 0 && this.#delayedCues.length > 0) {
+            const pending = [];
+            for (const delayed of this.#delayedCues) {
+                delayed.remaining -= delta;
+                if (delayed.remaining <= 0) {
+                    this.#applyCue(delayed.cue, delayed.context);
+                } else {
+                    pending.push(delayed);
+                }
+            }
+            this.#delayedCues = pending;
+        }
     }
 
     /** @returns {object} 렌더 뷰가 소비할 방어 복제된 피드백 상태입니다. */
@@ -134,6 +157,7 @@ export class TutorialFeedbackQueue {
             particles: Object.freeze(this.#particles.map(
                 (entry) => Object.freeze({ ...entry })
             )),
+            delayedCueCount: this.#delayedCues.length,
             screenShakeSeconds: this.#screenShakeSeconds,
             stabilizeSeconds: this.#stabilizeSeconds,
             flashSeconds: this.#flashSeconds
@@ -147,6 +171,7 @@ export class TutorialFeedbackQueue {
         this.#screenShakeSeconds = 0;
         this.#stabilizeSeconds = 0;
         this.#flashSeconds = 0;
+        this.#delayedCues = [];
     }
 
     /** 새 런이나 장면 이탈 시 모든 cue 상태를 초기화합니다. */

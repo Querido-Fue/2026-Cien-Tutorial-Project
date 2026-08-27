@@ -23,6 +23,22 @@ function cloneCueTile(value) {
         : null;
 }
 
+/** @param {object} from @param {object} to @param {string} fallback @returns {string} 목표 방향입니다. */
+function getCueFacing(from, to, fallback = 'down') {
+    const dx = Number(to?.x) - Number(from?.x);
+    const dy = Number(to?.y) - Number(from?.y);
+    if (!Number.isFinite(dx) || !Number.isFinite(dy)) {
+        return fallback;
+    }
+    if (Math.abs(dx) >= Math.abs(dy) && Math.abs(dx) > 0.001) {
+        return dx < 0 ? 'left' : 'right';
+    }
+    if (Math.abs(dy) > 0.001) {
+        return dy < 0 ? 'up' : 'down';
+    }
+    return fallback;
+}
+
 /** @param {object} cue @returns {object} 중첩 좌표까지 동결한 cue입니다. */
 function freezeCue(cue) {
     const normalized = { ...cue };
@@ -82,7 +98,8 @@ export class TutorialBattlePresenter {
             instability: toFiniteNumber(
                 previous.lora?.instability,
                 toFiniteNumber(next.lora?.instability)
-            )
+            ),
+            startedSourceAnimations: new Set()
         };
         const route = toEventList(path).map(cloneCueTile).filter(Boolean);
         if (route.length > 1) {
@@ -111,8 +128,17 @@ export class TutorialBattlePresenter {
                 sourceEventType: 'action-failed'
             }));
         }
-        for (const event of toEventList(events)) {
-            this.#appendEventCues(cues, event, tracker, next);
+        const eventList = toEventList(events);
+        for (let index = 0; index < eventList.length; index++) {
+            this.#appendEventCues(
+                cues,
+                eventList[index],
+                tracker,
+                previous,
+                next,
+                eventList,
+                index
+            );
         }
         this.#appendSnapshotFallbackCues(cues, tracker, next);
         return Object.freeze(cues);
@@ -147,8 +173,8 @@ export class TutorialBattlePresenter {
         return values[reason] || '지금은 그 선택을 적용할 수 없습니다.';
     }
 
-    /** @param {object[]} cues @param {object} event @param {object} tracker @param {object} next @private */
-    #appendEventCues(cues, event, tracker, next) {
+    /** @param {object[]} cues @param {object} event @param {object} tracker @param {object} previous @param {object} next @param {object[]} events @param {number} eventIndex @private */
+    #appendEventCues(cues, event, tracker, previous, next, events, eventIndex) {
         if (!event || typeof event.type !== 'string') {
             return;
         }
@@ -162,13 +188,26 @@ export class TutorialBattlePresenter {
         }
         switch (event.type) {
         case 'player-damaged':
-            this.#appendDamageCues(cues, event, 'player', tracker, next);
+            this.#appendDamageCues(
+                cues, event, 'player', tracker, previous, next, events, eventIndex
+            );
             break;
         case 'lora-damaged':
-            this.#appendDamageCues(cues, event, 'lora', tracker, next);
+            this.#appendDamageCues(
+                cues, event, 'lora', tracker, previous, next, events, eventIndex
+            );
             break;
         case 'mob-damaged':
-            this.#appendDamageCues(cues, event, event.mobId || 'mob', tracker, next);
+            this.#appendDamageCues(
+                cues,
+                event,
+                event.mobId || 'mob',
+                tracker,
+                previous,
+                next,
+                events,
+                eventIndex
+            );
             break;
         case 'player-healed':
             this.#appendHealCues(cues, event, tracker, next);
@@ -196,7 +235,7 @@ export class TutorialBattlePresenter {
         case 'item-used':
             cues.push(freezeCue({
                 type: CUE_TYPES.ACTOR_ANIMATION,
-                animationId: 'item-use',
+                animationId: 'item',
                 actorId: 'player',
                 sourceEventType: event.type
             }));
@@ -259,27 +298,23 @@ export class TutorialBattlePresenter {
         case 'lora-attack':
             cues.push(freezeCue({
                 type: CUE_TYPES.ACTOR_ANIMATION,
-                animationId: 'attack',
+                animationId: event.action === 'area'
+                    ? 'area'
+                    : event.action === 'idle' ? 'idle' : 'melee',
                 actorId: 'lora',
+                facing: getCueFacing(previous.lora, previous.player),
                 sourceEventType: event.type
             }));
             break;
         case 'mob-attack':
-            cues.push(freezeCue({
-                type: CUE_TYPES.ACTOR_ANIMATION,
-                animationId: 'attack',
-                actorId: event.mobId || 'mob',
-                tile: event,
-                sourceEventType: event.type
-            }));
             break;
         default:
             break;
         }
     }
 
-    /** @param {object[]} cues @param {object} event @param {string} actorId @param {object} tracker @param {object} next @private */
-    #appendDamageCues(cues, event, actorId, tracker, next) {
+    /** @param {object[]} cues @param {object} event @param {string} actorId @param {object} tracker @param {object} previous @param {object} next @param {object[]} events @param {number} eventIndex @private */
+    #appendDamageCues(cues, event, actorId, tracker, previous, next, events, eventIndex) {
         const amount = Math.max(0, Math.round(toFiniteNumber(event.damage ?? event.amount)));
         const trackerKey = actorId === 'player'
             ? 'playerHp'
@@ -292,6 +327,27 @@ export class TutorialBattlePresenter {
         if (trackerKey) {
             tracker[trackerKey] = to;
         }
+        const impact = this.#resolveDamageImpact(
+            event,
+            actorId,
+            previous,
+            next,
+            events,
+            eventIndex
+        );
+        if (impact?.startSource) {
+            const sourceKey = impact.actorId + ':' + impact.animationId;
+            if (!tracker.startedSourceAnimations.has(sourceKey)) {
+                tracker.startedSourceAnimations.add(sourceKey);
+                cues.push(freezeCue({
+                    type: CUE_TYPES.ACTOR_ANIMATION,
+                    actorId: impact.actorId,
+                    animationId: impact.animationId,
+                    facing: impact.facing,
+                    sourceEventType: event.type
+                }));
+            }
+        }
         cues.push(freezeCue({
             type: CUE_TYPES.HEALTH_TRANSITION,
             actorId,
@@ -303,6 +359,11 @@ export class TutorialBattlePresenter {
         if (amount <= 0) {
             return;
         }
+        const impactFields = impact ? {
+            impactActorId: impact.actorId,
+            impactAnimationId: impact.animationId,
+            impactFacing: impact.facing
+        } : {};
         cues.push(freezeCue({
             type: CUE_TYPES.FLOATING_TEXT,
             actorId,
@@ -310,30 +371,83 @@ export class TutorialBattlePresenter {
             text: '-' + String(amount),
             tone: 'danger',
             duration: toFiniteNumber(this.#animation.DAMAGE_TEXT_SECONDS, 0.62),
+            ...impactFields,
             sourceEventType: event.type
         }));
         cues.push(freezeCue({
             type: CUE_TYPES.ACTOR_ANIMATION,
-            animationId: 'damage',
+            animationId: to <= 0 ? 'death' : 'hit',
             actorId,
+            facing: impact?.targetFacing,
             tile: cloneCueTile(event),
+            waitForImpact: Boolean(impact),
+            ...impactFields,
             sourceEventType: event.type
         }));
         cues.push(freezeCue({
             type: CUE_TYPES.SCREEN_SHAKE,
             duration: toFiniteNumber(this.#animation.SHAKE_SECONDS, 0.18),
+            ...impactFields,
             sourceEventType: event.type
         }));
         cues.push(freezeCue({
             type: CUE_TYPES.FLASH,
             duration: toFiniteNumber(this.#animation.HIT_FLASH_SECONDS, 0.18),
+            ...impactFields,
             sourceEventType: event.type
         }));
         cues.push(freezeCue({
             type: CUE_TYPES.AUDIO,
             id: AUDIO_IDS.DAMAGE,
+            ...impactFields,
             sourceEventType: event.type
         }));
+    }
+
+    /** @param {object} event @param {string} targetActorId @param {object} previous @param {object} next @param {object[]} events @param {number} eventIndex @returns {object|null} @private */
+    #resolveDamageImpact(event, targetActorId, previous, next, events, eventIndex) {
+        const weapon = event.weapon || next.lastPlayerAction?.weapon;
+        const isPlayerAttack = event.source === 'player-attack'
+            || (targetActorId === 'lora' && ['melee', 'bow'].includes(weapon));
+        if (isPlayerAttack) {
+            const target = targetActorId === 'lora' ? next.lora : event;
+            return {
+                actorId: 'player',
+                animationId: weapon === 'bow' ? 'ranged' : 'melee',
+                facing: getCueFacing(previous.player, target, 'right'),
+                targetFacing: getCueFacing(target, previous.player, 'left'),
+                startSource: true
+            };
+        }
+        if (targetActorId !== 'player') {
+            return null;
+        }
+        if (typeof event.source === 'string' && event.source.startsWith('lora-')) {
+            const animationId = event.source === 'lora-area' ? 'area' : 'melee';
+            return {
+                actorId: 'lora',
+                animationId,
+                facing: getCueFacing(previous.lora, previous.player),
+                targetFacing: getCueFacing(previous.player, previous.lora),
+                startSource: false
+            };
+        }
+        if (event.source === 'mob-attack') {
+            const attackEvent = events.slice(eventIndex + 1).find(
+                (candidate) => candidate?.type === 'mob-attack'
+            );
+            if (!attackEvent?.mobId) {
+                return null;
+            }
+            return {
+                actorId: attackEvent.mobId,
+                animationId: 'attack',
+                facing: getCueFacing(attackEvent, previous.player),
+                targetFacing: getCueFacing(previous.player, attackEvent),
+                startSource: true
+            };
+        }
+        return null;
     }
 
     /** @param {object[]} cues @param {object} event @param {object} tracker @param {object} next @private */

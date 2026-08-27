@@ -54,6 +54,7 @@ export const TUTORIAL_PRESENTATION_CUE_TYPES = Object.freeze({
  * @type {Readonly<Record<string,string>>}
  */
 export const TUTORIAL_AUDIO_CUE_IDS = Object.freeze({
+    FOOTSTEP: 'tutorial.footstep',
     DAMAGE: 'tutorial.damage',
     HEAL: 'tutorial.heal',
     ITEM_PICKUP: 'tutorial.item.pickup',

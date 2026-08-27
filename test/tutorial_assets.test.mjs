@@ -46,7 +46,7 @@ test('에셋 매니페스트는 유일 ID, 안전한 런타임 경로와 명시�
     ]);
 });
 
-test('원본과 안전 복사본 31개는 PNG 헤더 크기 계약을 모두 만족한다', async () => {
+test('원본과 안전 복사본은 매니페스트의 PNG 헤더 크기 계약을 모두 만족한다', async () => {
     const audit = await auditTutorialAssets({
         manifest: TUTORIAL_ASSET_MANIFEST,
         repositoryRoot: REPOSITORY_ROOT,
@@ -54,10 +54,15 @@ test('원본과 안전 복사본 31개는 PNG 헤더 크기 계약을 모두 만
     });
     assert.deepEqual(audit.errors, []);
     assert.deepEqual(audit.warnings, []);
-    assert.equal(audit.entries.filter((entry) => entry.status === 'ready').length, 31);
+    assert.equal(
+        audit.entries.filter((entry) => entry.status === 'ready').length,
+        TUTORIAL_ASSET_MANIFEST.ENTRIES.filter((entry) => entry.type === 'image/png').length
+    );
     assert.equal(
         audit.entries.filter((entry) => entry.status === 'generated-fallback').length,
-        1
+        TUTORIAL_ASSET_MANIFEST.ENTRIES.filter(
+            (entry) => entry.type === 'generated-fallback'
+        ).length
     );
 });
 

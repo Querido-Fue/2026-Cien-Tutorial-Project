@@ -163,6 +163,88 @@ test('피드백 큐는 cue 순서와 수명을 소유하고 오디오를 별도�
     assert.equal(queue.getSnapshot().eventLog.length, 0);
 });
 
+test('플레이어·로라 공격 cue는 피해 대상 연출에 impact 동기화 정보를 전달한다', () => {
+    const presenter = new TutorialBattlePresenter({
+        items: TUTORIAL_GAME_DATA.ITEMS,
+        animation: TUTORIAL_GAME_DATA.ANIMATION
+    });
+    const previous = createSnapshot();
+    const next = createSnapshot({ playerHp: 80, loraHp: 50 });
+    next.lastPlayerAction = { type: 'attack', weapon: 'bow' };
+    const playerAttackCues = presenter.createCues({
+        previousSnapshot: previous,
+        nextSnapshot: next,
+        events: [{
+            type: 'mob-damaged', mobId: 'f1-mob', damage: 50, hp: 50,
+            x: 7, y: 4, source: 'player-attack'
+        }]
+    });
+    assert.ok(playerAttackCues.some((cue) => (
+        cue.type === TUTORIAL_PRESENTATION_CUE_TYPES.ACTOR_ANIMATION
+        && cue.actorId === 'player'
+        && cue.animationId === 'ranged'
+    )));
+    assert.ok(playerAttackCues.some((cue) => (
+        cue.actorId === 'f1-mob'
+        && cue.animationId === 'hit'
+        && cue.waitForImpact === true
+        && cue.impactActorId === 'player'
+        && cue.impactAnimationId === 'ranged'
+    )));
+
+    const bossAttackCues = presenter.createCues({
+        previousSnapshot: previous,
+        nextSnapshot: next,
+        events: [{
+            type: 'lora-damaged', damage: 50, hp: 50, weapon: 'melee'
+        }]
+    });
+    assert.ok(bossAttackCues.some((cue) => (
+        cue.actorId === 'player' && cue.animationId === 'melee'
+    )));
+    assert.ok(bossAttackCues.some((cue) => (
+        cue.actorId === 'lora'
+        && cue.animationId === 'hit'
+        && cue.waitForImpact === true
+        && cue.impactActorId === 'player'
+        && cue.impactAnimationId === 'melee'
+    )));
+
+    const loraAttackCues = presenter.createCues({
+        previousSnapshot: previous,
+        nextSnapshot: next,
+        events: [
+            { type: 'lora-attack', action: 'area', damage: 20 },
+            { type: 'player-damaged', amount: 20, hp: 80, source: 'lora-area' }
+        ]
+    });
+    assert.ok(loraAttackCues.some((cue) => (
+        cue.actorId === 'lora' && cue.animationId === 'area'
+    )));
+    assert.ok(loraAttackCues.some((cue) => (
+        cue.actorId === 'player'
+        && cue.animationId === 'hit'
+        && cue.impactActorId === 'lora'
+        && cue.impactAnimationId === 'area'
+    )));
+});
+
+test('피드백 큐는 지연 cue를 impact 시점 전에는 노출하지 않는다', () => {
+    const queue = new TutorialFeedbackQueue();
+    queue.enqueue([{
+        type: TUTORIAL_PRESENTATION_CUE_TYPES.FLASH,
+        duration: 0.2,
+        delaySeconds: 0.25
+    }]);
+    assert.equal(queue.getSnapshot().flashSeconds, 0);
+    assert.equal(queue.getSnapshot().delayedCueCount, 1);
+    queue.update(0.24);
+    assert.equal(queue.getSnapshot().flashSeconds, 0);
+    queue.update(0.02);
+    assert.equal(queue.getSnapshot().flashSeconds, 0.2);
+    assert.equal(queue.getSnapshot().delayedCueCount, 0);
+});
+
 test('애니메이션 타임라인은 완료와 취소 경계에서 입력 잠금을 해제한다', async () => {
     let nextId = 0;
     const removed = [];

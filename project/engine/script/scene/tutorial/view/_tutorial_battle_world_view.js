@@ -1,9 +1,9 @@
 import { TutorialBattleLayout } from './_tutorial_battle_layout.js';
 import {
-    clampBattleViewNumber,
     drawBattleViewText,
     toBattleViewList
 } from './_tutorial_battle_view_helpers.js';
+import { TutorialBattleActorView } from './_tutorial_battle_actor_view.js';
 
 /**
  * @class TutorialBattleWorldView
@@ -12,6 +12,7 @@ import {
 export class TutorialBattleWorldView {
     #renderPort;
     #assetPort;
+    #actorView;
     #frame;
 
     /**
@@ -21,6 +22,7 @@ export class TutorialBattleWorldView {
     constructor(renderPort, assetPort = {}) {
         this.#renderPort = renderPort;
         this.#assetPort = assetPort;
+        this.#actorView = new TutorialBattleActorView(renderPort, assetPort);
         this.#frame = null;
     }
 
@@ -296,7 +298,9 @@ export class TutorialBattleWorldView {
             entries.push({ type: 'teleport', value: teleport });
         }
         for (const mob of toBattleViewList(floor.mobs)) {
-            if (mob.alive !== false && Number(mob.hp) > 0) {
+            const spriteAnimation = world.spriteAnimations?.[mob.id];
+            if ((mob.alive !== false && Number(mob.hp) > 0)
+                || spriteAnimation?.visible === true) {
                 entries.push({ type: 'mob', value: mob });
             }
         }
@@ -312,9 +316,7 @@ export class TutorialBattleWorldView {
             else if (entry.type === 'item') this.#drawWorldItem(entry.value);
             else if (entry.type === 'event-tile') this.#drawEventTile(entry.value);
             else if (entry.type === 'teleport') this.#drawTeleport(entry.value);
-            else if (entry.type === 'mob') this.#drawMob(entry.value);
-            else if (entry.type === 'lora') this.#drawLora(entry.value);
-            else this.#drawPlayer(entry.value);
+            else this.#actorView.draw(entry.type, entry.value, this.#frame);
         }
     }
 
@@ -424,201 +426,6 @@ export class TutorialBattleWorldView {
             fill: colors.Tile.Teleport
         });
         this.#drawWorldGlyph('전', point.x, point.y, colors.UI.Text);
-    }
-
-    /** 일반 몹을 그립니다. @param {object} mob - 몹 상태입니다. @private */
-    #drawMob(mob) {
-        const { colors, layout } = this.#frame;
-        const point = this.#projectTile(mob.x, mob.y);
-        const size = layout.tileSide * 0.5;
-        this.#drawShadow(point.x, point.y, size);
-        this.#renderPort.renderGL('object', {
-            shape: 'circle', x: point.x, y: point.y, w: size, h: size,
-            fill: colors.Entity.MobDark
-        });
-        this.#renderPort.renderGL('object', {
-            shape: 'circle', x: point.x, y: point.y, w: size * 0.78, h: size * 0.78,
-            fill: colors.Entity.Mob
-        });
-        this.#drawWorldGlyph('M', point.x, point.y, colors.UI.Text);
-        this.#drawWorldHp(point.x, point.y - (size * 0.62), mob.hp, mob.maxHp || 100, size);
-    }
-
-    /** 플레이어 말을 그립니다. @param {object} player - 플레이어 상태입니다. @private */
-    #drawPlayer(player) {
-        const { colors, fonts, layout, world } = this.#frame;
-        const presentation = world.presentation;
-        const point = this.#projectTile(presentation.playerX, presentation.playerY);
-        const alpha = clampBattleViewNumber(presentation.playerAlpha, 0, 1);
-        const size = layout.tileSide * 0.56
-            * presentation.playerScale
-            * (1 + (presentation.actionPulse * world.config.actionPlayerScale));
-        this.#drawShadow(point.x, point.y, size, alpha);
-        this.#renderPort.renderGL('object', {
-            shape: 'circle', x: point.x, y: point.y, w: size, h: size,
-            fill: colors.Entity.PlayerDark, alpha
-        });
-        this.#renderPort.renderGL('object', {
-            shape: 'circle', x: point.x, y: point.y, w: size * 0.78, h: size * 0.78,
-            fill: colors.Entity.Player, alpha
-        });
-        this.#drawText(
-            'texteffect', 'P', point.x, point.y, fonts.HEADING,
-            colors.Entity.PlayerAccent, 'center', alpha
-        );
-        this.#drawWorldHp(
-            point.x,
-            point.y - (size * 0.62),
-            presentation.playerHp,
-            player.maxHp || 100,
-            size,
-            alpha,
-            world.readability?.playerPreview?.available
-                ? world.readability.playerPreview.expected?.playerHp
-                : null
-        );
-    }
-
-    /** 로라를 스프라이트 또는 도형 fallback으로 그립니다. @param {object} lora - 로라 상태입니다. @private */
-    #drawLora(lora) {
-        const { colors, layout, world } = this.#frame;
-        const point = this.#projectTile(lora.x, lora.y);
-        const spriteLayout = world.config.loraSprite;
-        const actionScale = 1 + (
-            world.presentation.actionPulse * world.config.actionLoraScale
-        );
-        const size = layout.tileSide * spriteLayout.BASE_SIZE_TILE_RATIO * actionScale;
-        const spriteSize = layout.tileSide * spriteLayout.SPRITE_SIZE_TILE_RATIO * actionScale;
-        const alive = lora.alive !== false && Number(lora.hp) > 0;
-        const alpha = alive ? 1 : 0.56;
-        const sprite = this.#assetPort.getLoraSprite?.() || null;
-        this.#drawShadow(point.x, point.y, size, alive ? 1 : 0.5);
-        if (sprite) {
-            if (world.feedback.flashSeconds > 0) {
-                this.#renderPort.renderGL('object', {
-                    shape: 'circle',
-                    x: point.x,
-                    y: point.y,
-                    w: size * spriteLayout.FLASH_GLOW_SIZE_RATIO,
-                    h: size * spriteLayout.FLASH_GLOW_SIZE_RATIO,
-                    fill: colors.Entity.LoraAccent,
-                    alpha: spriteLayout.FLASH_GLOW_ALPHA * alpha
-                });
-            }
-            this.#renderPort.renderGL('object', {
-                image: sprite,
-                x: Math.round(point.x - (spriteSize * 0.5)),
-                y: Math.round(point.y - (spriteSize * 0.5)
-                    + (layout.tileSide * spriteLayout.OFFSET_Y_TILE_RATIO)),
-                w: Math.round(spriteSize),
-                h: Math.round(spriteSize),
-                alpha,
-                smoothing: false
-            });
-        } else {
-            this.#renderPort.renderGL('object', {
-                shape: 'circle', x: point.x, y: point.y, w: size, h: size,
-                fill: colors.Entity.LoraDark, alpha
-            });
-            this.#renderPort.renderGL('object', {
-                shape: 'circle', x: point.x, y: point.y, w: size * 0.8, h: size * 0.8,
-                fill: world.feedback.flashSeconds > 0
-                    ? colors.Entity.LoraAccent
-                    : colors.Entity.Lora,
-                alpha
-            });
-            this.#renderPort.renderGL('object', {
-                shape: 'rect', x: point.x, y: point.y - (size * 0.23),
-                w: size * 0.56, h: size * 0.22,
-                fill: colors.Entity.LoraHair
-            });
-        }
-        if (world.feedback.stabilizeSeconds > 0) {
-            this.#renderPort.renderGL('object', {
-                shape: 'circle',
-                x: point.x,
-                y: point.y,
-                w: size * (1.12 + (world.feedback.stabilizeSeconds * 0.2)),
-                h: size * (1.12 + (world.feedback.stabilizeSeconds * 0.2)),
-                fill: colors.Effects.Stabilize,
-                alpha: clampBattleViewNumber(world.feedback.stabilizeSeconds, 0, 1) * 0.38
-            });
-        }
-        if (!sprite) {
-            this.#drawWorldGlyph('L', point.x, point.y, colors.Entity.LoraAccent);
-        }
-        this.#drawWorldHp(
-            point.x,
-            point.y - (size * 0.68),
-            world.presentation.loraHp,
-            lora.maxHp || 100,
-            size * 1.08,
-            1,
-            world.readability?.playerPreview?.available
-                ? world.readability.playerPreview.expected?.loraHp
-                : null
-        );
-    }
-
-    /** 액터 그림자를 그립니다. @private */
-    #drawShadow(x, y, size, alpha = 1) {
-        const { colors, world } = this.#frame;
-        const offset = Number(world.config.shadowOffsetRatio) || 0.08;
-        this.#renderPort.renderGL('object', {
-            shape: 'circle',
-            x,
-            y: y + (size * offset),
-            w: size,
-            h: size * 0.36,
-            fill: colors.Entity.Shadow,
-            alpha
-        });
-    }
-
-    /** 월드 HP 막대를 그립니다. @private */
-    #drawWorldHp(x, y, hp, maxHp, width, alpha = 1, pendingHp = null) {
-        const colors = this.#frame.colors;
-        const ratio = clampBattleViewNumber(Number(hp) / Math.max(1, Number(maxHp)), 0, 1);
-        const pendingRatio = pendingHp !== null
-            && pendingHp !== undefined
-            && Number.isFinite(Number(pendingHp))
-            ? clampBattleViewNumber(
-                Number(pendingHp) / Math.max(1, Number(maxHp)),
-                0,
-                1
-            )
-            : ratio;
-        const height = Math.max(2, width * 0.09);
-        this.#renderPort.renderGL('object', {
-            shape: 'rect', x, y, w: width, h: height,
-            fill: colors.UI.HpEmpty, alpha
-        });
-        if (ratio > 0) {
-            this.#renderPort.renderGL('object', {
-                shape: 'rect',
-                x: x - (width * 0.5) + ((width * ratio) * 0.5),
-                y,
-                w: width * ratio,
-                h: height,
-                fill: colors.UI.HpFull,
-                alpha
-            });
-        }
-        if (Math.abs(pendingRatio - ratio) > 0.0001) {
-            const startRatio = Math.min(ratio, pendingRatio);
-            const segmentRatio = Math.abs(pendingRatio - ratio);
-            this.#renderPort.renderGL('object', {
-                shape: 'rect',
-                x: x - (width * 0.5)
-                    + (width * startRatio)
-                    + ((width * segmentRatio) * 0.5),
-                y,
-                w: width * segmentRatio,
-                h: height,
-                fill: pendingRatio > ratio ? colors.UI.Success : colors.UI.Danger,
-                alpha
-            });
-        }
     }
 
     /** 월드 오브젝트의 짧은 글리프를 그립니다. @private */
