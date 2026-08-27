@@ -1,5 +1,5 @@
 export const TUTORIAL_META_RUNTIME_KEY = 'tutorialMeta';
-export const TUTORIAL_META_VERSION = 2;
+export const TUTORIAL_META_VERSION = 3;
 
 /**
  * @typedef {object} TutorialMeta
@@ -10,7 +10,8 @@ export const TUTORIAL_META_VERSION = 2;
  * @property {string[]} identifiedItemIds - 정체가 공개된 아이템 ID 목록입니다.
  * @property {string[]} discoveredTrapIds - 발견한 함정 ID 목록입니다.
  * @property {string[]} unlockedCutsceneIds - 해금한 컷씬 ID 목록입니다.
- * @property {number} bestScore - 지금까지 기록한 최고 점수입니다.
+ * @property {string[]} unlockedAchievementIds - 해금한 업적 ID 목록입니다.
+ * @property {number} bestScore - v2 저장 호환을 위해 보존하는 미사용 점수입니다.
  * @property {string[]} endingIds - 확인한 엔딩 ID 목록입니다.
  */
 
@@ -27,6 +28,7 @@ export function createDefaultTutorialMeta() {
         identifiedItemIds: [],
         discoveredTrapIds: [],
         unlockedCutsceneIds: [],
+        unlockedAchievementIds: [],
         bestScore: 0,
         endingIds: []
     };
@@ -129,6 +131,7 @@ export function normalizeTutorialMeta(value) {
         identifiedItemIds: normalizeIdList(source.identifiedItemIds),
         discoveredTrapIds: normalizeIdList(source.discoveredTrapIds),
         unlockedCutsceneIds: normalizeIdList(source.unlockedCutsceneIds),
+        unlockedAchievementIds: normalizeIdList(source.unlockedAchievementIds),
         bestScore: normalizeNonNegativeInteger(source.bestScore),
         endingIds: normalizeIdList(source.endingIds)
     };
@@ -253,19 +256,35 @@ export function unlockTutorialCutscene(meta, id) {
 }
 
 /**
- * 한 플레이의 결과를 기록하고 플레이 횟수, 최고 점수와 엔딩 목록을 갱신합니다.
+ * 업적을 해금한 상태의 새 메타 진행도를 반환합니다.
  * @param {*} meta - 현재 메타 진행도입니다.
- * @param {{score?:*,endingId?:*}} [result] - 기록할 점수와 엔딩 ID입니다.
+ * @param {*} id - 해금할 업적 ID입니다.
+ * @returns {TutorialMeta} 업적 ID가 중복 없이 반영된 새 객체입니다.
+ */
+export function unlockTutorialAchievement(meta, id) {
+    const normalizedMeta = normalizeTutorialMeta(meta);
+    return {
+        ...normalizedMeta,
+        unlockedAchievementIds: appendUniqueId(
+            normalizedMeta.unlockedAchievementIds,
+            id
+        )
+    };
+}
+
+/**
+ * 한 플레이의 결과를 기록하고 완료 횟수와 엔딩 목록을 갱신합니다.
+ * 미확정 점수 산식은 메타에 새로 반영하지 않습니다.
+ * @param {*} meta - 현재 메타 진행도입니다.
+ * @param {{endingId?:*}} [result] - 기록할 엔딩 ID입니다.
  * @returns {TutorialMeta} 플레이 결과가 반영된 새 객체입니다.
  */
 export function recordTutorialResult(meta, result = {}) {
     const normalizedMeta = normalizeTutorialMeta(meta);
     const resultSource = isRecord(result) ? result : {};
-    const score = normalizeNonNegativeInteger(resultSource.score);
     return {
         ...normalizedMeta,
         playCount: Math.min(normalizedMeta.playCount + 1, Number.MAX_SAFE_INTEGER),
-        bestScore: Math.max(normalizedMeta.bestScore, score),
         endingIds: appendUniqueId(normalizedMeta.endingIds, resultSource.endingId)
     };
 }

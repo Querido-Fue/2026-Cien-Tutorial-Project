@@ -1,6 +1,6 @@
 /**
  * @class TutorialAchievementBanner
- * @description 명시된 업적 규칙이 생기기 전까지 한 런의 최초 발견 알림 수명과 순서를 관리합니다.
+ * @description 판정이 끝난 업적 알림의 중복 제거, 표시 수명과 순서만 관리합니다.
  */
 export class TutorialAchievementBanner {
     #durationSeconds;
@@ -19,26 +19,29 @@ export class TutorialAchievementBanner {
     }
 
     /**
-     * 모델 이벤트에서 세션 한정 발견 알림을 구성합니다.
-     * @param {readonly object[]} events - 모델 결과 이벤트입니다.
-     * @param {object} items - 아이템 메타데이터입니다.
+     * 판정 계층이 만든 알림을 세션 대기열에 추가합니다.
+     * @param {readonly object[]} notifications - key, title, detail을 가진 알림입니다.
      * @returns {number} 새로 대기열에 추가된 알림 수입니다.
      */
-    enqueueFromEvents(events, items = {}) {
+    enqueue(notifications) {
         let addedCount = 0;
-        for (const event of Array.isArray(events) ? events : []) {
-            if (event?.type !== 'item-picked' || typeof event.itemId !== 'string') {
+        for (const notification of Array.isArray(notifications) ? notifications : []) {
+            const key = typeof notification?.key === 'string'
+                ? notification.key.trim()
+                : '';
+            if (!key
+                || typeof notification.title !== 'string'
+                || typeof notification.detail !== 'string') {
                 continue;
             }
-            const key = 'item:' + event.itemId;
             if (this.#seenKeys.has(key)) {
                 continue;
             }
             this.#seenKeys.add(key);
             this.#queue.push(Object.freeze({
                 key,
-                title: '발견 업적',
-                detail: (items[event.itemId]?.label || event.itemId) + ' 발견'
+                title: notification.title,
+                detail: notification.detail
             }));
             addedCount += 1;
         }

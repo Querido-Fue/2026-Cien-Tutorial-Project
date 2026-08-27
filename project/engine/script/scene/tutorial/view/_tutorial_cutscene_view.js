@@ -144,7 +144,7 @@ export class TutorialCutsceneView {
             {
                 key: 'cutscene-close',
                 ...layout.buttons[1],
-                label: '닫기  [Esc]',
+                label: '스킵  [Esc]',
                 enabled: !viewModel.presentationLocked,
                 command: { type: TUTORIAL_COMMANDS.CUTSCENE_CLOSE }
             }

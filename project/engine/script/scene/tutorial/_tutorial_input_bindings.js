@@ -7,6 +7,7 @@ export const TUTORIAL_KEY_CODES = Object.freeze({
     ALTERNATE_CONFIRM: 'Space',
     CANCEL: 'Escape',
     RESTART: 'KeyR',
+    GALLERY: 'KeyG',
     PATH_BACK: 'Backspace',
     TARGET_NEXT: 'Tab',
     ACTION_MELEE: 'Digit1',
@@ -58,6 +59,7 @@ export const TUTORIAL_WATCHED_KEY_CODES = Object.freeze([
     TUTORIAL_KEY_CODES.GUIDE,
     TUTORIAL_KEY_CODES.PATH_BACK,
     TUTORIAL_KEY_CODES.RESTART,
+    TUTORIAL_KEY_CODES.GALLERY,
     TUTORIAL_KEY_CODES.TARGET_NEXT,
     TUTORIAL_KEY_CODES.CANCEL
 ]);

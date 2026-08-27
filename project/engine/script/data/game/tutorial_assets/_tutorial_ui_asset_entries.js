@@ -21,7 +21,23 @@ export const TUTORIAL_UI_ASSET_IDS = Object.freeze({
     waitHealButton: 'ui.battle.wait-heal-button',
     itemPanel: 'ui.battle.item-panel',
     tutorialPopup: 'ui.battle.tutorial-popup',
-    achievementPopup: 'ui.battle.achievement-popup'
+    achievementPopup: 'ui.battle.achievement-popup',
+    galleryAchievementDisplay: 'ui.gallery.achievement-display',
+    galleryAchievementLocked: 'ui.gallery.achievement-locked',
+    galleryTitleOn: 'ui.gallery.title-on',
+    galleryTitleOff: 'ui.gallery.title-off',
+    galleryBookmarkRedLeft: 'ui.gallery.bookmark-red-left',
+    galleryBookmarkRedRight: 'ui.gallery.bookmark-red-right',
+    galleryBookmarkBlueRight: 'ui.gallery.bookmark-blue-right',
+    galleryBookmarkYellowLeft: 'ui.gallery.bookmark-yellow-left',
+    galleryBookmarkYellowRight: 'ui.gallery.bookmark-yellow-right',
+    galleryExitButton: 'ui.gallery.exit-button',
+    galleryTurnButton: 'ui.gallery.turn-button',
+    endingBook1: 'ui.ending.book-1',
+    endingBook2: 'ui.ending.book-2',
+    endingBook3: 'ui.ending.book-3',
+    endingBook4: 'ui.ending.book-4',
+    endingLetters: 'ui.ending.letters'
 });
 
 export const TUTORIAL_UI_ASSET_ENTRIES = Object.freeze([
@@ -131,5 +147,145 @@ export const TUTORIAL_UI_ASSET_ENTRIES = Object.freeze([
         actualDimensions: { width: 512, height: 300 },
         sourceRect: { x: 16, y: 16, w: 147, h: 18 },
         usage: '런타임 발견 업적 문구를 담는 알림 배경'
+    }),
+    createUiEntry({
+        id: TUTORIAL_UI_ASSET_IDS.galleryAchievementDisplay,
+        runtimePath: '../asset/tutorial/ui/gallery/achievement-display.png',
+        sourceName: 'img/UI/gallery_acheivementdisplay.png',
+        expectedDimensions: { width: 512, height: 300 },
+        actualDimensions: { width: 512, height: 300 },
+        sourceRect: { x: 16, y: 16, w: 96, h: 112 },
+        usage: '갤러리에서 해금한 업적을 표시하는 픽셀 프레임'
+    }),
+    createUiEntry({
+        id: TUTORIAL_UI_ASSET_IDS.galleryAchievementLocked,
+        runtimePath: '../asset/tutorial/ui/gallery/achievement-locked.png',
+        sourceName: 'img/UI/gallery_achievement_off.png',
+        expectedDimensions: { width: 512, height: 300 },
+        actualDimensions: { width: 512, height: 300 },
+        sourceRect: { x: 16, y: 16, w: 50, h: 50 },
+        usage: '갤러리의 잠긴 업적 표시'
+    }),
+    createUiEntry({
+        id: TUTORIAL_UI_ASSET_IDS.galleryTitleOn,
+        runtimePath: '../asset/tutorial/ui/gallery/title-on.png',
+        sourceName: 'img/UI/gallery_title_on.png',
+        expectedDimensions: { width: 512, height: 300 },
+        actualDimensions: { width: 512, height: 300 },
+        sourceRect: { x: 16, y: 16, w: 141, h: 26 },
+        usage: '선택된 갤러리 제목 탭'
+    }),
+    createUiEntry({
+        id: TUTORIAL_UI_ASSET_IDS.galleryTitleOff,
+        runtimePath: '../asset/tutorial/ui/gallery/title-off.png',
+        sourceName: 'img/UI/gallery_title_off.png',
+        expectedDimensions: { width: 512, height: 300 },
+        actualDimensions: { width: 512, height: 300 },
+        sourceRect: { x: 16, y: 16, w: 141, h: 26 },
+        usage: '선택되지 않은 갤러리 제목 탭'
+    }),
+    createUiEntry({
+        id: TUTORIAL_UI_ASSET_IDS.galleryBookmarkRedLeft,
+        runtimePath: '../asset/tutorial/ui/gallery/bookmark-red-left.png',
+        sourceName: 'img/UI/gallery_bookmark_red_left.png',
+        expectedDimensions: { width: 512, height: 256 },
+        actualDimensions: { width: 512, height: 256 },
+        sourceRect: { x: 16, y: 16, w: 98, h: 38 },
+        usage: '업적 갤러리 책갈피'
+    }),
+    createUiEntry({
+        id: TUTORIAL_UI_ASSET_IDS.galleryBookmarkRedRight,
+        runtimePath: '../asset/tutorial/ui/gallery/bookmark-red-right.png',
+        sourceName: 'img/UI/gallery_bookmark_red_right.png',
+        expectedDimensions: { width: 512, height: 256 },
+        actualDimensions: { width: 512, height: 256 },
+        sourceRect: { x: 16, y: 16, w: 98, h: 38 },
+        usage: '엔딩 갤러리 책갈피'
+    }),
+    createUiEntry({
+        id: TUTORIAL_UI_ASSET_IDS.galleryBookmarkBlueRight,
+        runtimePath: '../asset/tutorial/ui/gallery/bookmark-blue-right.png',
+        sourceName: 'img/UI/gallery_bookmark_blue_right.png',
+        expectedDimensions: { width: 512, height: 256 },
+        actualDimensions: { width: 512, height: 256 },
+        sourceRect: { x: 16, y: 16, w: 98, h: 39 },
+        usage: '컷씬 갤러리 책갈피'
+    }),
+    createUiEntry({
+        id: TUTORIAL_UI_ASSET_IDS.galleryBookmarkYellowLeft,
+        runtimePath: '../asset/tutorial/ui/gallery/bookmark-yellow-left.png',
+        sourceName: 'img/UI/gallery_bookmark_yellow_left.png',
+        expectedDimensions: { width: 512, height: 256 },
+        actualDimensions: { width: 512, height: 256 },
+        sourceRect: { x: 16, y: 16, w: 98, h: 40 },
+        usage: '로라의 일기 책갈피'
+    }),
+    createUiEntry({
+        id: TUTORIAL_UI_ASSET_IDS.galleryBookmarkYellowRight,
+        runtimePath: '../asset/tutorial/ui/gallery/bookmark-yellow-right.png',
+        sourceName: 'img/UI/gallery_bookmark_yellow_right.png',
+        expectedDimensions: { width: 512, height: 256 },
+        actualDimensions: { width: 512, height: 256 },
+        sourceRect: { x: 16, y: 16, w: 98, h: 40 },
+        usage: '개발자의 일기 책갈피'
+    }),
+    createUiEntry({
+        id: TUTORIAL_UI_ASSET_IDS.galleryExitButton,
+        runtimePath: '../asset/tutorial/ui/gallery/exit-button.png',
+        sourceName: 'img/UI/gallery_exitbutton.png',
+        expectedDimensions: { width: 512, height: 256 },
+        actualDimensions: { width: 512, height: 256 },
+        sourceRect: { x: 16, y: 16, w: 32, h: 32 },
+        usage: '갤러리 닫기 버튼 배경'
+    }),
+    createUiEntry({
+        id: TUTORIAL_UI_ASSET_IDS.galleryTurnButton,
+        runtimePath: '../asset/tutorial/ui/gallery/turn-button.png',
+        sourceName: 'img/UI/gallery_turnbutton_right_on.png',
+        expectedDimensions: { width: 512, height: 256 },
+        actualDimensions: { width: 512, height: 256 },
+        sourceRect: { x: 16, y: 16, w: 19, h: 32 },
+        usage: '갤러리 페이지 넘김 버튼 배경'
+    }),
+    createUiEntry({
+        id: TUTORIAL_UI_ASSET_IDS.endingBook1,
+        runtimePath: '../asset/tutorial/ui/ending/book-1.png',
+        sourceName: 'img/UI/ending_book1.png',
+        expectedDimensions: { width: 578, height: 477 },
+        actualDimensions: { width: 578, height: 477 },
+        usage: '갤러리와 결과 화면의 열린 책 프레임'
+    }),
+    createUiEntry({
+        id: TUTORIAL_UI_ASSET_IDS.endingBook2,
+        runtimePath: '../asset/tutorial/ui/ending/book-2.png',
+        sourceName: 'img/UI/ending_book2.png',
+        expectedDimensions: { width: 578, height: 477 },
+        actualDimensions: { width: 578, height: 477 },
+        usage: '갤러리 페이지 넘김 두 번째 프레임'
+    }),
+    createUiEntry({
+        id: TUTORIAL_UI_ASSET_IDS.endingBook3,
+        runtimePath: '../asset/tutorial/ui/ending/book-3.png',
+        sourceName: 'img/UI/ending_book3.png',
+        expectedDimensions: { width: 578, height: 477 },
+        actualDimensions: { width: 578, height: 477 },
+        usage: '갤러리 페이지 넘김 세 번째 프레임'
+    }),
+    createUiEntry({
+        id: TUTORIAL_UI_ASSET_IDS.endingBook4,
+        runtimePath: '../asset/tutorial/ui/ending/book-4.png',
+        sourceName: 'img/UI/ending_book4.png',
+        expectedDimensions: { width: 578, height: 477 },
+        actualDimensions: { width: 578, height: 477 },
+        usage: '갤러리 페이지 넘김 네 번째 프레임'
+    }),
+    createUiEntry({
+        id: TUTORIAL_UI_ASSET_IDS.endingLetters,
+        runtimePath: '../asset/tutorial/ui/ending/letters.png',
+        sourceName: 'img/UI/ending_letters.png',
+        expectedDimensions: { width: 512, height: 256 },
+        actualDimensions: { width: 512, height: 256 },
+        sourceRect: { x: 16, y: 16, w: 201, h: 57 },
+        usage: '결과 화면 왼쪽 페이지의 the end 이미지'
     })
 ]);

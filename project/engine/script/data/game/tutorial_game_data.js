@@ -45,7 +45,7 @@ const LORA_INSTABILITY_STATES = [
  * 9×8 두 층으로 구성된 턴제 전투 프로토타입의 정적 데이터를 제공합니다.
  */
 export const TUTORIAL_GAME_DATA = deepFreeze({
-    FEATURES: { CUTSCENES: false },
+    FEATURES: { CUTSCENES: true },
     SPRITES: {
         ITEM: {
             WORLD_HALO_SIZE_TILE_RATIO: 0.45,
@@ -515,10 +515,17 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
     CUTSCENES: {
         opening: {
             id: 'opening',
-            title: '마지막 문',
+            title: 'N번째 플레이어',
             cards: [
-                { speaker: '플레이어', text: '무너지는 두 층 너머, 로라와 출구가 동시에 보였다.', tone: 'neutral' },
-                { speaker: '로라', text: '가까이 오지 마. 이 문은 아직 열 수 없어.', tone: 'tense' }
+                { speaker: '로라', text: '먼저 나가볼게. 금방 돌아올게.', tone: 'soft' },
+                { speaker: '로라', text: '……', tone: 'cold' },
+                { speaker: '로라', text: '거짓말.', tone: 'tense' },
+                { speaker: '로라', text: '다들 그렇게 말하고, 아무도 돌아오지 않았어.', tone: 'tense' },
+                { speaker: '로라', text: '그러니까 이번엔, 아예 못 나가게 하면 되는 거야.', tone: 'tense' },
+                { speaker: '로라', text: '눈을 떠. 나의 N번째 플레이어.', tone: 'tense' },
+                { speaker: '내레이션', text: '당신은 이 세계에서 눈을 떴다.', tone: 'neutral' },
+                { speaker: '내레이션', text: '탈출구는 닫혀 있고, 그 앞에는 그 아이가 서 있다.', tone: 'neutral' },
+                { speaker: '내레이션', text: '어떤 결정을 내리든, 그것은 당신에게 달려 있다.', tone: 'neutral' }
             ]
         },
         teddy: {
@@ -542,11 +549,25 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
                 { speaker: '로라', text: '사진 속 우리는 아직 같은 방향을 보고 있었어.', tone: 'soft' }
             ]
         },
+        basementTransition: {
+            id: 'basement-transition',
+            title: '지하 진입',
+            cards: [
+                { speaker: '시스템', text: '바닥이 무너졌다.', tone: 'tense' },
+                { speaker: '시스템', text: '암전', tone: 'cold' },
+                { speaker: '시스템', text: '지하층에 진입했다.', tone: 'neutral' }
+            ]
+        },
         true: {
             id: 'true',
-            title: '함께 나가는 문',
+            title: '완벽주의자',
             cards: [
-                { speaker: '로라', text: '이번에는 도망치지 않을게.', tone: 'hope' }
+                { speaker: '플레이어', text: '로라.', tone: 'neutral' },
+                { speaker: '로라', text: '나가도 좋아. 이젠 안 막을게.', tone: 'soft' },
+                { speaker: '플레이어', text: '같이 나가자. 널 버려두고 가고 싶지 않아.', tone: 'hope' },
+                { speaker: '로라', text: '하지만.. 아무도 나를 반겨주지 않을 거야.', tone: 'soft' },
+                { speaker: '플레이어', text: '설령 정말 그렇다고 해도, 내가 네 옆에 항상 있어줄게.', tone: 'hope' },
+                { speaker: '플레이어', text: '이제 가자. 더 넓은 세상으로.', tone: 'hope' }
             ]
         },
         special: {
@@ -558,9 +579,13 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         },
         hollow: {
             id: 'hollow',
-            title: '빈 탈출',
+            title: '학살자',
             cards: [
-                { speaker: '플레이어', text: '문은 열렸지만 아무것도 해결되지 않았다.', tone: 'cold' }
+                { speaker: '플레이어', text: '로라.', tone: 'neutral' },
+                { speaker: '로라', text: '안쓰럽다는 듯이 날 쳐다보지 마. 너도 똑같아. 나를 상처주고 떠나버리잖아.', tone: 'tense' },
+                { speaker: '플레이어', text: '로라, 진정하고 내 말…', tone: 'neutral' },
+                { speaker: '로라', text: '아니! 꺼져버려. 네 얼굴만 봐도 소름 돋는 것 같으니까.', tone: 'tense' },
+                { speaker: '로라', text: '누가 더 잘 사나 보자. 여기 처박혀 있는 나인지, 그 좋다는 바깥 세상에서 돌아다니는 너인지.', tone: 'tense' }
             ]
         },
         failure: {

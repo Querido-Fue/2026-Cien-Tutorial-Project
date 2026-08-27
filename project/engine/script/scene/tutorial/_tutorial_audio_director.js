@@ -87,6 +87,7 @@ export class TutorialAudioDirector {
         }
         let cueId = '';
         if (commandType === COMMANDS.GALLERY_SHIFT
+            || commandType === COMMANDS.GALLERY_SECTION_SHIFT
             || commandType === COMMANDS.CUTSCENE_NEXT) {
             cueId = TUTORIAL_UI_AUDIO_IDS.BOOK_TURN;
         } else if (commandType === COMMANDS.RETURN_MENU

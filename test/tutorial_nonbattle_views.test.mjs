@@ -57,11 +57,28 @@ const CHOICES = Object.freeze([
     Object.freeze({ id: 'mascot-costume', label: '인형탈', description: '피해 감소' })
 ]);
 
-const GALLERY_ENTRIES = Object.freeze(Array.from({ length: 8 }, (_, index) => Object.freeze({
-    id: 'cutscene-' + String(index),
-    title: '컷씬 ' + String(index + 1),
-    cardCount: index + 1,
-    unlocked: index % 2 === 0
+const GALLERY_SECTIONS = Object.freeze([
+    ['achievements', '업적', 'galleryBookmarkRedLeft'],
+    ['lora-diary', '로라의 일기', 'galleryBookmarkYellowLeft'],
+    ['developer-diary', '개발자의 일기', 'galleryBookmarkYellowRight'],
+    ['endings', '엔딩', 'galleryBookmarkRedRight'],
+    ['cutscenes', '컷씬', 'galleryBookmarkBlueRight']
+].map(([id, title, bookmarkAssetKey], index) => Object.freeze({
+    id,
+    title,
+    bookmarkAssetKey,
+    selected: index === 0
+})));
+
+const GALLERY_ENTRIES = Object.freeze(Array.from({ length: 6 }, (_, index) => Object.freeze({
+    id: 'achievement-' + String(index),
+    kind: 'achievement',
+    title: '업적 ' + String(index + 1),
+    secondary: 'Achievement ' + String(index + 1),
+    body: '간단 설명 미확정',
+    unlocked: index % 2 === 0,
+    playable: false,
+    replayCutsceneId: null
 })));
 
 /**
@@ -93,8 +110,7 @@ test('비전투 화면의 핵심 콘텐츠와 버튼은 세 기준 화면의 UI 
             [menuView, createViewModel(viewport, {
                 title: 'N번째 플레이어',
                 subtitle: '프로토타입',
-                playCount: 1,
-                bestScore: 10
+                playCount: 1
             })],
             [starterView, createViewModel(viewport, {
                 choices: CHOICES,
@@ -103,21 +119,25 @@ test('비전투 화면의 핵심 콘텐츠와 버튼은 세 기준 화면의 UI 
                 selectionMinScale: 0.72
             })],
             [galleryView, createViewModel(viewport, {
+                sections: GALLERY_SECTIONS,
+                selectedSectionIndex: 0,
+                selectedSectionId: 'achievements',
+                selectedSectionTitle: '업적',
                 entries: GALLERY_ENTRIES,
                 selectedIndex: 0,
+                selectedEntry: GALLERY_ENTRIES[0],
                 selectionProgress: 1,
                 selectionMinScale: 0.72
             })],
             [resultView, createViewModel(viewport, {
                 result: {
-                    label: '작전 종료',
+                    displayName: '완벽주의자',
+                    endingId: 'true',
                     neutralized: false,
                     reason: 'turn-limit',
                     loraActionsCompleted: 12,
-                    instability: 20,
-                    score: 100
+                    instability: 20
                 },
-                bestScore: 100,
                 presentationLocked: false
             })],
             [cutsceneView, createViewModel(viewport, {

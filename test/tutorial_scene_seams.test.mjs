@@ -49,6 +49,7 @@ const EXPECTED_COMMANDS = Object.freeze({
     STARTER_SHIFT: 'tutorial/starter-shift',
     CHOOSE_STARTER: 'tutorial/choose-starter',
     RESTART: 'tutorial/restart',
+    GALLERY_SECTION_SHIFT: 'tutorial/gallery-section-shift',
     GALLERY_SHIFT: 'tutorial/gallery-shift',
     GALLERY_PLAY: 'tutorial/gallery-play',
     CUTSCENE_NEXT: 'tutorial/cutscene-next',

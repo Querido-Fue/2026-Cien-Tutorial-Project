@@ -24,6 +24,8 @@ NW.js와 Canvas/WebGL 기반의 2D 턴제 전술 프로토타입입니다. 기�
 npm test
 npm run test:model
 npm run test:balance
+npm run test:contracts
+npm run test:presentation
 npm run test:assets
 npm run test:audio
 npm run import:assets
@@ -35,10 +37,12 @@ npm run simulate:balance
 - `npm test`: 현재 모델 회귀 테스트와 저장소 정적 검사를 한 번에 실행합니다.
 - `npm run test:model`: 9×8 두 층 전투 모델의 기준 동작을 검사합니다.
 - `npm run test:balance`: 결정론적 밸런스 하네스의 재현성·명령 상한·공개 API 경계를 검사합니다.
+- `npm run test:contracts`: 장면 seam, 비전투 화면, 콘텐츠·메타 계약을 검사합니다.
+- `npm run test:presentation`: 전투 cue, 애니메이션 타임라인과 스프라이트 계약을 검사합니다.
 - `npm run test:assets`: 매니페스트, loader crop/fallback, 맵 투영과 픽셀 보간 계약을 검사합니다.
 - `npm run test:audio`: Fake Audio로 세 버스, crossfade, 중복·동시 재생 제한, 일시정지와 설정 이관을 검사합니다.
 - `npm run import:assets`: 원본을 보존하며 `project/asset/tutorial/`에 ASCII 런타임 이름으로 안전 복사합니다.
-- `npm run check:assets`: 원본·복사본 PNG 39개와 MP3 26개의 헤더·해시·경로·폴백 계약을 검사합니다.
+- `npm run check:assets`: 원본·복사본 PNG 55개와 MP3 26개의 헤더·해시·경로·폴백 계약을 검사합니다.
 - `npm run check:repo`: 데이터 ID, 맵 좌표, 선언된 에셋 경로를 검사합니다.
 - `npm run simulate:balance`: 두 스타터와 네 설명형 전략의 8개 시나리오를 실행하고
   무시되는 `reports/tutorial-balance-report.json`을 갱신합니다. 파일을 쓰지 않고

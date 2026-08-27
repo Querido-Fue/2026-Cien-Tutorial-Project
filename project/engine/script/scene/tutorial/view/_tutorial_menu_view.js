@@ -42,9 +42,13 @@ export class TutorialMenuView {
         };
         const startButton = {
             x: centerX - (buttonW * 0.5),
-            y: toTutorialUiHeight(viewport, 58),
+            y: toTutorialUiHeight(viewport, 56),
             w: buttonW,
             h: toTutorialUiHeight(viewport, 6)
+        };
+        const galleryButton = {
+            ...startButton,
+            y: toTutorialUiHeight(viewport, 65)
         };
         return {
             centerX,
@@ -55,7 +59,7 @@ export class TutorialMenuView {
                 createTutorialTextAnchor(centerX, toTutorialUiHeight(viewport, 31)),
                 createTutorialTextAnchor(centerX, toTutorialUiHeight(viewport, 82))
             ],
-            buttons: [startButton]
+            buttons: [startButton, galleryButton]
         };
     }
 
@@ -107,8 +111,7 @@ export class TutorialMenuView {
         });
         drawTutorialBackgroundPanel(this.#renderPort, layout.panel, colors.UI.Panel, 0.9);
         drawTutorialText(this.#renderPort, {
-            text: '플레이 ' + String(viewModel.playCount)
-                + '회  ·  최고 점수 ' + String(viewModel.bestScore),
+            text: '완료한 플레이  ' + String(viewModel.playCount) + '회',
             x: layout.centerX,
             y: toTutorialUiHeight(viewport, 41.5),
             font: fonts.BODY,
@@ -139,14 +142,24 @@ export class TutorialMenuView {
      * @returns {object[]} 직렬화 가능한 버튼 사양입니다.
      */
     getButtonSpecs(viewModel) {
-        const [rect] = this.getLayout(viewModel).buttons;
-        return [{
-            key: 'menu-start',
-            ...rect,
-            label: '게임 시작  [Enter]',
-            backgroundAssetKey: 'mainButton',
-            backgroundImageAlpha: 0.95,
-            command: { type: TUTORIAL_COMMANDS.START }
-        }];
+        const [startRect, galleryRect] = this.getLayout(viewModel).buttons;
+        return [
+            {
+                key: 'menu-start',
+                ...startRect,
+                label: '새 게임  [Enter]',
+                backgroundAssetKey: 'mainButton',
+                backgroundImageAlpha: 0.95,
+                command: { type: TUTORIAL_COMMANDS.START }
+            },
+            {
+                key: 'menu-gallery',
+                ...galleryRect,
+                label: '갤러리  [G]',
+                backgroundAssetKey: 'mainButton',
+                backgroundImageAlpha: 0.95,
+                command: { type: TUTORIAL_COMMANDS.OPEN_GALLERY }
+            }
+        ];
     }
 }

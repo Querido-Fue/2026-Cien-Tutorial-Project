@@ -191,21 +191,21 @@ test('에셋 포트는 분리 맵을 우선하고 불완전하면 합성본으�
     });
 });
 
-test('발견 업적 배너는 같은 아이템을 한 런에서 한 번만 순서대로 표시한다', () => {
+test('업적 배너는 판정된 알림을 같은 키로 한 런에서 한 번만 순서대로 표시한다', () => {
     const banner = new TutorialAchievementBanner({ durationSeconds: 1 });
-    banner.enqueueFromEvents([
-        { type: 'item-picked', itemId: 'mirror' },
-        { type: 'item-picked', itemId: 'mirror' },
-        { type: 'item-picked', itemId: 'mushroom' }
-    ], TUTORIAL_GAME_DATA.ITEMS);
+    banner.enqueue([
+        { key: 'achievement:mirror', title: '업적 달성', detail: '거울 발견' },
+        { key: 'achievement:mirror', title: '업적 달성', detail: '중복 알림' },
+        { key: 'achievement:mushroom', title: '업적 달성', detail: '버섯 발견' }
+    ]);
     assert.deepEqual(banner.getSnapshot(), {
         visible: true,
-        title: '발견 업적',
+        title: '업적 달성',
         detail: '거울 발견',
         progress: 0
     });
     banner.update(1);
-    assert.equal(banner.getSnapshot().detail, '마리오의 버섯 발견');
+    assert.equal(banner.getSnapshot().detail, '버섯 발견');
     banner.update(1);
     assert.equal(banner.getSnapshot().visible, false);
 });

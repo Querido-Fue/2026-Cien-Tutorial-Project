@@ -25,9 +25,12 @@ import {
     enqueueSimulationCommand
 } from 'simulation/simulation_command_queue.js';
 import { TutorialBattleModel } from './_tutorial_battle_model.js';
+import { TutorialAchievementEvaluator } from './_tutorial_achievement_evaluator.js';
 import { TutorialBattleFocusController } from './_tutorial_battle_focus_controller.js';
 import { TutorialCombatReadabilityPresenter } from './_tutorial_combat_readability_presenter.js';
 import { TutorialCutsceneController } from './_tutorial_cutscene_controller.js';
+import { TutorialCutsceneTriggerRouter } from './_tutorial_cutscene_trigger_router.js';
+import { TutorialGalleryController } from './_tutorial_gallery_controller.js';
 import { TutorialGuidanceController } from './_tutorial_guidance_controller.js';
 import {
     createDefaultTutorialMeta,
@@ -37,6 +40,7 @@ import {
     markTutorialOpeningWatched,
     recordTutorialResult,
     saveTutorialMeta,
+    unlockTutorialAchievement,
     unlockTutorialCutscene
 } from './_tutorial_meta_progress.js';
 import {
@@ -89,6 +93,7 @@ import { TutorialResultView } from './view/_tutorial_result_view.js';
 import { TutorialStarterView } from './view/_tutorial_starter_view.js';
 
 const TUTORIAL_GAME_DATA = getData('TUTORIAL_GAME_DATA');
+const TUTORIAL_CONTENT_DATA = getData('TUTORIAL_CONTENT_DATA');
 const TUTORIAL_ASSET_MANIFEST = getData('TUTORIAL_ASSET_MANIFEST');
 const TUTORIAL_SPRITE_CLIPS = getData('TUTORIAL_SPRITE_CLIPS');
 
@@ -121,6 +126,7 @@ export class TutorialScene extends BaseScene {
     constructor(sceneSystem) {
         super(sceneSystem);
         this.data = TUTORIAL_GAME_DATA;
+        this.content = TUTORIAL_CONTENT_DATA;
         this.mode = MODES.LOADING;
         this.model = null;
         this.floorView = null;
@@ -129,13 +135,26 @@ export class TutorialScene extends BaseScene {
         this.committedMeta = cloneCheckpointValue(this.meta);
         this.metaStaging = false;
         this.cutscenes = new TutorialCutsceneController(this.data.CUTSCENES);
+        const knownCutsceneIds = Object.values(this.data.CUTSCENES).map(
+            (entry) => entry.id
+        );
+        this.cutsceneTriggers = new TutorialCutsceneTriggerRouter({
+            triggerData: this.content.CUTSCENE_TRIGGERS,
+            knownCutsceneIds
+        });
+        this.galleryController = new TutorialGalleryController({
+            content: this.content,
+            cutscenes: this.data.CUTSCENES
+        });
+        this.achievementEvaluator = new TutorialAchievementEvaluator(
+            this.content.ACHIEVEMENTS
+        );
         this.cutsceneReturnMode = MODES.MENU;
         this.pendingCutscenes = [];
+        this.pendingEndingCutsceneId = null;
         this.runCutsceneIds = new Set();
         this.battleFocus = new TutorialBattleFocusController();
         this.guidance = new TutorialGuidanceController();
-        this.galleryEntries = Object.values(this.data.CUTSCENES);
-        this.galleryIndex = 0;
         this.starterIndex = Math.max(
             0,
             this.data.STARTER_CHOICES.findIndex((choice) => choice.id === 'mascot-costume')
@@ -169,8 +188,8 @@ export class TutorialScene extends BaseScene {
         this.loadingView = new TutorialLoadingView(tutorialRenderPort);
         this.menuView = new TutorialMenuView(tutorialRenderPort, this.assetPort);
         this.starterView = new TutorialStarterView(tutorialRenderPort, this.assetPort);
-        this.galleryView = new TutorialGalleryView(tutorialRenderPort);
-        this.resultView = new TutorialResultView(tutorialRenderPort);
+        this.galleryView = new TutorialGalleryView(tutorialRenderPort, this.assetPort);
+        this.resultView = new TutorialResultView(tutorialRenderPort, this.assetPort);
         this.cutsceneView = new TutorialCutsceneView(tutorialRenderPort);
         this.battleTutorialView = new TutorialBattleTutorialView(
             tutorialRenderPort,
@@ -388,6 +407,9 @@ export class TutorialScene extends BaseScene {
                 case COMMANDS.RESTART:
                     this.#applyRestart();
                     break;
+                case COMMANDS.GALLERY_SECTION_SHIFT:
+                    this.#applyGallerySectionShift(command.payload);
+                    break;
                 case COMMANDS.GALLERY_SHIFT:
                     this.#applyGalleryShift(command.payload);
                     break;
@@ -501,7 +523,9 @@ export class TutorialScene extends BaseScene {
         clearSimulationCommands();
         this.buttonHost.destroy();
         this.cutscenes.close();
+        this.cutsceneTriggers.reset();
         this.pendingCutscenes = [];
+        this.pendingEndingCutsceneId = null;
         this.runCutsceneIds.clear();
         this.battleFocus.reset();
         this.guidance.reset();
@@ -545,7 +569,6 @@ export class TutorialScene extends BaseScene {
         if (this.mode !== MODES.MENU || this.data.FEATURES?.CUTSCENES !== true) {
             return;
         }
-        this.galleryIndex = clampNumber(this.galleryIndex, 0, this.galleryEntries.length - 1);
         this.mode = MODES.GALLERY;
     }
 
@@ -619,7 +642,9 @@ export class TutorialScene extends BaseScene {
         this.spriteCueRouter.reset();
         this.audioDirector.resetTransient();
         this.cutscenes.close();
+        this.cutsceneTriggers.reset();
         this.pendingCutscenes = [];
+        this.pendingEndingCutsceneId = null;
         this.runCutsceneIds.clear();
         this.cutsceneReturnMode = nextMode;
         this.model = null;
@@ -674,7 +699,9 @@ export class TutorialScene extends BaseScene {
         this.resultData = null;
         this.resultRecorded = false;
         this.pendingCutscenes = [];
-        this.runCutsceneIds = new Set(initialSnapshot?.unlockedCutscenes || []);
+        this.pendingEndingCutsceneId = null;
+        this.runCutsceneIds = new Set();
+        const openingCutsceneIds = this.cutsceneTriggers.beginRun(this.meta);
         this.attackSelected = false;
         this.attackWeapon = 'melee';
         this.targetIndex = 0;
@@ -708,6 +735,22 @@ export class TutorialScene extends BaseScene {
         this.#refreshBattleCache();
         this.#syncSpriteRoster();
         this.#appendEvent('전투 시작 · 이동 경로를 지정하고 확정한 뒤 행동하세요.');
+        for (const cutsceneId of openingCutsceneIds) {
+            this.#openCutscene(cutsceneId, MODES.BATTLE, false);
+        }
+    }
+
+    /** 갤러리 섹션을 키보드 또는 섹션 ID로 전환합니다. @param {object} payload @private */
+    #applyGallerySectionShift(payload) {
+        if (this.mode !== MODES.GALLERY || this.cutscenes.isOpen()) {
+            return;
+        }
+        if (typeof payload?.sectionId === 'string') {
+            this.galleryController.selectSection(payload.sectionId);
+        } else {
+            this.galleryController.shiftSection(Number(payload?.delta) || 0);
+        }
+        this.presentationTimeline.startSelection('menu-selection');
     }
 
     /**
@@ -719,12 +762,8 @@ export class TutorialScene extends BaseScene {
         if (this.mode !== MODES.GALLERY || this.cutscenes.isOpen()) {
             return;
         }
-        const count = this.galleryEntries.length;
-        if (count <= 0) {
-            return;
-        }
         const delta = Number(payload?.delta) || 0;
-        this.galleryIndex = (this.galleryIndex + delta + count) % count;
+        this.galleryController.shiftEntry(delta, this.meta);
         this.presentationTimeline.startSelection('menu-selection');
     }
 
@@ -736,11 +775,11 @@ export class TutorialScene extends BaseScene {
         if (this.mode !== MODES.GALLERY || this.cutscenes.isOpen()) {
             return;
         }
-        const entry = this.galleryEntries[this.galleryIndex];
-        if (!entry || !this.#isCutsceneUnlocked(entry.id)) {
+        const entry = this.galleryController.getSelectedEntry(this.meta);
+        if (!entry?.playable || typeof entry.replayCutsceneId !== 'string') {
             return;
         }
-        this.#openCutscene(entry.id, MODES.GALLERY, true);
+        this.#openCutscene(entry.replayCutsceneId, MODES.GALLERY, true);
     }
 
     /**
@@ -756,13 +795,7 @@ export class TutorialScene extends BaseScene {
             return;
         }
         const completedId = transition.completedCutsceneId;
-        if (completedId) {
-            let nextMeta = unlockTutorialCutscene(this.meta, completedId);
-            if (completedId === 'opening') {
-                nextMeta = markTutorialOpeningWatched(nextMeta);
-            }
-            this.#replaceMeta(nextMeta);
-        }
+        this.#recordCutsceneSeen(completedId);
         this.#resumeAfterCutscene();
     }
 
@@ -774,8 +807,22 @@ export class TutorialScene extends BaseScene {
         if (!this.cutscenes.isOpen()) {
             return;
         }
+        const skippedId = this.cutscenes.getState().cutsceneId;
         this.cutscenes.close();
+        this.#recordCutsceneSeen(skippedId);
         this.#resumeAfterCutscene();
+    }
+
+    /** 완료 또는 스킵한 컷씬을 갤러리 해금과 오프닝 정책에 반영합니다. @param {string|null} id @private */
+    #recordCutsceneSeen(id) {
+        if (typeof id !== 'string' || !id) {
+            return;
+        }
+        let nextMeta = unlockTutorialCutscene(this.meta, id);
+        if (id === this.content.CUTSCENE_TRIGGERS.openingCutsceneId) {
+            nextMeta = markTutorialOpeningWatched(nextMeta);
+        }
+        this.#replaceMeta(nextMeta);
     }
 
     /**
@@ -1136,13 +1183,28 @@ export class TutorialScene extends BaseScene {
             }
         });
         this.presentationTimeline.applyCues(orderedCues);
-        const achievementCount = this.achievementBanner.enqueueFromEvents(
+        const achievementResult = this.achievementEvaluator.evaluate(
             result?.events,
-            this.data.ITEMS
+            this.meta.unlockedAchievementIds
+        );
+        let achievementMeta = this.meta;
+        for (const achievementId of achievementResult.unlockedIds) {
+            achievementMeta = unlockTutorialAchievement(achievementMeta, achievementId);
+        }
+        this.#replaceMeta(achievementMeta);
+        const achievementCount = this.achievementBanner.enqueue(
+            achievementResult.notifications
         );
         this.audioDirector.notifyAchievements(achievementCount);
         this.lastPresentationSnapshot = cloneCheckpointValue(nextSnapshot);
         this.#syncMetaFromModel();
+        for (const cutsceneId of this.cutsceneTriggers.consume(result?.events)) {
+            if (this.#isEndingCutsceneId(cutsceneId)) {
+                this.pendingEndingCutsceneId = cutsceneId;
+            } else {
+                this.#openCutscene(cutsceneId, MODES.BATTLE, false);
+            }
+        }
         this.#refreshBattleCache();
         this.#enterResultIfNeeded();
         if (this.presentationTimeline.getState().floorIndex
@@ -1185,20 +1247,6 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * 모델이 공개한 컷씬을 런타임 표시 목록에 넣습니다.
-     * @private
-     */
-    #collectRunCutscenes() {
-        const snapshot = this.#getSnapshot();
-        for (const rawId of toList(snapshot?.unlockedCutscenes)) {
-            const id = typeof rawId === 'string' ? rawId : rawId?.id;
-            if (id) {
-                this.#openCutscene(id, this.mode, false);
-            }
-        }
-    }
-
-    /**
      * 모델 결과가 생기면 결과 모드와 메타 기록을 구성합니다.
      * @private
      */
@@ -1211,7 +1259,9 @@ export class TutorialScene extends BaseScene {
         if (!rawResult) {
             return;
         }
-        if (this.spriteCueRouter.isBusy()) {
+        if (this.cutscenes.isOpen()
+            || this.pendingCutscenes.length > 0
+            || this.spriteCueRouter.isBusy()) {
             return;
         }
         const endingSource = rawResult.endingId
@@ -1220,13 +1270,8 @@ export class TutorialScene extends BaseScene {
             || rawResult.id;
         const endingId = typeof endingSource === 'string'
             ? endingSource
-            : this.galleryEntries[this.galleryEntries.length - 1]?.id;
-        const rawScore = Number(rawResult.score);
-        const score = Math.max(
-            0,
-            Math.round(Number.isFinite(rawScore) ? rawScore : this.#calculateScore())
-        );
-        const entry = this.galleryEntries.find((candidate) => candidate.id === endingId);
+            : 'failure';
+        const ending = this.#getEndingDefinition(endingId);
         const instability = clampNumber(
             rawResult.instability ?? this.model.lora?.instability,
             0,
@@ -1235,32 +1280,36 @@ export class TutorialScene extends BaseScene {
         this.resultData = {
             ...rawResult,
             endingId,
-            score,
             instability,
-            label: rawResult.label || entry?.title || '작전 종료'
+            displayName: ending.displayName,
+            label: rawResult.label || '작전 종료'
         };
         this.mode = MODES.RESULT;
         this.resultRecorded = true;
-        this.#replaceMeta(recordTutorialResult(this.meta, {
-            score,
-            endingId
-        }));
+        this.#replaceMeta(recordTutorialResult(this.meta, { endingId }));
+        const endingCutsceneId = this.pendingEndingCutsceneId;
+        this.pendingEndingCutsceneId = null;
+        if (endingCutsceneId === ending.cutsceneId) {
+            this.#openCutscene(endingCutsceneId, MODES.RESULT, false);
+        }
     }
 
-    /**
-     * 현재 전투 상태로 안정적인 점수 기본값을 계산합니다.
-     * @returns {number} 점수입니다.
-     * @private
-     */
-    #calculateScore() {
-        const hp = clampNumber(this.model?.player?.hp, 0, 100);
-        const instability = clampNumber(this.model?.lora?.instability, 0, 100);
-        const turnBonus = Math.max(
-            0,
-            (Number(this.model?.maxTurns) || this.data.RULES.MAX_TURNS)
-                - (Number(this.model?.loraActionsCompleted) || 0)
-        ) * 50;
-        return Math.round((hp * 10) + ((100 - instability) * 12) + turnBonus);
+    /** @param {string} endingId @returns {object} 표시명과 컷씬이 분리된 엔딩 정의입니다. @private */
+    #getEndingDefinition(endingId) {
+        return this.content.ENDINGS.find((ending) => ending.id === endingId)
+            || this.content.ENDINGS.find((ending) => ending.id === 'failure')
+            || {
+                id: 'failure',
+                displayName: 'happily ever after..?',
+                cutsceneId: null
+            };
+    }
+
+    /** @param {string} cutsceneId @returns {boolean} 엔딩 뒤 재생할 컷씬인지 여부입니다. @private */
+    #isEndingCutsceneId(cutsceneId) {
+        return this.content.ENDINGS.some(
+            (ending) => ending.cutsceneId === cutsceneId
+        );
     }
 
     /**
@@ -1317,7 +1366,9 @@ export class TutorialScene extends BaseScene {
         if (typeof id !== 'string' || this.data.FEATURES?.CUTSCENES !== true) {
             return;
         }
-        const exists = this.galleryEntries.some((entry) => entry.id === id);
+        const exists = Object.values(this.data.CUTSCENES).some(
+            (entry) => entry.id === id
+        );
         if (!exists || (!repeat && this.runCutsceneIds.has(id))) {
             return;
         }
@@ -1335,16 +1386,6 @@ export class TutorialScene extends BaseScene {
         if (transition.ok) {
             this.cutsceneReturnMode = returnMode;
         }
-    }
-
-    /**
-     * 컷씬 해금 여부를 확인합니다.
-     * @param {string} id - 컷씬 ID입니다.
-     * @returns {boolean} 해금 상태입니다.
-     * @private
-     */
-    #isCutsceneUnlocked(id) {
-        return this.meta.unlockedCutsceneIds.includes(id);
     }
 
     /**
@@ -1615,7 +1656,9 @@ export class TutorialScene extends BaseScene {
         }
 
         if (this.mode === MODES.MENU) {
-            if (this.#wasKeyPressed(KEY_CODES.CONFIRM)) {
+            if (this.#wasKeyPressed(KEY_CODES.GALLERY)) {
+                enqueueSimulationCommand({ type: COMMANDS.OPEN_GALLERY });
+            } else if (this.#wasKeyPressed(KEY_CODES.CONFIRM)) {
                 enqueueSimulationCommand({ type: COMMANDS.START });
             }
             return;
@@ -1641,15 +1684,18 @@ export class TutorialScene extends BaseScene {
         }
 
         if (this.mode === MODES.GALLERY) {
-            if (this.#wasAnyKeyPressed(SELECTION_KEY_CODES.PREVIOUS)) {
+            const direction = KEY_DIRECTIONS.find(
+                (entry) => this.#wasAnyKeyPressed(entry.codes)
+            );
+            if (direction?.y) {
                 enqueueSimulationCommand({
-                    type: COMMANDS.GALLERY_SHIFT,
-                    payload: { delta: -1 }
+                    type: COMMANDS.GALLERY_SECTION_SHIFT,
+                    payload: { delta: direction.y }
                 });
-            } else if (this.#wasAnyKeyPressed(SELECTION_KEY_CODES.NEXT)) {
+            } else if (direction?.x) {
                 enqueueSimulationCommand({
                     type: COMMANDS.GALLERY_SHIFT,
-                    payload: { delta: 1 }
+                    payload: { delta: direction.x }
                 });
             } else if (this.#wasKeyPressed(KEY_CODES.CONFIRM)) {
                 enqueueSimulationCommand({ type: COMMANDS.GALLERY_PLAY });
@@ -1975,8 +2021,7 @@ export class TutorialScene extends BaseScene {
             ...this.#createNonbattleViewFrame(),
             title: this.data.TEXT.TITLE,
             subtitle: this.data.TEXT.SUBTITLE,
-            playCount: Number(this.meta?.playCount) || 0,
-            bestScore: Number(this.meta?.bestScore) || 0
+            playCount: Number(this.meta?.playCount) || 0
         });
     }
 
@@ -1999,15 +2044,10 @@ export class TutorialScene extends BaseScene {
 
     /** @returns {object} 갤러리 뷰 모델입니다. @private */
     #createGalleryViewModel() {
+        const gallery = this.galleryController.getSnapshot(this.meta);
         return Object.freeze({
             ...this.#createNonbattleViewFrame(),
-            entries: Object.freeze(this.galleryEntries.map((entry) => Object.freeze({
-                id: entry.id,
-                title: entry.title,
-                cardCount: Array.isArray(entry.cards) ? entry.cards.length : 0,
-                unlocked: this.#isCutsceneUnlocked(entry.id)
-            }))),
-            selectedIndex: this.galleryIndex,
+            ...gallery,
             selectionProgress: Number(
                 this.presentationTimeline.getState().menuSelectionProgress
             ) || 0,
@@ -2020,7 +2060,6 @@ export class TutorialScene extends BaseScene {
         return Object.freeze({
             ...this.#createNonbattleViewFrame(),
             result: Object.freeze({ ...(this.resultData || {}) }),
-            bestScore: Number(this.meta?.bestScore) || 0,
             presentationLocked: this.presentationTimeline.isLocked()
         });
     }
@@ -2360,6 +2399,7 @@ export class TutorialScene extends BaseScene {
      */
     #getButtonSignature() {
         const cutsceneState = this.cutscenes.getState();
+        const galleryState = this.galleryController.getSnapshot(this.meta);
         const inventory = this.#getInventoryEntries()
             .map((entry) => entry.itemId + ':' + String(entry.count))
             .join('|');
@@ -2368,7 +2408,8 @@ export class TutorialScene extends BaseScene {
             cutsceneState.open ? cutsceneState.cutsceneId : '-',
             String(cutsceneState.cardIndex),
             String(this.starterIndex),
-            String(this.galleryIndex),
+            galleryState.selectedSectionId,
+            String(galleryState.selectedIndex),
             String(this.model?.turn),
             String(this.model?.phase),
             String(this.model?.movementUsed),
