@@ -13,6 +13,9 @@ import {
     runtimeRoot,
 } from '../project/engine/script/util/nw_bridge.js';
 import { buildWeb } from '../scripts/build-web.mjs';
+import nthplayerWorker, {
+    createUpstreamUrl,
+} from '../scripts/cloudflare/nthplayer-worker.js';
 
 class TestStorage {
     constructor() {
@@ -78,4 +81,30 @@ test('웹 빌드는 Pages 하위 경로에서 동작하는 정적 번들을 만�
     await stat(path.join(outputRoot, '.nojekyll'));
     await stat(path.join(outputRoot, 'asset', 'font', 'LanaPixel.ttf'));
     await stat(path.join(outputRoot, 'asset', 'tutorial', 'maps', 'first-floor-background.png'));
+});
+
+test('Cloudflare 경로 프록시는 공개 경로와 쿼리를 Pages 업스트림으로 옮긴다', () => {
+    const upstreamUrl = createUpstreamUrl(new URL('https://jukchang.com/game/nthplayer/asset/ui.png?v=7'));
+    assert.equal(
+        upstreamUrl.href,
+        'https://querido-fue.github.io/2026-Cien-Tutorial-Project/asset/ui.png?v=7',
+    );
+});
+
+test('Cloudflare 경로 프록시는 기준 경로에 후행 슬래시를 강제한다', async () => {
+    const response = await nthplayerWorker.fetch(new Request('https://jukchang.com/game/nthplayer?from=home'));
+    assert.equal(response.status, 308);
+    assert.equal(response.headers.get('location'), 'https://jukchang.com/game/nthplayer/?from=home');
+});
+
+test('Cloudflare 경로 프록시는 범위 밖 경로와 쓰기 요청을 거부한다', async () => {
+    const outsideResponse = await nthplayerWorker.fetch(new Request('https://jukchang.com/'));
+    assert.equal(outsideResponse.status, 404);
+
+    const writeResponse = await nthplayerWorker.fetch(new Request(
+        'https://jukchang.com/game/nthplayer/save',
+        { method: 'POST' },
+    ));
+    assert.equal(writeResponse.status, 405);
+    assert.equal(writeResponse.headers.get('allow'), 'GET, HEAD');
 });

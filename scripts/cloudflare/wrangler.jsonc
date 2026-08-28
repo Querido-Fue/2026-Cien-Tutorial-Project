@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nthplayer-path-router",
+  "main": "./nthplayer-worker.js",
+  "compatibility_date": "2026-08-28",
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "jukchang.com/game/nthplayer",
+      "zone_name": "jukchang.com"
+    },
+    {
+      "pattern": "jukchang.com/game/nthplayer/*",
+      "zone_name": "jukchang.com"
+    }
+  ]
+}

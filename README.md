@@ -1,6 +1,6 @@
 # N번째 플레이어
 
-NW.js와 Canvas/WebGL 기반의 2D 턴제 전술 프로토타입입니다. 기본 진입점은
+NW.js·웹 브라우저와 Canvas/WebGL 기반의 2D 턴제 전술 프로토타입입니다. 기본 진입점은
 `project/engine/index.html`이며 전투 규칙은 화면과 분리된
 `TutorialBattleModel`이 담당합니다.
 
@@ -8,12 +8,18 @@ NW.js와 Canvas/WebGL 기반의 2D 턴제 전술 프로토타입입니다. 기�
 
 - 자동 검사: Node.js `22.18.0`(CI 고정 버전)과 npm
 - 데스크톱 런타임·패키징: 공식 `nwjs-v0.108.0-win-x64`
+- 웹 런타임: 최신 Chromium, Firefox, Safari와 GitHub Pages 정적 호스팅
 - 지원 패키지: Windows x64만 해당합니다. macOS/Linux 결과물은 현재 계약과 검증기가
   없으므로 Windows 결과물을 이름만 바꿔 배포하지 않습니다.
 
 개발 실행은 공식 NW.js `0.108.0` Windows x64 압축을 푼 뒤 저장소의 `project` 내용을
 그 런타임 폴더에 두고 `nw.exe`를 실행합니다. `project/package.json`은 최소 1280×720 창과
 `engine/index.html` 진입점을 선언합니다. NW.js 바이너리는 저장소에 커밋하지 않습니다.
+
+웹 번들은 `npm run build:web`으로 `dist/web`에 생성합니다. `main` 브랜치 push는
+`.github/workflows/pages.yml`을 통해 전체 검증 뒤 GitHub Pages에 자동 배포됩니다. 로컬
+실행과 `jukchang.com/game/nthplayer` 경로 프록시 구성은
+[`docs/web-deployment.md`](docs/web-deployment.md)를 확인합니다.
 
 ## 재현 가능한 Windows 패키징
 
@@ -53,6 +59,8 @@ npm run import:assets
 npm run check:assets
 npm run check:repo
 npm run simulate:balance
+npm run test:web
+npm run build:web
 ```
 
 - `npm test`: 전체 Node 회귀 테스트와 에셋·저장소·릴리스 감사를 한 번에 실행합니다.
@@ -71,6 +79,8 @@ npm run simulate:balance
 - `npm run simulate:balance`: 두 스타터와 네 설명형 전략의 8개 시나리오를 실행하고
   무시되는 `reports/tutorial-balance-report.json`을 갱신합니다. 파일을 쓰지 않고
   JSON만 보려면 `npm run simulate:balance -- --json --no-write`를 사용합니다.
+- `npm run test:web`: 브라우저 저장 어댑터, Pages 정적 번들, Cloudflare 경로 프록시를 검사합니다.
+- `npm run build:web`: Pages와 경로 프록시에서 실행할 상대 URL 기반 정적 번들을 생성합니다.
 
 아트와 사운드는 각각 `TUTORIAL_ASSET_MANIFEST`, `TUTORIAL_AUDIO_MANIFEST`와
 `check:assets`가 엄격하게 검사합니다. 제공되지 않은 지하층 BGM은 1층 곡으로 명시적
@@ -80,13 +90,13 @@ npm run simulate:balance
 
 | 경로 | 역할 |
 | --- | --- |
-| `project/engine/` | NW.js HTML 진입점, 엔진, 튜토리얼 런타임 |
+| `project/engine/` | NW.js·브라우저 공용 HTML 진입점, 엔진, 튜토리얼 런타임 |
 | `project/asset/` | 게임 아트, 폰트, 사운드 원본 및 런타임 에셋 |
 | `project/license/` | 배포 에셋 라이선스 |
 | `test/` | Node 기반 회귀 테스트 |
-| `scripts/` | 저장소·에셋·릴리스 검증, NW.js 패키징, 밸런스 시뮬레이션 도구 |
+| `scripts/` | 저장소·에셋·릴리스 검증, NW.js·웹 패키징, Cloudflare 프록시, 밸런스 도구 |
 | `manifests/` | 에셋 출처·권리 상태의 기계 판독 매니페스트 |
-| `.github/workflows/ci.yml` | Node 22.18.0 클린 체크아웃 CI |
+| `.github/workflows/` | Node 22.18.0 CI와 GitHub Pages 자동 배포 |
 | `docs/` | 현재 빌드 기준선과 개발 문서 |
 
 아트 원본은 `project/asset/img`과 `project/asset/old`에 보존하고,
@@ -97,7 +107,7 @@ npm run simulate:balance
 
 ## 공개 릴리스 상태
 
-코드의 내부 RC 검증과 Windows 패키징 계약은 준비됐지만 공개 배포는 차단 상태입니다.
+코드의 내부 RC 검증, Windows 패키징과 웹 배포 계약은 준비됐지만 공개 배포권 감사는 미완료입니다.
 프로젝트 코드 라이선스, 제공 아트·오디오의 원본별 배포 권리, 외부 게임을 참조한 네 아이템
 표현을 먼저 확정하거나 교체해야 합니다. 상세 근거와 완료 조건은
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md),
