@@ -6,6 +6,7 @@ import { TutorialCutsceneView } from '../project/engine/script/scene/tutorial/vi
 import { TutorialGalleryView } from '../project/engine/script/scene/tutorial/view/_tutorial_gallery_view.js';
 import { TutorialLoadingView } from '../project/engine/script/scene/tutorial/view/_tutorial_loading_view.js';
 import { TutorialMenuView } from '../project/engine/script/scene/tutorial/view/_tutorial_menu_view.js';
+import { TutorialPauseView } from '../project/engine/script/scene/tutorial/view/_tutorial_pause_view.js';
 import { TutorialResultView } from '../project/engine/script/scene/tutorial/view/_tutorial_result_view.js';
 import { TutorialStarterView } from '../project/engine/script/scene/tutorial/view/_tutorial_starter_view.js';
 import { isTutorialRectWithinUi } from '../project/engine/script/scene/tutorial/view/_tutorial_nonbattle_view_helpers.js';
@@ -100,6 +101,7 @@ test('비전투 화면의 핵심 콘텐츠와 버튼은 세 기준 화면의 UI 
     const loadingView = new TutorialLoadingView(NOOP_RENDER_PORT);
     const menuView = new TutorialMenuView(NOOP_RENDER_PORT);
     const starterView = new TutorialStarterView(NOOP_RENDER_PORT);
+    const pauseView = new TutorialPauseView(NOOP_RENDER_PORT);
     const galleryView = new TutorialGalleryView(NOOP_RENDER_PORT);
     const resultView = new TutorialResultView(NOOP_RENDER_PORT);
     const cutsceneView = new TutorialCutsceneView(NOOP_RENDER_PORT);
@@ -118,6 +120,7 @@ test('비전투 화면의 핵심 콘텐츠와 버튼은 세 기준 화면의 UI 
                 selectionProgress: 1,
                 selectionMinScale: 0.72
             })],
+            [pauseView, createViewModel(viewport, { selectedIndex: 0 })],
             [galleryView, createViewModel(viewport, {
                 sections: GALLERY_SECTIONS,
                 selectedSectionIndex: 0,
@@ -196,12 +199,52 @@ test('메인 메뉴는 타이틀과 버튼 외 안내 문구·카메라 오버�
         renderCommands.filter(({ command }) => command.shape === 'text'),
         []
     );
+    const buttons = view.getButtonSpecs(createViewModel(VIEWPORTS[0], {
+        canContinue: false
+    }));
+    assert.deepEqual(buttons.map((button) => button.key), [
+        'menu-continue',
+        'menu-start',
+        'menu-gallery'
+    ]);
+    assert.equal(buttons[0].enabled, false);
+    assert.equal(buttons.every((button) => button.fitHitToBackground === true), true);
+});
+
+test('스타터 카드와 Pause 메뉴는 보이는 영역 자체를 클릭 계약으로 사용한다', () => {
+    const starter = new TutorialStarterView(NOOP_RENDER_PORT);
+    const starterModel = createViewModel(VIEWPORTS[0], {
+        choices: CHOICES,
+        selectedIndex: 0,
+        selectionProgress: 1,
+        selectionMinScale: 0.72
+    });
+    const starterLayout = starter.getLayout(starterModel);
+    const starterButtons = starter.getButtonSpecs(starterModel);
+    assert.equal(starterButtons.length, 2);
+    assert.deepEqual(
+        starterButtons.map(({ x, y, w, h }) => ({ x, y, w, h })),
+        starterLayout.cards.map(({ x, y, w, h }) => ({ x, y, w, h }))
+    );
+    assert.equal(starterButtons.every((button) => button.drawBackground === false), true);
+
+    const pause = new TutorialPauseView(NOOP_RENDER_PORT);
+    const pauseButtons = pause.getButtonSpecs(createViewModel(VIEWPORTS[0], {
+        selectedIndex: 1
+    }));
+    assert.deepEqual(pauseButtons.map((button) => button.command.type), [
+        'tutorial/resume',
+        'tutorial/restart',
+        'tutorial/return-menu'
+    ]);
+    assert.equal(pauseButtons[1].active, true);
 });
 
 test('비전투 뷰는 장면·모델·저장·명령 큐를 직접 import하지 않는다', async () => {
     const names = [
         '_tutorial_loading_view.js',
         '_tutorial_menu_view.js',
+        '_tutorial_pause_view.js',
         '_tutorial_starter_view.js',
         '_tutorial_gallery_view.js',
         '_tutorial_result_view.js',

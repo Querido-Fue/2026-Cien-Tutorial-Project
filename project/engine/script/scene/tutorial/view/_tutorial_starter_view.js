@@ -1,14 +1,18 @@
 import { TUTORIAL_COMMANDS } from '../_tutorial_scene_constants.js';
 import {
-    createTutorialTextAnchor,
     drawTutorialBackgroundPanel,
     drawTutorialText,
-    getTutorialUiCenterX,
-    toTutorialUiHeight,
-    toTutorialUiWidth,
     wrapTutorialText
 } from './_tutorial_nonbattle_view_helpers.js';
-import { drawTutorialPixelAsset } from './_tutorial_asset_view_helpers.js';
+import {
+    drawTutorialPixelAsset,
+    fitTutorialAssetRect
+} from './_tutorial_asset_view_helpers.js';
+import {
+    createTutorialDesignSpace,
+    projectTutorialDesignRect
+} from './_tutorial_design_space.js';
+import { TUTORIAL_UI_LAYOUT_TOKENS } from './_tutorial_ui_layout_tokens.js';
 
 /**
  * @class TutorialStarterView
@@ -31,41 +35,22 @@ export class TutorialStarterView {
      */
     getLayout(viewModel) {
         const { viewport, choices } = viewModel;
-        const centerX = getTutorialUiCenterX(viewport);
-        const cardW = toTutorialUiWidth(viewport, 27);
-        const gap = toTutorialUiWidth(viewport, 3);
-        const count = Math.max(1, choices.length);
-        const startX = Number(viewport.UIOffsetX)
-            + ((Number(viewport.UIWW) - ((cardW * count) + (gap * (count - 1)))) * 0.5);
+        const space = createTutorialDesignSpace(viewport);
+        const tokens = TUTORIAL_UI_LAYOUT_TOKENS.STARTER;
+        const map = projectTutorialDesignRect(space, tokens.MAP);
+        const title = projectTutorialDesignRect(space, tokens.TITLE);
+        const cardTokens = [tokens.LEFT_CARD, tokens.RIGHT_CARD];
         const cards = choices.map((choice, index) => ({
             id: choice.id,
-            x: startX + (index * (cardW + gap)),
-            y: toTutorialUiHeight(viewport, 31),
-            w: cardW,
-            h: toTutorialUiHeight(viewport, 22)
+            ...projectTutorialDesignRect(space, cardTokens[index] || cardTokens[0])
         }));
-        const choiceButtons = cards.map((card) => ({
-            x: card.x,
-            y: toTutorialUiHeight(viewport, 55),
-            w: card.w,
-            h: toTutorialUiHeight(viewport, 11)
-        }));
-        const backButton = {
-            x: Number(viewport.UIOffsetX) + toTutorialUiWidth(viewport, 4),
-            y: toTutorialUiHeight(viewport, 88),
-            w: toTutorialUiWidth(viewport, 14),
-            h: toTutorialUiHeight(viewport, 5)
-        };
         return {
-            centerX,
+            space,
+            map,
+            title,
             cards,
-            contentRects: [
-                createTutorialTextAnchor(centerX, toTutorialUiHeight(viewport, 18)),
-                createTutorialTextAnchor(centerX, toTutorialUiHeight(viewport, 25)),
-                createTutorialTextAnchor(centerX, toTutorialUiHeight(viewport, 73)),
-                ...cards
-            ],
-            buttons: [...choiceButtons, backButton]
+            contentRects: [map, title, ...cards],
+            buttons: [...cards]
         };
     }
 
@@ -75,21 +60,32 @@ export class TutorialStarterView {
      */
     draw(viewModel) {
         const layout = this.getLayout(viewModel);
-        const { colors, fonts, viewport } = viewModel;
-        drawTutorialText(this.#renderPort, {
-            text: '출발 장비 선택',
-            x: layout.centerX,
-            y: toTutorialUiHeight(viewport, 18),
-            font: fonts.TITLE,
-            fill: colors.UI.Text,
-            align: 'center'
+        const { colors, fonts } = viewModel;
+        const artwork = this.#assetPort.getMapArtwork?.('first-floor');
+        const mapRect = fitTutorialAssetRect(artwork?.layers?.[0], layout.map)
+            || layout.map;
+        for (const image of artwork?.layers || []) {
+            this.#renderPort.renderGL('background', {
+                image,
+                x: mapRect.x,
+                y: mapRect.y,
+                w: mapRect.w,
+                h: mapRect.h,
+                smoothing: false
+            });
+        }
+        drawTutorialPixelAsset(this.#renderPort, {
+            layer: 'ui',
+            image: this.#assetPort.getUiAsset?.('turnFrame'),
+            rect: layout.title,
+            alpha: 0.98
         });
         drawTutorialText(this.#renderPort, {
-            text: '매 턴 이동 경로를 먼저 확정한 뒤 행동합니다. 출발 장비를 고르세요.',
-            x: layout.centerX,
-            y: toTutorialUiHeight(viewport, 25),
-            font: fonts.BODY,
-            fill: colors.UI.Muted,
+            text: '아이템 선택',
+            x: layout.title.x + (layout.title.w * 0.5),
+            y: layout.title.y + (layout.title.h * 0.5),
+            font: fonts.HEADING,
+            fill: colors.UI.Text,
             align: 'center'
         });
         viewModel.choices.forEach((choice, index) => {
@@ -108,8 +104,8 @@ export class TutorialStarterView {
             drawTutorialBackgroundPanel(
                 this.#renderPort,
                 scaledRect,
-                selected ? colors.UI.PanelStrong : colors.UI.Panel,
-                0.95
+                selected ? colors.UI.Accent : colors.UI.Panel,
+                selected ? 0.42 : 0.22
             );
             drawTutorialPixelAsset(this.#renderPort, {
                 layer: 'ui',
@@ -117,40 +113,44 @@ export class TutorialStarterView {
                 rect: scaledRect,
                 alpha: selected ? 1 : 0.76
             });
+            const iconSize = Math.min(card.w * 0.42, card.h * 0.24);
+            drawTutorialPixelAsset(this.#renderPort, {
+                layer: 'ui',
+                image: this.#assetPort.getItemIcon?.(choice.id),
+                rect: {
+                    x: card.x + ((card.w - iconSize) * 0.5),
+                    y: card.y + (card.h * 0.29),
+                    w: iconSize,
+                    h: iconSize
+                },
+                alpha: selected ? 1 : 0.76
+            });
             drawTutorialText(this.#renderPort, {
-                text: choice.label,
+                text: (selected ? '◆ ' : '') + choice.label,
                 x: card.x + (card.w * 0.5),
-                y: toTutorialUiHeight(viewport, 36),
-                font: fonts.HEADING,
-                fill: colors.UI.Text,
+                y: card.y + (card.h * 0.17),
+                font: fonts.BODY,
+                fill: colors.UI.PanelStrong,
                 align: 'center'
             });
             const lines = wrapTutorialText(
                 this.#renderPort,
                 choice.description,
                 fonts.SMALL,
-                card.w * 0.8,
-                3
+                card.w * 0.72,
+                4
             );
             lines.forEach((line, lineIndex) => {
                 drawTutorialText(this.#renderPort, {
                     text: line,
                     x: card.x + (card.w * 0.5),
-                    y: toTutorialUiHeight(viewport, 42)
-                        + (lineIndex * toTutorialUiHeight(viewport, 2.7)),
+                    y: card.y + (card.h * 0.66)
+                        + (lineIndex * Math.max(15, card.h * 0.07)),
                     font: fonts.SMALL,
-                    fill: colors.UI.Muted,
+                    fill: colors.UI.PanelStrong,
                     align: 'center'
                 });
             });
-        });
-        drawTutorialText(this.#renderPort, {
-            text: '방향키/WASD 선택 · Enter 확정',
-            x: layout.centerX,
-            y: toTutorialUiHeight(viewport, 73),
-            font: fonts.SMALL,
-            fill: colors.UI.Muted,
-            align: 'center'
         });
     }
 
@@ -164,22 +164,15 @@ export class TutorialStarterView {
         const choiceSpecs = viewModel.choices.map((choice, index) => ({
             key: 'starter-' + choice.id,
             ...layout.buttons[index],
-            label: (index === viewModel.selectedIndex ? '◆ ' : '') + choice.label,
-            backgroundAssetKey: 'mainButton',
-            backgroundImageAlpha: 0.82,
+            label: '',
+            tooltip: `${choice.label}: ${choice.description}`,
+            drawBackground: false,
             active: index === viewModel.selectedIndex,
             command: {
                 type: TUTORIAL_COMMANDS.CHOOSE_STARTER,
                 payload: { itemId: choice.id }
             }
         }));
-        return [...choiceSpecs, {
-            key: 'starter-back',
-            ...layout.buttons[layout.buttons.length - 1],
-            label: '메뉴  [Esc]',
-            backgroundAssetKey: 'mainButton',
-            backgroundImageAlpha: 0.82,
-            command: { type: TUTORIAL_COMMANDS.RETURN_MENU }
-        }];
+        return choiceSpecs;
     }
 }

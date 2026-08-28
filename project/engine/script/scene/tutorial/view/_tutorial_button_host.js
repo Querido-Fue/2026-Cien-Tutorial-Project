@@ -135,6 +135,7 @@ export class TutorialButtonHost {
             radius: spec.radius ?? style.defaultRadius,
             shadow: spec.shadow,
             backgroundImage,
+            drawBackground: spec.drawBackground !== false,
             backgroundImageAlpha: enabled
                 ? (spec.backgroundImageAlpha ?? 1)
                 : (spec.backgroundImageAlpha ?? 1) * 0.32,

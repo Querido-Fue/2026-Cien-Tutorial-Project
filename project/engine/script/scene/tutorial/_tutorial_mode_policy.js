@@ -33,6 +33,13 @@ export const TUTORIAL_MODE_POLICIES = Object.freeze({
         canRestartRun: true,
         acceptsBattleInput: true
     }),
+    [TUTORIAL_MODES.PAUSE]: Object.freeze({
+        view: 'pause',
+        buttons: 'pause',
+        canReturnMenu: true,
+        canRestartRun: true,
+        acceptsBattleInput: false
+    }),
     [TUTORIAL_MODES.RESULT]: Object.freeze({
         view: 'result',
         buttons: 'result',

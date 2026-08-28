@@ -1,12 +1,13 @@
 import { TUTORIAL_COMMANDS } from '../_tutorial_scene_constants.js';
 import {
-    createTutorialTextAnchor,
     drawTutorialText,
-    getTutorialUiCenterX,
-    toTutorialUiHeight,
-    toTutorialUiWidth
 } from './_tutorial_nonbattle_view_helpers.js';
 import { drawTutorialPixelAsset } from './_tutorial_asset_view_helpers.js';
+import {
+    createTutorialDesignSpace,
+    projectTutorialDesignRect
+} from './_tutorial_design_space.js';
+import { TUTORIAL_UI_LAYOUT_TOKENS } from './_tutorial_ui_layout_tokens.js';
 
 /**
  * @class TutorialMenuView
@@ -29,24 +30,23 @@ export class TutorialMenuView {
      */
     getLayout(viewModel) {
         const { viewport } = viewModel;
-        const centerX = getTutorialUiCenterX(viewport);
-        const buttonW = toTutorialUiWidth(viewport, 24);
-        const startButton = {
-            x: centerX - (buttonW * 0.5),
-            y: toTutorialUiHeight(viewport, 56),
-            w: buttonW,
-            h: toTutorialUiHeight(viewport, 6)
-        };
-        const galleryButton = {
-            ...startButton,
-            y: toTutorialUiHeight(viewport, 65)
-        };
+        const space = createTutorialDesignSpace(viewport);
+        const tokens = TUTORIAL_UI_LAYOUT_TOKENS.MAIN;
+        const logo = projectTutorialDesignRect(space, tokens.LOGO);
+        const group = projectTutorialDesignRect(space, tokens.BUTTON_GROUP);
+        const gap = Math.max(4, Math.round(space.h * tokens.BUTTON_GAP));
+        const buttonHeight = Math.max(1, Math.floor((group.h - (gap * 2)) / 3));
+        const buttons = Array.from({ length: 3 }, (_, index) => Object.freeze({
+            x: group.x,
+            y: group.y + (index * (buttonHeight + gap)),
+            w: group.w,
+            h: buttonHeight
+        }));
         return {
-            centerX,
-            contentRects: [
-                createTutorialTextAnchor(centerX, toTutorialUiHeight(viewport, 24))
-            ],
-            buttons: [startButton, galleryButton]
+            space,
+            logo,
+            contentRects: [logo],
+            buttons
         };
     }
 
@@ -56,22 +56,17 @@ export class TutorialMenuView {
      */
     draw(viewModel) {
         const layout = this.getLayout(viewModel);
-        const { colors, fonts, viewport } = viewModel;
+        const { colors, fonts } = viewModel;
         const titleDrawn = drawTutorialPixelAsset(this.#renderPort, {
             layer: 'ui',
             image: this.#assetPort.getUiAsset?.('mainTitle'),
-            rect: {
-                x: layout.centerX - toTutorialUiWidth(viewport, 18),
-                y: toTutorialUiHeight(viewport, 10),
-                w: toTutorialUiWidth(viewport, 36),
-                h: toTutorialUiHeight(viewport, 18)
-            }
+            rect: layout.logo
         });
         if (!titleDrawn) {
             drawTutorialText(this.#renderPort, {
                 text: viewModel.title,
-                x: layout.centerX,
-                y: toTutorialUiHeight(viewport, 24),
+                x: layout.logo.x + (layout.logo.w * 0.5),
+                y: layout.logo.y + (layout.logo.h * 0.5),
                 font: fonts.TITLE,
                 fill: colors.UI.Text,
                 align: 'center'
@@ -85,22 +80,37 @@ export class TutorialMenuView {
      * @returns {object[]} 직렬화 가능한 버튼 사양입니다.
      */
     getButtonSpecs(viewModel) {
-        const [startRect, galleryRect] = this.getLayout(viewModel).buttons;
+        const [continueRect, startRect, galleryRect] = this.getLayout(viewModel).buttons;
         return [
+            {
+                key: 'menu-continue',
+                ...continueRect,
+                label: '계속하기',
+                enabled: viewModel.canContinue === true,
+                inspectable: true,
+                tooltip: viewModel.canContinue === true
+                    ? '중단한 전투를 이어합니다.'
+                    : '저장된 전투가 없습니다.',
+                backgroundAssetKey: 'mainButton',
+                backgroundImageAlpha: 0.95,
+                fitHitToBackground: true
+            },
             {
                 key: 'menu-start',
                 ...startRect,
-                label: '새 게임  [Enter]',
+                label: '새 게임',
                 backgroundAssetKey: 'mainButton',
                 backgroundImageAlpha: 0.95,
+                fitHitToBackground: true,
                 command: { type: TUTORIAL_COMMANDS.START }
             },
             {
                 key: 'menu-gallery',
                 ...galleryRect,
-                label: '갤러리  [G]',
+                label: '갤러리',
                 backgroundAssetKey: 'mainButton',
                 backgroundImageAlpha: 0.95,
+                fitHitToBackground: true,
                 command: { type: TUTORIAL_COMMANDS.OPEN_GALLERY }
             }
         ];

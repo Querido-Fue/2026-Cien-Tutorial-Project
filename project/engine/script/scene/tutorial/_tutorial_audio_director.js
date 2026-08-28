@@ -9,6 +9,9 @@ const CLICK_COMMANDS = new Set([
     COMMANDS.START,
     COMMANDS.OPEN_GALLERY,
     COMMANDS.STARTER_SHIFT,
+    COMMANDS.PAUSE,
+    COMMANDS.RESUME,
+    COMMANDS.PAUSE_SHIFT,
     COMMANDS.RESTART,
     COMMANDS.GALLERY_PLAY,
     COMMANDS.INVENTORY_PAGE_SHIFT,
@@ -138,7 +141,7 @@ export class TutorialAudioDirector {
                 ? TUTORIAL_BGM_IDS.ENDING_STABILIZED
                 : TUTORIAL_BGM_IDS.ENDING_SUBDUED;
         }
-        if (state.mode === 'battle') {
+        if (state.mode === 'battle' || state.mode === 'pause') {
             return Number(state.floorIndex) >= 1
                 ? TUTORIAL_BGM_IDS.BASEMENT
                 : TUTORIAL_BGM_IDS.FLOOR_1;

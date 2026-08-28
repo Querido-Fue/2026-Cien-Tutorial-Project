@@ -73,3 +73,22 @@ test('전투와 결과 화면의 재시작은 같은 스타터를 재사용하�
     assert.match(restartMethod.groups.body, /this\.\#leaveRun\(MODES\.STARTER\)/);
     assert.doesNotMatch(restartMethod.groups.body, /#beginRun\(/);
 });
+
+test('Pause와 Resume은 전투 모델을 정리하거나 체크포인트로 재생성하지 않는다', async () => {
+    const { scene } = await readContractSources();
+    const pauseMethod = scene.match(
+        /#applyPause\(\)\s*\{(?<body>[\s\S]*?)\n\s*\}\n\n\s*\/\*\*/
+    );
+    const resumeMethod = scene.match(
+        /#applyResume\(\)\s*\{(?<body>[\s\S]*?)\n\s*\}\n\n\s*\/\*\*/
+    );
+    assert.ok(pauseMethod?.groups?.body);
+    assert.ok(resumeMethod?.groups?.body);
+    assert.match(pauseMethod.groups.body, /this\.mode = MODES\.PAUSE/);
+    assert.match(resumeMethod.groups.body, /this\.mode = MODES\.BATTLE/);
+    for (const body of [pauseMethod.groups.body, resumeMethod.groups.body]) {
+        assert.doesNotMatch(body, /#leaveRun\(/);
+        assert.doesNotMatch(body, /#beginRun\(/);
+        assert.doesNotMatch(body, /this\.model\s*=\s*null/);
+    }
+});

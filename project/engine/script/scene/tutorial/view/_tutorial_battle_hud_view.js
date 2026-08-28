@@ -207,7 +207,7 @@ export class TutorialBattleHudView {
                 y: menuRect.y + ((menuRect.h - menuH) * 0.5),
                 w: menuRect.w,
                 h: menuH,
-                label: 'Esc  메뉴',
+                label: 'Esc  일시정지',
                 backgroundAssetKey: 'mainButton',
                 backgroundImageAlpha: 0.86,
                 enabled: !hud.presentationLocked,
@@ -216,7 +216,7 @@ export class TutorialBattleHudView {
                 textColor: colors.UI.Text,
                 radius: this.#uwh(1),
                 shadow: { blur: 8, color: colors.UI.CardShadow },
-                command: { type: TUTORIAL_COMMANDS.RETURN_MENU }
+                command: { type: TUTORIAL_COMMANDS.PAUSE }
             });
 
             const inventoryRect = layout.hudRects.INVENTORY_CARD;

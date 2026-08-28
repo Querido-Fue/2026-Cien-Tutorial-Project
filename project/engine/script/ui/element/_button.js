@@ -60,6 +60,7 @@ export class ButtonElement extends BaseUIElement {
         this.hoverColor = properties.hoverColor || ColorSchemes.Overlay.Control.Hover;
         this.backgroundImage = properties.backgroundImage || null;
         this.backgroundImageAlpha = properties.backgroundImageAlpha ?? 1;
+        this.drawBackground = properties.drawBackground !== false;
 
         if (properties.color) this.color = properties.color;
 
@@ -80,6 +81,7 @@ export class ButtonElement extends BaseUIElement {
         this.pressClickHandled = false;
         this.backgroundImage = null;
         this.backgroundImageAlpha = 1;
+        this.drawBackground = true;
     }
 
     /**
@@ -146,23 +148,25 @@ export class ButtonElement extends BaseUIElement {
         const scaledX = cx - scaledW / 2;
         const scaledY = cy - scaledH / 2;
 
-        if (this.shadow) {
+        if (this.shadow && this.drawBackground) {
             shadowOn(this.layer, this.shadow.blur, this.shadow.color);
         }
 
         const bounds = { x: scaledX, y: scaledY, w: scaledW, h: scaledH };
         this.currentColor = colorUtil().lerpColor(this.idleColor, this.hoverColor, this.hoverValue, bounds);
 
-        render(this.layer, {
-            shape: 'roundRect',
-            x: scaledX,
-            y: scaledY,
-            w: scaledW,
-            h: scaledH,
-            radius: this.radius,
-            fill: this.currentColor,
-            alpha: this.alpha
-        });
+        if (this.drawBackground) {
+            render(this.layer, {
+                shape: 'roundRect',
+                x: scaledX,
+                y: scaledY,
+                w: scaledW,
+                h: scaledH,
+                radius: this.radius,
+                fill: this.currentColor,
+                alpha: this.alpha
+            });
+        }
 
         const imageWidth = Number(
             this.backgroundImage?.naturalWidth || this.backgroundImage?.width
@@ -170,7 +174,7 @@ export class ButtonElement extends BaseUIElement {
         const imageHeight = Number(
             this.backgroundImage?.naturalHeight || this.backgroundImage?.height
         );
-        if (imageWidth > 0 && imageHeight > 0) {
+        if (this.drawBackground && imageWidth > 0 && imageHeight > 0) {
             const imageScale = Math.min(scaledW / imageWidth, scaledH / imageHeight);
             const drawW = Math.max(1, Math.round(imageWidth * imageScale));
             const drawH = Math.max(1, Math.round(imageHeight * imageScale));
@@ -238,7 +242,7 @@ export class ButtonElement extends BaseUIElement {
             }
         }
 
-        if (this.shadow) {
+        if (this.shadow && this.drawBackground) {
             shadowOff(this.layer);
         }
     }

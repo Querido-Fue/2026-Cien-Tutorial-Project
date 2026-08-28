@@ -90,6 +90,7 @@ import { TutorialCutsceneView } from './view/_tutorial_cutscene_view.js';
 import { TutorialGalleryView } from './view/_tutorial_gallery_view.js';
 import { TutorialLoadingView } from './view/_tutorial_loading_view.js';
 import { TutorialMenuView } from './view/_tutorial_menu_view.js';
+import { TutorialPauseView } from './view/_tutorial_pause_view.js';
 import { TutorialResultView } from './view/_tutorial_result_view.js';
 import { TutorialStarterView } from './view/_tutorial_starter_view.js';
 
@@ -164,6 +165,7 @@ export class TutorialScene extends BaseScene {
         this.starterItemId = this.data.STARTER_CHOICES[this.starterIndex]?.id || 'mascot-costume';
         this.resultData = null;
         this.resultRecorded = false;
+        this.pauseIndex = 0;
         this.destroyed = false;
         this.saveSequence = Promise.resolve();
         this.timelineRevision = 0;
@@ -190,6 +192,7 @@ export class TutorialScene extends BaseScene {
         this.loadingView = new TutorialLoadingView(tutorialRenderPort);
         this.menuView = new TutorialMenuView(tutorialRenderPort, this.assetPort);
         this.starterView = new TutorialStarterView(tutorialRenderPort, this.assetPort);
+        this.pauseView = new TutorialPauseView(tutorialRenderPort, this.assetPort);
         this.galleryView = new TutorialGalleryView(tutorialRenderPort, this.assetPort);
         this.resultView = new TutorialResultView(tutorialRenderPort, this.assetPort);
         this.cutsceneView = new TutorialCutsceneView(tutorialRenderPort);
@@ -329,6 +332,11 @@ export class TutorialScene extends BaseScene {
         this.buttonHost.update();
         this.#prepareKeyboardEdges();
         this.#handleKeyboardInput();
+        if (this.mode === MODES.PAUSE) {
+            this.audioDirector.sync(this.#createAudioState());
+            this.#captureKeyboardLatch();
+            return;
+        }
         this.#updatePointerState();
         this.#handlePointerInput();
         this.#updateLoraTurn(deltaSeconds);
@@ -359,15 +367,19 @@ export class TutorialScene extends BaseScene {
             this.starterView.draw(this.#createStarterViewModel());
         } else if (view === 'gallery') {
             this.galleryView.draw(this.#createGalleryViewModel());
-        } else if (view === 'battle') {
+        } else if (view === 'battle' || view === 'pause') {
             const battleViewModel = this.#createBattleViewModel();
             this.battleWorldView.draw(battleViewModel);
             this.battleFeedbackView.draw(battleViewModel);
             this.battleHudView.draw(battleViewModel);
             this.battleAchievementView.draw(battleViewModel);
-            this.battleTutorialView.draw(
-                this.#createBattleTutorialViewModel(battleViewModel)
-            );
+            if (view === 'battle') {
+                this.battleTutorialView.draw(
+                    this.#createBattleTutorialViewModel(battleViewModel)
+                );
+            } else {
+                this.pauseView.draw(this.#createPauseViewModel());
+            }
         } else if (view === 'result') {
             this.resultView.draw(this.#createResultViewModel());
         }
@@ -409,6 +421,15 @@ export class TutorialScene extends BaseScene {
                     break;
                 case COMMANDS.CHOOSE_STARTER:
                     this.#applyChooseStarter(command.payload);
+                    break;
+                case COMMANDS.PAUSE:
+                    this.#applyPause();
+                    break;
+                case COMMANDS.RESUME:
+                    this.#applyResume();
+                    break;
+                case COMMANDS.PAUSE_SHIFT:
+                    this.#applyPauseShift(command.payload);
                     break;
                 case COMMANDS.RESTART:
                     this.#applyRestart();
@@ -628,6 +649,45 @@ export class TutorialScene extends BaseScene {
         this.#beginRun(this.data.STARTER_CHOICES[choiceIndex].id);
     }
 
+    /** 안정된 전투 프레임을 파괴하지 않고 Pause 모드로 전환합니다. @private */
+    #applyPause() {
+        if (this.mode !== MODES.BATTLE
+            || !this.model
+            || this.cutscenes.isOpen()
+            || this.guidance.isOpen()
+            || this.presentationTimeline.isLocked()) {
+            return;
+        }
+        this.pauseIndex = 0;
+        this.hoveredTile = null;
+        this.hoveredTileKey = '';
+        this.mode = MODES.PAUSE;
+        this.buttonHost.invalidate();
+    }
+
+    /** Pause 이전과 동일한 모델·표현 상태로 전투를 재개합니다. @private */
+    #applyResume() {
+        if (this.mode !== MODES.PAUSE || !this.model) {
+            return;
+        }
+        this.mode = MODES.BATTLE;
+        this.buttonHost.invalidate();
+    }
+
+    /** Pause 세로 메뉴의 키보드 선택을 순환합니다. @param {object} payload @private */
+    #applyPauseShift(payload) {
+        if (this.mode !== MODES.PAUSE) {
+            return;
+        }
+        const delta = Math.sign(Number(payload?.delta) || 0);
+        if (delta === 0) {
+            return;
+        }
+        this.pauseIndex = (this.pauseIndex + delta + 3) % 3;
+        this.presentationTimeline.startSelection('menu-selection');
+        this.buttonHost.invalidate();
+    }
+
     /** 전투를 중단하거나 결과를 닫고 스타터 선택으로 돌아갑니다. @private */
     #applyRestart() {
         if (!canRestartTutorialRun(this.mode)) {
@@ -659,6 +719,7 @@ export class TutorialScene extends BaseScene {
         this.mode = nextMode;
         this.resultData = null;
         this.resultRecorded = false;
+        this.pauseIndex = 0;
         this.loraTurnState = null;
         this.attackSelected = false;
         this.attackWeapon = 'melee';
@@ -1692,6 +1753,32 @@ export class TutorialScene extends BaseScene {
             return;
         }
 
+        if (this.mode === MODES.PAUSE) {
+            if (this.#wasKeyPressed(KEY_CODES.CANCEL)) {
+                enqueueSimulationCommand({ type: COMMANDS.RESUME });
+            } else if (this.#wasKeyPressed(KEY_CODES.RESTART)) {
+                enqueueSimulationCommand({ type: COMMANDS.RESTART });
+            } else if (this.#wasAnyKeyPressed(SELECTION_KEY_CODES.PREVIOUS)) {
+                enqueueSimulationCommand({
+                    type: COMMANDS.PAUSE_SHIFT,
+                    payload: { delta: -1 }
+                });
+            } else if (this.#wasAnyKeyPressed(SELECTION_KEY_CODES.NEXT)) {
+                enqueueSimulationCommand({
+                    type: COMMANDS.PAUSE_SHIFT,
+                    payload: { delta: 1 }
+                });
+            } else if (this.#wasKeyPressed(KEY_CODES.CONFIRM)
+                || this.#wasKeyPressed(KEY_CODES.ALTERNATE_CONFIRM)) {
+                enqueueSimulationCommand({
+                    type: [COMMANDS.RESUME, COMMANDS.RESTART, COMMANDS.RETURN_MENU][
+                        this.pauseIndex
+                    ]
+                });
+            }
+            return;
+        }
+
         if (this.mode === MODES.GALLERY) {
             const direction = KEY_DIRECTIONS.find(
                 (entry) => this.#wasAnyKeyPressed(entry.codes)
@@ -1743,7 +1830,7 @@ export class TutorialScene extends BaseScene {
             return;
         }
         if (this.#wasKeyPressed(KEY_CODES.CANCEL)) {
-            enqueueSimulationCommand({ type: COMMANDS.RETURN_MENU });
+            enqueueSimulationCommand({ type: COMMANDS.PAUSE });
             return;
         }
         if (!this.#canAcceptBattleInput()) {
@@ -2030,7 +2117,8 @@ export class TutorialScene extends BaseScene {
             ...this.#createNonbattleViewFrame(),
             title: this.data.TEXT.TITLE,
             subtitle: this.data.TEXT.SUBTITLE,
-            playCount: Number(this.meta?.playCount) || 0
+            playCount: Number(this.meta?.playCount) || 0,
+            canContinue: false
         });
     }
 
@@ -2048,6 +2136,14 @@ export class TutorialScene extends BaseScene {
                 this.presentationTimeline.getState().menuSelectionProgress
             ) || 0,
             selectionMinScale: Number(this.data.ANIMATION.SELECTION_MIN_SCALE) || 0.72
+        });
+    }
+
+    /** @returns {object} Pause 오버레이 뷰 모델입니다. @private */
+    #createPauseViewModel() {
+        return Object.freeze({
+            ...this.#createNonbattleViewFrame(),
+            selectedIndex: this.pauseIndex
         });
     }
 
@@ -2417,6 +2513,7 @@ export class TutorialScene extends BaseScene {
             cutsceneState.open ? cutsceneState.cutsceneId : '-',
             String(cutsceneState.cardIndex),
             String(this.starterIndex),
+            String(this.pauseIndex),
             galleryState.selectedSectionId,
             String(galleryState.selectedIndex),
             String(this.model?.turn),
@@ -2456,6 +2553,9 @@ export class TutorialScene extends BaseScene {
         }
         if (buttonGroup === 'starter') {
             return this.starterView.getButtonSpecs(this.#createStarterViewModel());
+        }
+        if (buttonGroup === 'pause') {
+            return this.pauseView.getButtonSpecs(this.#createPauseViewModel());
         }
         if (buttonGroup === 'gallery') {
             return this.galleryView.getButtonSpecs(this.#createGalleryViewModel());
@@ -2619,6 +2719,26 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #focusBattleControl(key) {
+        if (this.mode === MODES.PAUSE && key?.startsWith('pause-')) {
+            const index = ['pause-resume', 'pause-restart', 'pause-exit'].indexOf(key);
+            if (index >= 0 && index !== this.pauseIndex) {
+                this.pauseIndex = index;
+                this.buttonHost.invalidate();
+            }
+            return;
+        }
+        if (this.mode === MODES.STARTER && key?.startsWith('starter-')) {
+            const itemId = key.slice('starter-'.length);
+            const index = this.data.STARTER_CHOICES.findIndex(
+                (choice) => choice.id === itemId
+            );
+            if (index >= 0 && index !== this.starterIndex) {
+                this.starterIndex = index;
+                this.presentationTimeline.startSelection('menu-selection');
+                this.buttonHost.invalidate();
+            }
+            return;
+        }
         if (this.mode === MODES.BATTLE
             && !this.guidance.isOpen()
             && this.battleFocus.focus(key)) {
