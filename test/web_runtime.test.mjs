@@ -97,10 +97,20 @@ test('Cloudflare 경로 프록시는 기준 경로에 후행 슬래시를 강제
     assert.equal(response.headers.get('location'), 'https://jukchang.com/game/nthplayer/?from=home');
 });
 
-test('Cloudflare 경로 프록시는 범위 밖 경로와 쓰기 요청을 거부한다', async () => {
+test('Cloudflare 경로 프록시는 기존 루트 준비 중 화면을 보존한다', async () => {
     const outsideResponse = await nthplayerWorker.fetch(new Request('https://jukchang.com/'));
-    assert.equal(outsideResponse.status, 404);
+    assert.equal(outsideResponse.status, 200);
+    assert.match(await outsideResponse.text(), /<title>Coming Soon!<\/title>/);
 
+    const headResponse = await nthplayerWorker.fetch(new Request(
+        'https://www.jukchang.com/',
+        { method: 'HEAD' },
+    ));
+    assert.equal(headResponse.status, 200);
+    assert.equal(await headResponse.text(), '');
+});
+
+test('Cloudflare 경로 프록시는 쓰기 요청을 거부한다', async () => {
     const writeResponse = await nthplayerWorker.fetch(new Request(
         'https://jukchang.com/game/nthplayer/save',
         { method: 'POST' },

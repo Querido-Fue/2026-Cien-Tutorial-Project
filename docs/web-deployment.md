@@ -34,15 +34,20 @@ GitHub Pages 주소와 `jukchang.com` 주소는 서로 다른 출처이므로, P
 ## jukchang.com 경로 연결
 
 GitHub Pages custom domain은 도메인 단위이고 임의의 중첩 경로만 지정할 수 없습니다.
-현재 `jukchang.com` 루트 페이지를 유지하려면 Cloudflare Worker Route가
-`/game/nthplayer` 요청만 프로젝트 Pages로 프록시해야 합니다.
+현재 `jukchang.com` 루트의 준비 중 화면을 유지하면서 게임 경로를 제공하려면 Cloudflare
+Worker가 apex와 `www` 요청을 받아야 합니다. Worker는 `/game/nthplayer`만 프로젝트 Pages로
+프록시하고 나머지 경로에는 기존과 같은 준비 중 화면을 반환합니다.
+
+apex A 레코드는 프록시된 상태로 GoDaddy의 현재 외부 도메인 원본
+`13.248.243.5`를 가리킵니다. 이전 `160.153.0.8`은 다른 Cloudflare 종단이어서 요청이
+이 zone의 Worker Route보다 먼저 해당 서비스로 넘어갔고, 등록된 Route가 실행되지
+않았습니다.
 
 필요한 파일은 다음과 같습니다.
 
 - `scripts/cloudflare/nthplayer-worker.js`: 안전한 GET/HEAD 프록시, Range 요청 전달,
-  후행 슬래시 리다이렉트
-- `scripts/cloudflare/wrangler.jsonc`: `jukchang.com/game/nthplayer`와
-  `jukchang.com/game/nthplayer/*` 두 Route 선언
+  후행 슬래시 리다이렉트, 루트 준비 중 화면
+- `scripts/cloudflare/wrangler.jsonc`: apex와 `www`의 HTTPS Route 선언
 
 Cloudflare 계정 인증 후 저장소 루트에서 Wrangler로 배포할 수 있습니다.
 
@@ -54,8 +59,8 @@ npx wrangler@4 deploy --config scripts/cloudflare/wrangler.jsonc
 Domains & Routes에 아래 두 Route를 연결합니다.
 
 ```text
-jukchang.com/game/nthplayer
-jukchang.com/game/nthplayer/*
+https://jukchang.com/*
+https://www.jukchang.com/*
 ```
 
 Worker 배포 후 다음을 확인합니다.
@@ -67,7 +72,8 @@ curl -I https://jukchang.com/game/nthplayer/asset/font/LanaPixel.ttf
 ```
 
 첫 요청은 `/game/nthplayer/`로 308 응답해야 하고, 나머지는 200이어야 합니다. 루트
-`https://jukchang.com/` 응답은 기존 사이트 그대로여야 합니다.
+`https://jukchang.com/`은 `Coming Soon!` 준비 중 화면을 반환해야 합니다. GoDaddy 본
+사이트를 공개할 때는 Worker의 루트 응답 정책과 DNS 원본을 함께 재검토해야 합니다.
 
 ## 권리 확인
 

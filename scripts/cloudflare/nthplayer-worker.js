@@ -1,6 +1,35 @@
 const PUBLIC_PATH_PREFIX = '/game/nthplayer';
 const UPSTREAM_ORIGIN = 'https://querido-fue.github.io';
 const UPSTREAM_PATH_PREFIX = '/2026-Cien-Tutorial-Project';
+const LANDING_PAGE_HTML = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Coming Soon!</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f0f0f0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .container { text-align: center; padding: 2rem; }
+    h1 { color: #333; font-size: 2.5rem; margin-bottom: 1rem; }
+    p { color: #666; font-size: 1.125rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Coming Soon!</h1>
+    <p>Your application is being prepared. Please check back soon.</p>
+  </div>
+</body>
+</html>`;
 const ALLOWED_REQUEST_HEADERS = Object.freeze([
     'accept',
     'accept-encoding',
@@ -51,9 +80,34 @@ const rewriteRedirectLocation = (location, publicUrl) => {
     return rewrittenUrl.href;
 };
 
+/**
+ * 기존 루트 도메인의 준비 중 화면을 정적 응답으로 보존합니다.
+ * @param {string} requestMethod - 원본 HTTP 메서드입니다.
+ * @returns {Response} 루트 도메인용 응답입니다.
+ */
+const createLandingPageResponse = (requestMethod) => new Response(
+    requestMethod === 'HEAD' ? null : LANDING_PAGE_HTML,
+    {
+        status: 200,
+        headers: {
+            'cache-control': 'public, max-age=300',
+            'content-type': 'text/html; charset=utf-8',
+            'referrer-policy': 'strict-origin-when-cross-origin',
+            'x-content-type-options': 'nosniff',
+        },
+    },
+);
+
 export default {
     async fetch(request) {
         const publicUrl = new URL(request.url);
+
+        if (request.method !== 'GET' && request.method !== 'HEAD') {
+            return new Response('Method Not Allowed', {
+                status: 405,
+                headers: { allow: 'GET, HEAD' },
+            });
+        }
 
         if (publicUrl.pathname === PUBLIC_PATH_PREFIX) {
             publicUrl.pathname = `${PUBLIC_PATH_PREFIX}/`;
@@ -61,14 +115,7 @@ export default {
         }
 
         if (!publicUrl.pathname.startsWith(`${PUBLIC_PATH_PREFIX}/`)) {
-            return new Response('Not Found', { status: 404 });
-        }
-
-        if (request.method !== 'GET' && request.method !== 'HEAD') {
-            return new Response('Method Not Allowed', {
-                status: 405,
-                headers: { allow: 'GET, HEAD' },
-            });
+            return createLandingPageResponse(request.method);
         }
 
         const upstreamUrl = createUpstreamUrl(publicUrl);

@@ -6,11 +6,11 @@
   "workers_dev": false,
   "routes": [
     {
-      "pattern": "jukchang.com/game/nthplayer",
+      "pattern": "https://jukchang.com/*",
       "zone_name": "jukchang.com"
     },
     {
-      "pattern": "jukchang.com/game/nthplayer/*",
+      "pattern": "https://www.jukchang.com/*",
       "zone_name": "jukchang.com"
     }
   ]
