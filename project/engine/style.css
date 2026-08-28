@@ -7,6 +7,7 @@ body {
     height: 100vh;
     overflow: hidden;
     background-color: #202020;
+    font-family: 'LanaPixel', monospace;
 }
 
 html {
@@ -72,9 +73,9 @@ html {
 }
 
 @font-face {
-    font-family: 'Pretendard Variable';
-    font-weight: 45 920;
+    font-family: 'LanaPixel';
+    font-weight: normal;
     font-style: normal;
     font-display: swap;
-    src: url('../asset/old/font/PretendardVariable.woff2') format('woff2-variations');
+    src: url('../asset/font/LanaPixel.ttf') format('truetype');
 }

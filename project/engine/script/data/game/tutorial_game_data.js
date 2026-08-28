@@ -1,5 +1,15 @@
-const DEFAULT_FONT_FAMILY = 'Pretendard Variable, arial';
+const DEFAULT_FONT_FAMILY = 'LanaPixel, monospace';
 const MONO_FONT_FAMILY = 'Consolas, monospace';
+const TYPOGRAPHY_SCALE = 1.2;
+
+/**
+ * 타이포그래피 값을 공통 배율로 확대하고 부동소수점 노이즈를 제거합니다.
+ * @param {number} value - 원본 타이포그래피 값입니다.
+ * @returns {number} 확대된 값입니다.
+ */
+function scaleTypographyValue(value) {
+    return Number((value * TYPOGRAPHY_SCALE).toFixed(2));
+}
 
 /**
  * 객체와 하위 값을 재귀적으로 동결합니다.
@@ -26,7 +36,13 @@ function deepFreeze(value) {
  * @returns {{SIZE_UIWW:number,MIN:number,MAX:number,WEIGHT:number,FAMILY:string}} 폰트 규격입니다.
  */
 function createTypographySpec(sizeUIWW, min, max, weight, family = DEFAULT_FONT_FAMILY) {
-    return { SIZE_UIWW: sizeUIWW, MIN: min, MAX: max, WEIGHT: weight, FAMILY: family };
+    return {
+        SIZE_UIWW: scaleTypographyValue(sizeUIWW),
+        MIN: scaleTypographyValue(min),
+        MAX: scaleTypographyValue(max),
+        WEIGHT: weight,
+        FAMILY: family
+    };
 }
 
 /** 9×8 타일의 기본 높이 데이터입니다. */

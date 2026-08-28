@@ -33,6 +33,17 @@
       "releaseStatus": "approved"
     },
     {
+      "id": "lana-pixel-font",
+      "category": "font",
+      "paths": [
+        "project/asset/font/LanaPixel.ttf"
+      ],
+      "origin": "프로젝트 제공 폰트 파일; 사용자가 전체 사용 가능 권리를 확인함",
+      "originStatus": "user-confirmed-authorized",
+      "license": "전체 사용 가능(사용자 확인, 2026-08-28)",
+      "releaseStatus": "approved"
+    },
+    {
       "id": "provided-art-sources",
       "category": "art",
       "paths": [

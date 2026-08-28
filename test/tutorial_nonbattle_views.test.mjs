@@ -167,6 +167,37 @@ test('비전투 화면의 핵심 콘텐츠와 버튼은 세 기준 화면의 UI 
     }
 });
 
+test('메인 메뉴는 타이틀과 버튼 외 안내 문구·카메라 오버레이를 그리지 않는다', () => {
+    const requestedAssetKeys = [];
+    const renderCommands = [];
+    const renderPort = {
+        render(layer, command) {
+            renderCommands.push({ layer, command });
+        },
+        renderGL() {},
+        wrapText: NOOP_RENDER_PORT.wrapText
+    };
+    const assetPort = {
+        getUiAsset(key) {
+            requestedAssetKeys.push(key);
+            return key === 'mainTitle' ? { width: 360, height: 180 } : null;
+        }
+    };
+    const view = new TutorialMenuView(renderPort, assetPort);
+
+    view.draw(createViewModel(VIEWPORTS[0], {
+        title: 'N번째 플레이어',
+        subtitle: '프로토타입',
+        playCount: 5
+    }));
+
+    assert.deepEqual(requestedAssetKeys, ['mainTitle']);
+    assert.deepEqual(
+        renderCommands.filter(({ command }) => command.shape === 'text'),
+        []
+    );
+});
+
 test('비전투 뷰는 장면·모델·저장·명령 큐를 직접 import하지 않는다', async () => {
     const names = [
         '_tutorial_loading_view.js',

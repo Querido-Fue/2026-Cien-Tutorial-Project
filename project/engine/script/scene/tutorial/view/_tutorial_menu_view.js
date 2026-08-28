@@ -1,7 +1,6 @@
 import { TUTORIAL_COMMANDS } from '../_tutorial_scene_constants.js';
 import {
     createTutorialTextAnchor,
-    drawTutorialBackgroundPanel,
     drawTutorialText,
     getTutorialUiCenterX,
     toTutorialUiHeight,
@@ -31,15 +30,7 @@ export class TutorialMenuView {
     getLayout(viewModel) {
         const { viewport } = viewModel;
         const centerX = getTutorialUiCenterX(viewport);
-        const panelW = toTutorialUiWidth(viewport, 38);
-        const panelH = toTutorialUiHeight(viewport, 12);
         const buttonW = toTutorialUiWidth(viewport, 24);
-        const panel = {
-            x: centerX - (panelW * 0.5),
-            y: toTutorialUiHeight(viewport, 44) - (panelH * 0.5),
-            w: panelW,
-            h: panelH
-        };
         const startButton = {
             x: centerX - (buttonW * 0.5),
             y: toTutorialUiHeight(viewport, 56),
@@ -52,12 +43,8 @@ export class TutorialMenuView {
         };
         return {
             centerX,
-            panel,
             contentRects: [
-                panel,
-                createTutorialTextAnchor(centerX, toTutorialUiHeight(viewport, 24)),
-                createTutorialTextAnchor(centerX, toTutorialUiHeight(viewport, 31)),
-                createTutorialTextAnchor(centerX, toTutorialUiHeight(viewport, 82))
+                createTutorialTextAnchor(centerX, toTutorialUiHeight(viewport, 24))
             ],
             buttons: [startButton, galleryButton]
         };
@@ -70,17 +57,6 @@ export class TutorialMenuView {
     draw(viewModel) {
         const layout = this.getLayout(viewModel);
         const { colors, fonts, viewport } = viewModel;
-        drawTutorialPixelAsset(this.#renderPort, {
-            layer: 'ui',
-            image: this.#assetPort.getUiAsset?.('mainCameraOverlay'),
-            rect: {
-                x: viewport.UIOffsetX,
-                y: 0,
-                w: viewport.UIWW,
-                h: viewport.WH
-            },
-            alpha: 0.72
-        });
         const titleDrawn = drawTutorialPixelAsset(this.#renderPort, {
             layer: 'ui',
             image: this.#assetPort.getUiAsset?.('mainTitle'),
@@ -101,39 +77,6 @@ export class TutorialMenuView {
                 align: 'center'
             });
         }
-        drawTutorialText(this.#renderPort, {
-            text: viewModel.subtitle,
-            x: layout.centerX,
-            y: toTutorialUiHeight(viewport, 31),
-            font: fonts.SUBTITLE,
-            fill: colors.UI.Muted,
-            align: 'center'
-        });
-        drawTutorialBackgroundPanel(this.#renderPort, layout.panel, colors.UI.Panel, 0.9);
-        drawTutorialText(this.#renderPort, {
-            text: '완료한 플레이  ' + String(viewModel.playCount) + '회',
-            x: layout.centerX,
-            y: toTutorialUiHeight(viewport, 41.5),
-            font: fonts.BODY,
-            fill: colors.UI.Text,
-            align: 'center'
-        });
-        drawTutorialText(this.#renderPort, {
-            text: '이동 4칸 지정 → 행동 → 로라 → 몹 · 총 12회',
-            x: layout.centerX,
-            y: toTutorialUiHeight(viewport, 47),
-            font: fonts.SMALL,
-            fill: colors.UI.Muted,
-            align: 'center'
-        });
-        drawTutorialText(this.#renderPort, {
-            text: 'Enter 시작',
-            x: layout.centerX,
-            y: toTutorialUiHeight(viewport, 82),
-            font: fonts.SMALL,
-            fill: colors.UI.Muted,
-            align: 'center'
-        });
     }
 
     /**

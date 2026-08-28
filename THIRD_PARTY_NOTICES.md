@@ -15,6 +15,15 @@
 
 패키징 결과에는 위 라이선스 파일을 `license/pretendard.txt`로 함께 넣는다.
 
+## LanaPixel
+
+- 파일: `project/asset/font/LanaPixel.ttf`
+- 출처: 프로젝트 제공 폰트 파일
+- 라이선스: 전체 사용 가능(사용자 확인, 2026-08-28)
+- 상태: 배포 가능
+
+게임 런타임과 패키징 결과는 이 폰트를 사용한다.
+
 ## NW.js v0.108.0 Windows x64
 
 NW.js 바이너리는 저장소에 커밋하지 않는다. `package:nwjs`는 사용자가 별도로

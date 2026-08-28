@@ -39,14 +39,14 @@ Minecraft·Mario·The Legend of Zelda·MapleStory를 직접 참조한 아이템 
 | 명령 | 결과 |
 | --- | --- |
 | `npm ci --ignore-scripts` | 성공, 패키지 1개 감사, 취약점 0 |
-| `npm test` | 105개 통과, 실패·취소·건너뜀 0 |
+| `npm test` | 106개 통과, 실패·취소·건너뜀 0 |
 | `check:assets` | PNG 55, MP3 26, 코드·오디오 폴백 각 1, 경고 0 |
 | `check:repo` | 오류 0, 경고 0 |
-| `check:release` | JS 206, import 502, 에셋 194, 순환·미해결 import 0 |
+| `check:release` | JS 206, import 502, 에셋 195, 순환·미해결 import 0 |
 | 격리 패키징 테스트 | 올바른 입력 성공, 잘못된 폴더명·제품 버전 거부, 원본·save 제외 확인 |
 | `simulate:balance -- --json --no-write` | 8개 시나리오, 구조 실패 0, preview 불일치 0, 파일 미작성 |
 | `git diff --check` | 최종 커밋 전 다시 실행하는 인수 조건 |
-| 클린 체크아웃 재검증 | `npm ci`, 105/105 테스트·감사, 8시나리오 쓰기 없는 시뮬레이션 통과 |
+| 클린 체크아웃 재검증 | `npm ci`, 106/106 테스트·감사, 8시나리오 쓰기 없는 시뮬레이션 통과 |
 
 `check:release`가 보고한 `project/engine/script/core/system_handler.js`의 `console.log` 1개는
 `debugMode`로 제한된 기존 진단 출력이다. 릴리스 실행 경로의 무조건 출력이나 `debugger`는
@@ -84,7 +84,7 @@ GitHub Actions는 Node `22.18.0`, `npm ci --ignore-scripts`, `npm test`, 쓰기 
 1. 입력 폴더 이름이 `nwjs-v0.108.0-win-x64`이다.
 2. `nw.exe` 제품 버전과 필수 Windows 런타임 파일·디렉터리가 계약과 일치한다.
 3. 출력 폴더가 아직 존재하지 않는다.
-4. 패키지는 `engine`, `asset/tutorial`, Pretendard 폰트, 앱 아이콘, 런타임
+4. 패키지는 `engine`, `asset/tutorial`, LanaPixel 폰트, 앱 아이콘, 런타임
    `package.json`, `license`, `THIRD_PARTY_NOTICES.md`만 복사한다.
 5. `nw.exe`는 `nth-player.exe`로 바꾸고 NW.js `credits.html`과 결정론적
    `BUILD_INFO.json`을 보존한다.
