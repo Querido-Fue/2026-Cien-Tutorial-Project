@@ -5,6 +5,11 @@ import {
     wrapBattleViewText
 } from './_tutorial_battle_view_helpers.js';
 import { drawTutorialPixelAsset } from './_tutorial_asset_view_helpers.js';
+import {
+    createTutorialDesignSpace,
+    projectTutorialDesignRect
+} from './_tutorial_design_space.js';
+import { TUTORIAL_UI_LAYOUT_TOKENS } from './_tutorial_ui_layout_tokens.js';
 
 /**
  * @class TutorialBattleTutorialView
@@ -26,65 +31,91 @@ export class TutorialBattleTutorialView {
             return;
         }
         const { colors, copy, fonts, viewport } = viewModel;
-        const rect = this.#getModalRect(viewModel);
-        const pad = clampBattleViewNumber(rect.w * 0.07, 18, 30);
-        const lineH = clampBattleViewNumber(viewport.WH * 0.038, 24, 34);
+        const space = viewModel.layout?.designSpace
+            || createTutorialDesignSpace(viewport);
+        const rects = this.#getCalloutRects(space);
         this.#renderPort.render('ui', {
             shape: 'rect',
-            x: viewport.UIOffsetX,
-            y: 0,
-            w: viewport.UIWW,
-            h: viewport.WH,
+            x: space.x,
+            y: space.y,
+            w: space.w,
+            h: space.h,
             fill: colors.UI.CardShadow,
-            alpha: 0.58
+            alpha: 0.38
         });
-        this.#renderPort.render('ui', {
-            shape: 'roundRect',
-            x: rect.x + 3,
-            y: rect.y + 4,
-            w: rect.w,
-            h: rect.h,
-            radius: viewport.WH * 0.02,
-            fill: colors.UI.CardShadow
-        });
-        this.#renderPort.render('ui', {
-            shape: 'roundRect',
-            x: rect.x,
-            y: rect.y,
-            w: rect.w,
-            h: rect.h,
-            radius: viewport.WH * 0.02,
-            fill: colors.UI.Card,
-            stroke: colors.UI.Border,
-            lineWidth: 1
-        });
-        drawTutorialPixelAsset(this.#renderPort, {
-            layer: 'ui',
-            image: this.#assetPort.getUiAsset?.('tutorialPopup'),
-            rect,
-            alpha: 0.72
-        });
-        let y = rect.y + pad;
-        this.#drawText(copy.title, rect.x + pad, y, fonts.HEADING, colors.UI.Primary);
-        y += lineH * 1.45;
-        for (const sentence of copy.sentences) {
+        rects.forEach((rect, index) => {
+            const sentence = copy.sentences[index] || '';
+            const pad = clampBattleViewNumber(rect.w * 0.075, 7, 14);
+            const lineH = clampBattleViewNumber(rect.h * 0.22, 14, 20);
+            this.#renderPort.render('ui', {
+                shape: 'roundRect',
+                x: rect.x + 2,
+                y: rect.y + 3,
+                w: rect.w,
+                h: rect.h,
+                radius: Math.max(5, space.scale * 6),
+                fill: colors.UI.CardShadow
+            });
+            this.#renderPort.render('ui', {
+                shape: 'roundRect',
+                x: rect.x,
+                y: rect.y,
+                w: rect.w,
+                h: rect.h,
+                radius: Math.max(5, space.scale * 6),
+                fill: colors.UI.Card,
+                stroke: colors.UI.Border,
+                lineWidth: 1
+            });
+            drawTutorialPixelAsset(this.#renderPort, {
+                layer: 'ui',
+                image: this.#assetPort.getUiAsset?.('tutorialPaper'),
+                rect,
+                alpha: 0.48,
+                mode: 'exact'
+            });
+            const rodH = Math.max(4, rect.h * 0.09);
+            drawTutorialPixelAsset(this.#renderPort, {
+                layer: 'ui',
+                image: this.#assetPort.getUiAsset?.('tutorialRodTop'),
+                rect: { x: rect.x, y: rect.y, w: rect.w, h: rodH },
+                alpha: 0.92,
+                mode: 'exact'
+            });
+            drawTutorialPixelAsset(this.#renderPort, {
+                layer: 'ui',
+                image: this.#assetPort.getUiAsset?.('tutorialRodBottom'),
+                rect: { x: rect.x, y: rect.y + rect.h - rodH, w: rect.w, h: rodH },
+                alpha: 0.92,
+                mode: 'exact'
+            });
+            this.#drawText(
+                String(index + 1).padStart(2, '0'),
+                rect.x + pad,
+                rect.y + pad + (lineH * 0.1),
+                fonts.SMALL,
+                colors.UI.Primary
+            );
             const lines = wrapBattleViewText(
                 this.#renderPort,
-                '· ' + sentence,
-                fonts.BODY,
+                sentence,
+                fonts.SMALL,
                 rect.w - (pad * 2),
-                2
+                3
             );
-            for (const line of lines) {
-                this.#drawText(line, rect.x + pad, y, fonts.BODY, colors.UI.Text);
-                y += lineH;
-            }
-            y += lineH * 0.22;
-        }
+            lines.forEach((line, lineIndex) => this.#drawText(
+                line,
+                rect.x + pad,
+                rect.y + pad + (lineH * (1.1 + lineIndex)),
+                fonts.SMALL,
+                colors.UI.Text
+            ));
+        });
+        const replayRect = rects[1];
         this.#drawText(
             copy.replay,
-            rect.x + pad,
-            rect.y + rect.h - pad - (lineH * 1.45),
+            replayRect.x,
+            replayRect.y + replayRect.h + Math.max(12, space.scale * 10),
             fonts.SMALL,
             colors.UI.Muted
         );
@@ -100,31 +131,36 @@ export class TutorialBattleTutorialView {
             return [];
         }
         if (!viewModel.open) {
-            const rect = viewModel.layout.hudRects.MISSION_CARD;
+            const space = viewModel.layout.designSpace
+                || createTutorialDesignSpace(viewModel.viewport);
             return [{
                 key: 'battle-guide-open',
-                x: rect.x + (rect.w * 0.64),
-                y: rect.y + (rect.h * 0.025),
-                w: rect.w * 0.31,
-                h: clampBattleViewNumber(rect.h * 0.1, 28, 38),
-                label: '?  도움',
+                x: space.x + (space.w * 0.31),
+                y: space.y + (space.h * 0.06),
+                w: space.w * 0.035,
+                h: space.h * 0.045,
+                label: '?',
+                backgroundAssetKey: 'mainButton',
+                backgroundImageAlpha: 0.82,
+                fitHitToBackground: true,
                 idleColor: viewModel.colors.UI.CardHeader,
                 hoverColor: viewModel.colors.UI.ButtonHover,
                 command: { type: TUTORIAL_COMMANDS.GUIDE_SHOW }
             }];
         }
-        const rect = this.#getModalRect(viewModel);
-        const buttonW = rect.w * 0.34;
-        const buttonH = clampBattleViewNumber(rect.h * 0.16, 38, 54);
+        const space = viewModel.layout.designSpace
+            || createTutorialDesignSpace(viewModel.viewport);
+        const rect = projectTutorialDesignRect(
+            space,
+            TUTORIAL_UI_LAYOUT_TOKENS.TUTORIAL.SKIP
+        );
         return [{
             key: 'battle-guide-dismiss',
-            x: rect.x + rect.w - buttonW - (rect.w * 0.07),
-            y: rect.y + rect.h - buttonH - (rect.h * 0.07),
-            w: buttonW,
-            h: buttonH,
-            label: '확인  [Enter]',
+            ...rect,
+            label: '확인 / 건너뛰기',
             backgroundAssetKey: 'mainButton',
             backgroundImageAlpha: 0.9,
+            fitHitToBackground: true,
             idleColor: viewModel.colors.UI.Primary,
             hoverColor: viewModel.colors.UI.PrimaryHover,
             textColor: viewModel.colors.UI.OnPrimary,
@@ -132,17 +168,11 @@ export class TutorialBattleTutorialView {
         }];
     }
 
-    /** @param {object} viewModel @returns {{x:number,y:number,w:number,h:number}} 중앙 모달 영역입니다. @private */
-    #getModalRect(viewModel) {
-        const { modal, viewport } = viewModel;
-        const w = viewport.UIWW * ((Number(modal.WIDTH_UIWW) || 42) / 100);
-        const h = viewport.WH * ((Number(modal.HEIGHT_WH) || 42) / 100);
-        return {
-            x: viewport.UIOffsetX + ((viewport.UIWW - w) * 0.5),
-            y: (viewport.WH - h) * 0.5,
-            w,
-            h
-        };
+    /** @param {object} space @returns {object[]} Figma 관찰 좌표의 콜아웃입니다. @private */
+    #getCalloutRects(space) {
+        return TUTORIAL_UI_LAYOUT_TOKENS.TUTORIAL.CALLOUTS.map(
+            (token) => projectTutorialDesignRect(space, token)
+        );
     }
 
     /** @private */

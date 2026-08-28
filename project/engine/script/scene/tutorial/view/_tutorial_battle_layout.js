@@ -1,3 +1,5 @@
+import { createTutorialDesignSpace } from './_tutorial_design_space.js';
+
 /**
  * @class TutorialBattleLayout
  * @description 전투 보드 투영, HUD 사각형과 타일 히트테스트의 단일 좌표 원본입니다.
@@ -26,14 +28,15 @@ export class TutorialBattleLayout {
             UIWW: Number(viewport?.UIWW) || 0,
             UIOffsetX: Number(viewport?.UIOffsetX) || 0
         });
-        const uww = (value) => safeViewport.UIWW * (Number(value) / 100);
-        const uwh = (value) => safeViewport.WH * (Number(value) / 100);
+        const designSpace = createTutorialDesignSpace(safeViewport);
+        const uww = (value) => designSpace.w * (Number(value) / 100);
+        const uwh = (value) => designSpace.h * (Number(value) / 100);
         const boardLayout = this.#config.board;
         const boardRect = Object.freeze({
-            x: safeViewport.UIOffsetX + uww(boardLayout.X_UIWW),
-            y: uwh(boardLayout.Y_WH),
-            w: uww(boardLayout.MAX_WIDTH_UIWW),
-            h: uwh(boardLayout.MAX_HEIGHT_WH)
+            x: Math.round(designSpace.x + uww(boardLayout.X_UIWW)),
+            y: Math.round(designSpace.y + uwh(boardLayout.Y_WH)),
+            w: Math.round(uww(boardLayout.MAX_WIDTH_UIWW)),
+            h: Math.round(uwh(boardLayout.MAX_HEIGHT_WH))
         });
         const minBoardSide = Math.min(boardRect.w, boardRect.h);
         const boardPadding = Math.min(
@@ -74,14 +77,15 @@ export class TutorialBattleLayout {
         });
         const hudRects = Object.freeze(Object.fromEntries(
             Object.entries(this.#config.hud).map(([key, layout]) => ([key, Object.freeze({
-                x: safeViewport.UIOffsetX + uww(layout.X_UIWW),
-                y: uwh(layout.Y_WH),
-                w: uww(layout.WIDTH_UIWW),
-                h: uwh(layout.HEIGHT_WH)
+                x: Math.round(designSpace.x + uww(layout.X_UIWW)),
+                y: Math.round(designSpace.y + uwh(layout.Y_WH)),
+                w: Math.round(uww(layout.WIDTH_UIWW)),
+                h: Math.round(uwh(layout.HEIGHT_WH))
             })]))
         ));
         this.#geometry = Object.freeze({
             viewport: safeViewport,
+            designSpace,
             mapWidth,
             mapHeight,
             boardRect,

@@ -6,6 +6,8 @@ import { TUTORIAL_GAME_DATA } from '../project/engine/script/data/game/tutorial_
 import { TUTORIAL_ASSET_MANIFEST } from '../project/engine/script/data/game/tutorial_asset_manifest.js';
 import { TutorialBattleHudView } from '../project/engine/script/scene/tutorial/view/_tutorial_battle_hud_view.js';
 import { TutorialBattleLayout } from '../project/engine/script/scene/tutorial/view/_tutorial_battle_layout.js';
+import { TutorialBattleTutorialView } from '../project/engine/script/scene/tutorial/view/_tutorial_battle_tutorial_view.js';
+import { TUTORIAL_UI_LAYOUT_TOKENS } from '../project/engine/script/scene/tutorial/view/_tutorial_ui_layout_tokens.js';
 import { TutorialBattleFocusController } from '../project/engine/script/scene/tutorial/_tutorial_battle_focus_controller.js';
 import { TutorialCombatReadabilityPresenter } from '../project/engine/script/scene/tutorial/_tutorial_combat_readability_presenter.js';
 import { TutorialGuidanceController } from '../project/engine/script/scene/tutorial/_tutorial_guidance_controller.js';
@@ -119,6 +121,29 @@ test('세 화면비에서 HUD 영역은 UI 안에 있고 서로 겹치지 않는
     }
 });
 
+test('1280×720 전투 레이아웃은 Figma 정규화 앵커를 그대로 투영한다', () => {
+    const geometry = createLayout().resize(VIEWPORTS[0]);
+    const mappings = {
+        boardRect: TUTORIAL_UI_LAYOUT_TOKENS.BATTLE.MAP,
+        STAGE_HEADER: TUTORIAL_UI_LAYOUT_TOKENS.BATTLE.TURN,
+        LORA_CARD: TUTORIAL_UI_LAYOUT_TOKENS.BATTLE.LORA,
+        PLAYER_STATUS: TUTORIAL_UI_LAYOUT_TOKENS.BATTLE.PLAYER,
+        PRIMARY_ACTION: TUTORIAL_UI_LAYOUT_TOKENS.BATTLE.ACTION,
+        SECONDARY_ACTIONS: TUTORIAL_UI_LAYOUT_TOKENS.BATTLE.SECONDARY,
+        MISSION_CARD: TUTORIAL_UI_LAYOUT_TOKENS.BATTLE.CONTEXT,
+        INVENTORY_CARD: TUTORIAL_UI_LAYOUT_TOKENS.BATTLE.ITEM_FOCUS
+    };
+    for (const [key, token] of Object.entries(mappings)) {
+        const actual = key === 'boardRect' ? geometry.boardRect : geometry.hudRects[key];
+        assert.deepEqual(actual, {
+            x: Math.round(token.x * 1280),
+            y: Math.round(token.y * 720),
+            w: Math.round(token.w * 1280),
+            h: Math.round(token.h * 720)
+        }, key);
+    }
+});
+
 test('인벤토리 페이지는 음수와 초과 요청을 유효 범위로 제한한다', () => {
     const view = new TutorialBattleHudView(NOOP_RENDER_PORT);
     const entries = Array.from({ length: 32 }, (_, index) => ({
@@ -153,6 +178,54 @@ test('첫 플레이 안내는 자동으로 열리고 확인 뒤 재플레이에�
     assert.equal(guidance.isOpen(), false);
     guidance.show();
     assert.equal(guidance.isOpen(), true);
+});
+
+test('전투 안내는 7개 콜아웃과 Figma 하단 확인 영역을 사용한다', () => {
+    const commands = [];
+    const renderPort = {
+        render(layer, command) {
+            commands.push({ layer, ...command });
+        },
+        measureText(text) {
+            return String(text).length * 8;
+        },
+        wrapText(text) {
+            return [String(text)];
+        }
+    };
+    const layout = createLayout().resize(VIEWPORTS[0]);
+    const view = new TutorialBattleTutorialView(renderPort);
+    const viewModel = {
+        open: true,
+        viewport: VIEWPORTS[0],
+        layout,
+        fonts: { SMALL: '12px sans-serif' },
+        colors: {
+            UI: {
+                CardShadow: '#000', Card: '#fff', Border: '#333',
+                Primary: '#a00', Text: '#111', Muted: '#777',
+                PrimaryHover: '#b00', OnPrimary: '#fff'
+            }
+        },
+        copy: {
+            sentences: Array.from({ length: 7 }, (_, index) => `안내 ${index + 1}`),
+            replay: 'H로 다시 열기'
+        }
+    };
+    view.draw(viewModel);
+    const paperCards = commands.filter((command) => command.shape === 'roundRect');
+    assert.equal(paperCards.length, 14);
+    const [dismiss] = view.getButtonSpecs(viewModel);
+    const skip = TUTORIAL_UI_LAYOUT_TOKENS.TUTORIAL.SKIP;
+    assert.deepEqual(
+        { x: dismiss.x, y: dismiss.y, w: dismiss.w, h: dismiss.h },
+        {
+            x: Math.round(skip.x * 1280),
+            y: Math.round(skip.y * 720),
+            w: Math.round(skip.w * 1280),
+            h: Math.round(skip.h * 720)
+        }
+    );
 });
 
 test('가독성 프레젠터는 모델 수치를 재계산하지 않고 현재→예상 표시값을 보존한다', () => {

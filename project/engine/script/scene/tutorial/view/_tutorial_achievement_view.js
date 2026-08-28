@@ -1,5 +1,13 @@
 import { drawBattleViewText } from './_tutorial_battle_view_helpers.js';
-import { drawTutorialPixelAsset } from './_tutorial_asset_view_helpers.js';
+import {
+    drawTutorialPixelAsset,
+    fitTutorialAssetRect
+} from './_tutorial_asset_view_helpers.js';
+import {
+    createTutorialDesignSpace,
+    projectTutorialDesignRect
+} from './_tutorial_design_space.js';
+import { TUTORIAL_UI_LAYOUT_TOKENS } from './_tutorial_ui_layout_tokens.js';
 
 /**
  * @class TutorialAchievementView
@@ -22,13 +30,16 @@ export class TutorialAchievementView {
         if (!achievement?.visible || !viewport) {
             return;
         }
-        const rect = {
-            x: viewport.UIOffsetX + (viewport.UIWW * 0.355),
-            y: viewport.WH * 0.055,
-            w: viewport.UIWW * 0.29,
-            h: viewport.WH * 0.095
-        };
-        const art = this.#assetPort.getUiAsset?.('achievementPopup') || null;
+        const space = viewModel.layout?.designSpace
+            || createTutorialDesignSpace(viewport);
+        const target = projectTutorialDesignRect(
+            space,
+            TUTORIAL_UI_LAYOUT_TOKENS.BATTLE.ACHIEVEMENT
+        );
+        const art = this.#assetPort.getUiAsset?.('achievementFull')
+            || this.#assetPort.getUiAsset?.('achievementPopup')
+            || null;
+        const rect = fitTutorialAssetRect(art, target) || target;
         if (!drawTutorialPixelAsset(this.#renderPort, {
             layer: 'ui',
             image: art,

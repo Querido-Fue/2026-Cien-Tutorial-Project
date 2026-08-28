@@ -412,6 +412,21 @@ export class TutorialBattleWorldView {
         const { colors, layout, world } = this.#frame;
         const point = this.#projectTile(teleport.x, teleport.y);
         const pulse = 0.88 + (Math.sin(world.elapsedSeconds * 4) * 0.1);
+        const marker = this.#assetPort.getUiAsset?.('teleportMarker') || null;
+        if (marker) {
+            const width = layout.tileSide * 1.08 * pulse;
+            const height = width * (32 / 59);
+            this.#renderPort.renderGL('object', {
+                image: marker,
+                x: Math.round(point.x - (width * 0.5)),
+                y: Math.round(point.y - (height * 0.58)),
+                w: Math.round(width),
+                h: Math.round(height),
+                alpha: 0.94,
+                smoothing: false
+            });
+            return;
+        }
         this.#renderPort.renderGL('object', {
             shape: 'circle', x: point.x, y: point.y,
             w: layout.tileSide * 0.6 * pulse,

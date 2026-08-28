@@ -614,11 +614,11 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
     },
     LAYOUT: {
         BOARD: {
-            X_UIWW: 32.5,
-            Y_WH: 20,
-            MAX_WIDTH_UIWW: 43,
-            MAX_HEIGHT_WH: 64,
-            FRAME_PADDING_RATIO: 0.025,
+            X_UIWW: 2.7,
+            Y_WH: 2.5,
+            MAX_WIDTH_UIWW: 94.6,
+            MAX_HEIGHT_WH: 95,
+            FRAME_PADDING_RATIO: 0.008,
             TILE_GAP_RATIO: 0.045,
             ENTITY_SCALE_RATIO: 0.64,
             SHADOW_OFFSET_RATIO: 0.08,
@@ -627,19 +627,19 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         HEADER: { X_UIWW: 4, Y_WH: 3.4 },
         ACTIONS: {
             COLUMNS: 4,
-            GAP_X_UIWW: 0.6,
+            GAP_X_UIWW: 0.45,
             BUTTON_RADIUS_WH: 1
         },
-        INVENTORY: { PAGE_SIZE: 15, COLUMNS: 3, ROWS: 5 },
+        INVENTORY: { PAGE_SIZE: 4, COLUMNS: 4, ROWS: 1 },
         HUD: {
-            STAGE_HEADER: { X_UIWW: 4.5, Y_WH: 4.8, WIDTH_UIWW: 21.5, HEIGHT_WH: 12 },
-            MENU: { X_UIWW: 27, Y_WH: 3.6, WIDTH_UIWW: 7, HEIGHT_WH: 4.8 },
-            LORA_CARD: { X_UIWW: 69.5, Y_WH: 4.5, WIDTH_UIWW: 27.5, HEIGHT_WH: 21 },
-            MISSION_CARD: { X_UIWW: 76, Y_WH: 30, WIDTH_UIWW: 21, HEIGHT_WH: 36 },
-            PLAYER_STATUS: { X_UIWW: 4, Y_WH: 59.5, WIDTH_UIWW: 27, HEIGHT_WH: 5 },
-            INVENTORY_CARD: { X_UIWW: 4, Y_WH: 66, WIDTH_UIWW: 27, HEIGHT_WH: 30 },
-            SECONDARY_ACTIONS: { X_UIWW: 32.5, Y_WH: 87, WIDTH_UIWW: 43, HEIGHT_WH: 9 },
-            PRIMARY_ACTION: { X_UIWW: 78, Y_WH: 87, WIDTH_UIWW: 19, HEIGHT_WH: 9 }
+            STAGE_HEADER: { X_UIWW: 4.8, Y_WH: 6, WIDTH_UIWW: 17, HEIGHT_WH: 4.5 },
+            MENU: { X_UIWW: 22.5, Y_WH: 6, WIDTH_UIWW: 8, HEIGHT_WH: 4.5 },
+            LORA_CARD: { X_UIWW: 71, Y_WH: 6, WIDTH_UIWW: 24, HEIGHT_WH: 15 },
+            MISSION_CARD: { X_UIWW: 4.5, Y_WH: 12, WIDTH_UIWW: 16, HEIGHT_WH: 22 },
+            PLAYER_STATUS: { X_UIWW: 4.8, Y_WH: 81.5, WIDTH_UIWW: 22, HEIGHT_WH: 12 },
+            INVENTORY_CARD: { X_UIWW: 4.7, Y_WH: 58, WIDTH_UIWW: 10, HEIGHT_WH: 23 },
+            SECONDARY_ACTIONS: { X_UIWW: 72, Y_WH: 69, WIDTH_UIWW: 23, HEIGHT_WH: 7.5 },
+            PRIMARY_ACTION: { X_UIWW: 82, Y_WH: 77, WIDTH_UIWW: 13, HEIGHT_WH: 17 }
         },
         MODAL: { WIDTH_UIWW: 42, HEIGHT_WH: 46, RADIUS_WH: 2 }
     },
@@ -699,9 +699,13 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         TUTORIAL_GUIDE: {
             TITLE: '전투 안내',
             SENTENCES: [
-                '업적을 달성하면 이곳에 표시됩니다.',
-                '로라의 체력, 불안정 수치를 확인할 수 있습니다.',
-                '매턴 최대 4칸 이동할 수 있습니다.'
+                '턴 순서와 현재 진행 단계를 확인하세요.',
+                '다음 로라 행동과 선택 결과를 미리 볼 수 있습니다.',
+                '업적을 달성하면 화면 위쪽에 표시됩니다.',
+                '로라의 체력과 불안정 수치를 확인하세요.',
+                '근접·원거리·회복·대기 중 행동을 선택하세요.',
+                '내 체력과 보유 아이템은 왼쪽 아래에 있습니다.',
+                '매턴 최대 4칸 이동한 뒤 행동을 확정하세요.'
             ],
             REPLAY: 'H로 언제든 다시 열 수 있습니다.'
         },
