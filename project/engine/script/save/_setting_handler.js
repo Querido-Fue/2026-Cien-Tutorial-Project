@@ -1,4 +1,4 @@
-import { fsPromises, path } from 'util/nw_bridge.js';
+import { fsPromises, isNwRuntime, path } from 'util/nw_bridge.js';
 import { setTheme } from 'display/_theme_handler.js';
 import { MathUtil } from 'util/math_util.js';
 import { getData } from 'data/data_handler.js';
@@ -44,7 +44,7 @@ export class SettingHandler {
             theme: { type: 'string', value: DEFAULT_THEME_KEY, min: -1, max: -1, hidden: false },
             disableTransparency: { type: 'bool', value: false, min: -1, max: -1, hidden: false },
             language: { type: 'string', value: defaultLang, min: -1, max: -1, hidden: false },
-            windowMode: { type: 'string', value: 'fullscreen', min: -1, max: -1, hidden: false },
+            windowMode: { type: 'string', value: isNwRuntime() ? 'fullscreen' : 'windowed', min: -1, max: -1, hidden: false },
             widescreenSupport: { type: 'bool', value: true, min: -1, max: -1, hidden: false },
             width: { type: 'int', value: 1280, min: 1280, max: -1, hidden: false },
             height: { type: 'int', value: 720, min: 720, max: -1, hidden: false },
@@ -117,7 +117,7 @@ export class SettingHandler {
             if (processedValue === 'fullscreen' || processedValue === 'windowed') {
                 return processedValue;
             }
-            return 'fullscreen';
+            return isNwRuntime() ? 'fullscreen' : 'windowed';
         }
         if (key === 'language') {
             if (AVAILABLE_LANGUAGE_KEYS.includes(processedValue)) {

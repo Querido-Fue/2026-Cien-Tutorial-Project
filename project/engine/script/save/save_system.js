@@ -1,4 +1,4 @@
-import { path } from 'util/nw_bridge.js';
+import { path, runtimeRoot } from 'util/nw_bridge.js';
 import { ProgressHandler } from './_progress_handler.js';
 import { RuntimeStateHandler } from './_runtime_state_handler.js';
 import { SettingHandler } from './_setting_handler.js';
@@ -8,12 +8,12 @@ let saveSystemInstance;
 
 /**
  * @class SaveSystem
- * @description 엔진 런타임의 설정/진행도/상태 데이터를 NW.js 로컬 파일에 저장합니다.
+ * @description 엔진 런타임의 설정/진행도/상태 데이터를 런타임별 로컬 저장소에 저장합니다.
  */
 export class SaveSystem {
     constructor() {
         saveSystemInstance = this;
-        this.dataDir = path.join(process.cwd(), 'save');
+        this.dataDir = path.join(runtimeRoot, 'save');
 
         this.settingHandler = new SettingHandler(this.dataDir);
         this.progressHandler = new ProgressHandler(this.dataDir);

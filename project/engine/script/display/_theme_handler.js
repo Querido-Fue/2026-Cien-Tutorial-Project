@@ -1,9 +1,7 @@
 import { getData } from 'data/data_handler.js';
 import { setDisplayBackgroundColor } from './_display_background_port.js';
 import { colorUtil } from 'util/color_util.js';
-const fs = require('fs');
-const fsPromises = fs.promises;
-const path = require('path');
+import { fsPromises, path, runtimeRoot } from 'util/nw_bridge.js';
 
 const THEMES = getData('THEMES');
 const DEFAULT_THEME_KEY = getData('DEFAULT_THEME_KEY');
@@ -72,7 +70,7 @@ export class ThemeHandler {
     async init() {
         let themeKey = DEFAULT_THEME_KEY;
         try {
-            const dataDir = path.join(process.cwd(), 'save');
+            const dataDir = path.join(runtimeRoot, 'save');
             const settingsPath = path.join(dataDir, 'settings.json');
 
             try {

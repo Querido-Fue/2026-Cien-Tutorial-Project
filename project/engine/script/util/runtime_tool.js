@@ -1,12 +1,11 @@
-import { nw } from './nw_bridge.js';
+import { isNwRuntime, nw } from './nw_bridge.js';
 import { clampFiniteNumber, resolveFiniteNumber } from './number_util.js';
 
 let runtimeToolInstance = null;
 
 /**
  * @class RuntimeTool
- * @description 런타임 환경(NW.js) 관련 유틸리티 클래스입니다.
- * NW.js 창 및 외부 연동 기능을 제공합니다.
+ * @description NW.js와 웹 브라우저의 창 및 외부 연동 기능을 제공합니다.
  */
 export class RuntimeTool {
     constructor() {
@@ -54,7 +53,19 @@ export class RuntimeTool {
             return false;
         }
 
-        nw.Shell.openExternal(normalizedUrl);
+        if (isNwRuntime()) {
+            nw.Shell.openExternal(normalizedUrl);
+            return true;
+        }
+
+        if (typeof window === 'undefined' || typeof window.open !== 'function') {
+            return false;
+        }
+
+        const openedWindow = window.open(normalizedUrl, '_blank', 'noopener,noreferrer');
+        if (openedWindow) {
+            openedWindow.opener = null;
+        }
         return true;
     }
 
@@ -64,11 +75,23 @@ export class RuntimeTool {
      */
     setFullScreen(isFullScreen) {
         const appWindow = this._getWindow();
-        if (isFullScreen) {
-            appWindow.enterFullscreen();
-        } else {
-            appWindow.leaveFullscreen();
+        if (appWindow) {
+            if (isFullScreen) {
+                appWindow.enterFullscreen();
+            } else {
+                appWindow.leaveFullscreen();
+            }
+            return true;
         }
+
+        const documentElement = globalThis.document?.documentElement;
+        const operation = isFullScreen
+            ? documentElement?.requestFullscreen?.()
+            : (globalThis.document?.fullscreenElement
+                ? globalThis.document.exitFullscreen?.()
+                : null);
+        operation?.catch?.(() => {});
+        return Boolean(operation);
     }
 
     /**
@@ -78,9 +101,13 @@ export class RuntimeTool {
      */
     setWindowSize(width, height) {
         const appWindow = this._getWindow();
+        if (!appWindow) {
+            return false;
+        }
         const nextWidth = Math.round(clampFiniteNumber(Number(width), 1, Infinity, appWindow.width || 1));
         const nextHeight = Math.round(clampFiniteNumber(Number(height), 1, Infinity, appWindow.height || 1));
         appWindow.resizeTo(nextWidth, nextHeight);
+        return true;
     }
 
     /**
@@ -90,9 +117,13 @@ export class RuntimeTool {
      */
     setWindowPosition(x, y) {
         const appWindow = this._getWindow();
+        if (!appWindow) {
+            return false;
+        }
         const nextX = Math.round(resolveFiniteNumber(Number(x), appWindow.x || 0));
         const nextY = Math.round(resolveFiniteNumber(Number(y), appWindow.y || 0));
         appWindow.moveTo(nextX, nextY);
+        return true;
     }
 
     /**
@@ -100,6 +131,9 @@ export class RuntimeTool {
      */
     setWindowPositionCenter() {
         const appWindow = this._getWindow();
+        if (!appWindow) {
+            return false;
+        }
         const width = clampFiniteNumber(Number(appWindow.width), 1, Infinity, 1);
         const height = clampFiniteNumber(Number(appWindow.height), 1, Infinity, 1);
         const screenWidth = clampFiniteNumber(Number(window.screen?.width), 1, Infinity, width);
@@ -107,13 +141,21 @@ export class RuntimeTool {
         const x = Math.round((screenWidth - width) / 2);
         const y = Math.round((screenHeight - height) / 2);
         appWindow.moveTo(x, y);
+        return true;
     }
 
     /**
      * 창을 닫습니다.
      */
     closeWindow() {
-        this._getWindow().close(true);
+        const appWindow = this._getWindow();
+        if (appWindow) {
+            appWindow.close(true);
+            return true;
+        }
+
+        globalThis.window?.close?.();
+        return false;
     }
 
     /**
@@ -122,23 +164,32 @@ export class RuntimeTool {
      */
     setZoomLevel(zoomLevel) {
         const appWindow = this._getWindow();
+        if (!appWindow) {
+            return false;
+        }
         appWindow.zoomLevel = resolveFiniteNumber(Number(zoomLevel), appWindow.zoomLevel || 0);
+        return true;
     }
 
     /**
      * 디버그 창을 엽니다.
      */
     openDebugWindow() {
-        this._getWindow().showDevTools();
+        const appWindow = this._getWindow();
+        if (!appWindow) {
+            return false;
+        }
+        appWindow.showDevTools();
+        return true;
     }
 
     /**
      * 현재 NW.js 앱 창 객체를 반환합니다.
-     * @returns {NWJS_Helpers.win} NW.js 창 객체입니다.
+     * @returns {NWJS_Helpers.win|null} NW.js 창 객체입니다.
      * @private
      */
     _getWindow() {
-        return nw.Window.get();
+        return isNwRuntime() ? nw.Window.get() : null;
     }
 }
 

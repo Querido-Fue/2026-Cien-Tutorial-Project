@@ -18,6 +18,8 @@
     "check:repo": "node --experimental-default-type=module scripts/check-repo.mjs",
     "check:release": "node --experimental-default-type=module scripts/check-release.mjs",
     "simulate:balance": "node --experimental-default-type=module scripts/simulate-tutorial-balance.mjs",
+    "build:web": "node scripts/build-web.mjs",
+    "test:web": "node --experimental-default-type=module --test test/web_runtime.test.mjs",
     "package:nwjs": "node scripts/package-nwjs.mjs",
     "package": "npm run package:nwjs"
   }
