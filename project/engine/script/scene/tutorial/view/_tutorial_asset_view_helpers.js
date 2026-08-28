@@ -33,13 +33,43 @@ export function fitTutorialAssetRect(image, container) {
 }
 
 /**
+ * 지정 렌더 모드로 픽셀 에셋 대상 사각형을 계산합니다.
+ * exact는 화면별 layout builder가 이미 원본 비율을 보장할 때만 사용합니다.
+ * @param {object} image - CanvasImageSource입니다.
+ * @param {{x:number,y:number,w:number,h:number}} container - 대상 영역입니다.
+ * @param {'contain'|'exact'} [mode='contain'] - 렌더 모드입니다.
+ * @returns {{x:number,y:number,w:number,h:number}|null} 정수 대상 사각형입니다.
+ */
+export function resolveTutorialAssetRect(image, container, mode = 'contain') {
+    if (mode === 'exact') {
+        const dimensions = getTutorialAssetDimensions(image);
+        const width = Number(container?.w);
+        const height = Number(container?.h);
+        if (!dimensions || !(width > 0) || !(height > 0)) {
+            return null;
+        }
+        return Object.freeze({
+            x: Math.round(Number(container.x)),
+            y: Math.round(Number(container.y)),
+            w: Math.max(1, Math.round(width)),
+            h: Math.max(1, Math.round(height))
+        });
+    }
+    return fitTutorialAssetRect(image, container);
+}
+
+/**
  * UI PNG를 비율 유지·정수 좌표·nearest-neighbor 옵션으로 그립니다.
  * @param {object} renderPort - render 함수를 가진 포트입니다.
  * @param {object} options - 이미지와 레이어·대상 영역입니다.
  * @returns {boolean} 그리기 명령 생성 여부입니다.
  */
 export function drawTutorialPixelAsset(renderPort, options) {
-    const target = fitTutorialAssetRect(options?.image, options?.rect);
+    const target = resolveTutorialAssetRect(
+        options?.image,
+        options?.rect,
+        options?.mode || 'contain'
+    );
     if (!target || typeof renderPort?.render !== 'function') {
         return false;
     }

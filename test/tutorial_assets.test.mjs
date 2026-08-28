@@ -10,7 +10,10 @@ import { TutorialAssetLoader } from '../project/engine/script/scene/tutorial/_tu
 import { TutorialAssetPort } from '../project/engine/script/scene/tutorial/_tutorial_asset_port.js';
 import { TutorialAchievementBanner } from '../project/engine/script/scene/tutorial/_tutorial_achievement_banner.js';
 import { TutorialBattleLayout } from '../project/engine/script/scene/tutorial/view/_tutorial_battle_layout.js';
-import { fitTutorialAssetRect } from '../project/engine/script/scene/tutorial/view/_tutorial_asset_view_helpers.js';
+import {
+    fitTutorialAssetRect,
+    resolveTutorialAssetRect
+} from '../project/engine/script/scene/tutorial/view/_tutorial_asset_view_helpers.js';
 import { auditTutorialAssets } from '../scripts/tutorial-assets/tutorial_asset_audit.mjs';
 import { resolveTutorialAssetPaths } from '../scripts/tutorial-assets/tutorial_asset_paths.mjs';
 
@@ -250,6 +253,11 @@ test('픽셀 UI는 비율을 유지한 정수 사각형과 일시적 nearest 옵
     );
     assert.deepEqual(fitted, { x: 10, y: 25, w: 300, h: 51 });
     assert.ok(Math.abs((fitted.w / fitted.h) - (153 / 26)) < 0.02);
+    assert.deepEqual(resolveTutorialAssetRect(
+        { width: 153, height: 26 },
+        { x: 10.4, y: 20.7, w: 300, h: 60 },
+        'exact'
+    ), { x: 10, y: 21, w: 300, h: 60 });
 
     const smoothingChanges = [];
     const context = {

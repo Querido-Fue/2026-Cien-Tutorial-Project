@@ -1,4 +1,5 @@
 import { UIPool, releaseUIItem } from 'ui/_ui_pool.js';
+import { fitTutorialAssetRect } from './_tutorial_asset_view_helpers.js';
 
 /**
  * @class TutorialButtonHost
@@ -101,6 +102,13 @@ export class TutorialButtonHost {
         const enabled = spec.enabled !== false;
         const inspectable = spec.inspectable === true || enabled;
         const icon = spec.icon || this.#createItemIconChild(spec.iconId, spec.iconWidth);
+        const backgroundImage = spec.backgroundAssetKey
+            ? this.#assetPort.getUiAsset?.(spec.backgroundAssetKey)
+            : null;
+        const visualRect = spec.fitHitToBackground === true && backgroundImage
+            ? fitTutorialAssetRect(backgroundImage, spec)
+            : null;
+        const interactiveRect = visualRect || spec;
         const textElement = UIPool.text_element.get();
         textElement.init({
             parent: this.#parent,
@@ -118,17 +126,15 @@ export class TutorialButtonHost {
         button.init({
             parent: this.#parent,
             layer: 'ui',
-            x: spec.x,
-            y: spec.y,
-            width: spec.w,
-            height: spec.h,
+            x: interactiveRect.x,
+            y: interactiveRect.y,
+            width: interactiveRect.w,
+            height: interactiveRect.h,
             center: icon ? [icon, textElement] : [textElement],
             itemSpacing: spec.itemSpacing,
             radius: spec.radius ?? style.defaultRadius,
             shadow: spec.shadow,
-            backgroundImage: spec.backgroundAssetKey
-                ? this.#assetPort.getUiAsset?.(spec.backgroundAssetKey)
-                : null,
+            backgroundImage,
             backgroundImageAlpha: enabled
                 ? (spec.backgroundImageAlpha ?? 1)
                 : (spec.backgroundImageAlpha ?? 1) * 0.32,
