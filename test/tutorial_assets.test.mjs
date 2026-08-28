@@ -276,6 +276,27 @@ test('픽셀 UI는 비율을 유지한 정수 사각형과 일시적 nearest 옵
     });
     assert.deepEqual(smoothingChanges, [false, true]);
 
+    const transformCalls = [];
+    const flippedContext = {
+        imageSmoothingEnabled: true,
+        save() { transformCalls.push(['save']); },
+        translate(...args) { transformCalls.push(['translate', ...args]); },
+        scale(...args) { transformCalls.push(['scale', ...args]); },
+        drawImage(...args) { transformCalls.push(['drawImage', ...args]); },
+        restore() { transformCalls.push(['restore']); }
+    };
+    renderDrawImage(flippedContext, {
+        image: 'arrow', x: 10, y: 20, w: 19, h: 32,
+        smoothing: false, flipX: true
+    });
+    assert.deepEqual(transformCalls, [
+        ['save'],
+        ['translate', 29, 20],
+        ['scale', -1, 1],
+        ['drawImage', 'arrow', 0, 0, 19, 32],
+        ['restore']
+    ]);
+
     const throwingContext = {
         imageSmoothingEnabled: true,
         drawImage() { throw new Error('draw failed'); }

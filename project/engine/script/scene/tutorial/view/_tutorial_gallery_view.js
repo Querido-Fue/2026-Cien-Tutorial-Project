@@ -4,11 +4,15 @@ import {
     createTutorialTextAnchor,
     drawTutorialBackgroundPanel,
     drawTutorialText,
-    getTutorialUiCenterX,
     toTutorialUiHeight,
     toTutorialUiWidth,
     wrapTutorialText
 } from './_tutorial_nonbattle_view_helpers.js';
+import {
+    createTutorialDesignSpace,
+    projectTutorialDesignRect
+} from './_tutorial_design_space.js';
+import { TUTORIAL_UI_LAYOUT_TOKENS } from './_tutorial_ui_layout_tokens.js';
 
 /**
  * @class TutorialGalleryView
@@ -31,13 +35,12 @@ export class TutorialGalleryView {
      */
     getLayout(viewModel) {
         const { viewport } = viewModel;
-        const centerX = getTutorialUiCenterX(viewport);
-        const bookContainer = {
-            x: centerX - toTutorialUiWidth(viewport, 38),
-            y: toTutorialUiHeight(viewport, 14),
-            w: toTutorialUiWidth(viewport, 76),
-            h: toTutorialUiHeight(viewport, 67)
-        };
+        const space = createTutorialDesignSpace(viewport);
+        const centerX = space.x + (space.w * 0.5);
+        const bookContainer = projectTutorialDesignRect(
+            space,
+            TUTORIAL_UI_LAYOUT_TOKENS.GALLERY.BOOK
+        );
         const book = fitTutorialAssetRect(
             this.#assetPort.getUiAsset?.('endingBook1'),
             bookContainer
@@ -54,57 +57,47 @@ export class TutorialGalleryView {
             w: book.w * 0.39,
             h: book.h * 0.76
         };
-        const tabGap = toTutorialUiWidth(viewport, 0.7);
-        const tabW = Math.min(
-            toTutorialUiWidth(viewport, 16),
-            (toTutorialUiWidth(viewport, 88) - (tabGap * 4)) / 5
-        );
-        const tabsTotalW = (tabW * viewModel.sections.length)
-            + (tabGap * Math.max(0, viewModel.sections.length - 1));
+        const bookmarkTokens = [
+            ...TUTORIAL_UI_LAYOUT_TOKENS.GALLERY.LEFT_BOOKMARKS,
+            ...TUTORIAL_UI_LAYOUT_TOKENS.GALLERY.RIGHT_BOOKMARKS
+        ];
         const tabs = viewModel.sections.map((section, index) => ({
             id: section.id,
-            x: centerX - (tabsTotalW * 0.5) + (index * (tabW + tabGap)),
-            y: toTutorialUiHeight(viewport, 5.5),
-            w: tabW,
-            h: toTutorialUiHeight(viewport, 5.6)
+            ...projectTutorialDesignRect(space, bookmarkTokens[index])
         }));
-        const rowH = Math.min(toTutorialUiHeight(viewport, 6.2), leftPage.h / 7.5);
+        const rowH = Math.min(
+            space.h * 0.052,
+            (leftPage.h * 0.7) / Math.max(1, viewModel.entries.length)
+        );
         const rows = viewModel.entries.map((entry, index) => ({
             id: entry.id,
             x: leftPage.x + (leftPage.w * 0.04),
-            y: leftPage.y + (leftPage.h * 0.12) + (index * rowH),
+            y: leftPage.y + (leftPage.h * 0.15) + (index * rowH),
             w: leftPage.w * 0.92,
             h: rowH * 0.82
         }));
-        const buttonY = toTutorialUiHeight(viewport, 86);
-        const buttonH = toTutorialUiHeight(viewport, 5.4);
-        const buttons = [
-            {
-                x: centerX - toTutorialUiWidth(viewport, 31),
-                y: buttonY,
-                w: toTutorialUiWidth(viewport, 12),
-                h: buttonH
-            },
-            {
-                x: centerX - toTutorialUiWidth(viewport, 8),
-                y: buttonY,
-                w: toTutorialUiWidth(viewport, 16),
-                h: buttonH
-            },
-            {
-                x: centerX + toTutorialUiWidth(viewport, 19),
-                y: buttonY,
-                w: toTutorialUiWidth(viewport, 12),
-                h: buttonH
-            },
-            {
-                x: Number(viewport.UIOffsetX) + toTutorialUiWidth(viewport, 3),
-                y: toTutorialUiHeight(viewport, 91),
-                w: toTutorialUiWidth(viewport, 12),
-                h: buttonH
+        const buttons = {
+            previous: projectTutorialDesignRect(
+                space,
+                TUTORIAL_UI_LAYOUT_TOKENS.GALLERY.PREVIOUS
+            ),
+            next: projectTutorialDesignRect(
+                space,
+                TUTORIAL_UI_LAYOUT_TOKENS.GALLERY.NEXT
+            ),
+            close: projectTutorialDesignRect(
+                space,
+                TUTORIAL_UI_LAYOUT_TOKENS.GALLERY.CLOSE
+            ),
+            play: {
+                x: rightPage.x + (rightPage.w * 0.27),
+                y: rightPage.y + (rightPage.h * 0.78),
+                w: rightPage.w * 0.46,
+                h: rightPage.h * 0.095
             }
-        ];
+        };
         return {
+            space,
             centerX,
             book,
             leftPage,
@@ -267,36 +260,33 @@ export class TutorialGalleryView {
             active: section.selected,
             backgroundAssetKey: section.bookmarkAssetKey,
             backgroundImageAlpha: section.selected ? 1 : 0.62,
+            fitHitToBackground: true,
             command: {
                 type: TUTORIAL_COMMANDS.GALLERY_SECTION_SHIFT,
                 payload: { sectionId: section.id }
             }
         }));
         const playable = viewModel.selectedEntry?.playable === true;
-        return [
+        const buttons = [
             ...sectionButtons,
             {
                 key: 'gallery-prev',
-                ...layout.buttons[0],
-                label: '◀ 이전',
+                ...layout.buttons.previous,
+                label: '‹',
                 backgroundAssetKey: 'galleryTurnButton',
+                backgroundImageAlpha: 0.9,
+                backgroundImageFlipX: true,
                 command: {
                     type: TUTORIAL_COMMANDS.GALLERY_SHIFT,
                     payload: { delta: -1 }
                 }
             },
             {
-                key: 'gallery-play',
-                ...layout.buttons[1],
-                label: playable ? '재생  [Enter]' : '열람 중',
-                enabled: playable,
-                command: { type: TUTORIAL_COMMANDS.GALLERY_PLAY }
-            },
-            {
                 key: 'gallery-next',
-                ...layout.buttons[2],
-                label: '다음 ▶',
+                ...layout.buttons.next,
+                label: '›',
                 backgroundAssetKey: 'galleryTurnButton',
+                backgroundImageAlpha: 0.9,
                 command: {
                     type: TUTORIAL_COMMANDS.GALLERY_SHIFT,
                     payload: { delta: 1 }
@@ -304,11 +294,25 @@ export class TutorialGalleryView {
             },
             {
                 key: 'gallery-back',
-                ...layout.buttons[3],
-                label: '메뉴  [Esc]',
+                ...layout.buttons.close,
+                label: '×',
                 backgroundAssetKey: 'galleryExitButton',
+                backgroundImageAlpha: 1,
+                fitHitToBackground: true,
                 command: { type: TUTORIAL_COMMANDS.RETURN_MENU }
             }
         ];
+        if (playable) {
+            buttons.splice(sectionButtons.length + 1, 0, {
+                key: 'gallery-play',
+                ...layout.buttons.play,
+                label: '재생  [Enter]',
+                backgroundAssetKey: 'mainButton',
+                backgroundImageAlpha: 0.88,
+                fitHitToBackground: true,
+                command: { type: TUTORIAL_COMMANDS.GALLERY_PLAY }
+            });
+        }
+        return buttons;
     }
 }

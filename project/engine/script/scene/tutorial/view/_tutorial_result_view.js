@@ -2,12 +2,13 @@ import { TUTORIAL_COMMANDS } from '../_tutorial_scene_constants.js';
 import { drawTutorialPixelAsset, fitTutorialAssetRect } from './_tutorial_asset_view_helpers.js';
 import {
     createTutorialTextAnchor,
-    drawTutorialBackgroundPanel,
-    drawTutorialText,
-    getTutorialUiCenterX,
-    toTutorialUiHeight,
-    toTutorialUiWidth
+    drawTutorialBackgroundPanel
 } from './_tutorial_nonbattle_view_helpers.js';
+import {
+    createTutorialDesignSpace,
+    projectTutorialDesignRect
+} from './_tutorial_design_space.js';
+import { TUTORIAL_UI_LAYOUT_TOKENS } from './_tutorial_ui_layout_tokens.js';
 
 /**
  * @class TutorialResultView
@@ -30,13 +31,12 @@ export class TutorialResultView {
      */
     getLayout(viewModel) {
         const { viewport } = viewModel;
-        const centerX = getTutorialUiCenterX(viewport);
-        const container = {
-            x: centerX - toTutorialUiWidth(viewport, 38),
-            y: toTutorialUiHeight(viewport, 9),
-            w: toTutorialUiWidth(viewport, 76),
-            h: toTutorialUiHeight(viewport, 72)
-        };
+        const space = createTutorialDesignSpace(viewport);
+        const centerX = space.x + (space.w * 0.5);
+        const container = projectTutorialDesignRect(
+            space,
+            TUTORIAL_UI_LAYOUT_TOKENS.RESULT.BOOK
+        );
         const book = fitTutorialAssetRect(
             this.#assetPort.getUiAsset?.('endingBook1'),
             container
@@ -53,24 +53,28 @@ export class TutorialResultView {
             w: book.w * 0.39,
             h: book.h * 0.75
         };
-        const buttonW = toTutorialUiWidth(viewport, 18);
-        const buttonH = toTutorialUiHeight(viewport, 5.5);
-        const gap = toTutorialUiWidth(viewport, 2);
+        const buttonGroup = projectTutorialDesignRect(
+            space,
+            TUTORIAL_UI_LAYOUT_TOKENS.RESULT.BUTTON_GROUP
+        );
+        const buttonGap = Math.max(5, space.h * 0.012);
+        const buttonH = (buttonGroup.h - buttonGap) * 0.5;
         const buttons = [
             {
-                x: centerX - buttonW - (gap * 0.5),
-                y: toTutorialUiHeight(viewport, 86),
-                w: buttonW,
+                x: buttonGroup.x,
+                y: buttonGroup.y,
+                w: buttonGroup.w,
                 h: buttonH
             },
             {
-                x: centerX + (gap * 0.5),
-                y: toTutorialUiHeight(viewport, 86),
-                w: buttonW,
+                x: buttonGroup.x,
+                y: buttonGroup.y + buttonH + buttonGap,
+                w: buttonGroup.w,
                 h: buttonH
             }
         ];
         return {
+            space,
             centerX,
             book,
             leftPage,
@@ -91,7 +95,32 @@ export class TutorialResultView {
     /** @param {object} viewModel - 읽기 전용 결과 상태입니다. */
     draw(viewModel) {
         const layout = this.getLayout(viewModel);
-        const { colors, fonts, viewport, result } = viewModel;
+        const { colors } = viewModel;
+        const artwork = this.#assetPort.getMapArtwork?.('basement') || null;
+        const mapTarget = projectTutorialDesignRect(
+            layout.space,
+            TUTORIAL_UI_LAYOUT_TOKENS.BATTLE.MAP
+        );
+        const mapRect = fitTutorialAssetRect(artwork?.layers?.[0], mapTarget)
+            || mapTarget;
+        for (const image of artwork?.layers || []) {
+            this.#renderPort.render('ui', {
+                shape: 'image',
+                image,
+                ...mapRect,
+                alpha: 0.58,
+                smoothing: false
+            });
+        }
+        this.#renderPort.render('ui', {
+            shape: 'rect',
+            x: layout.space.x,
+            y: layout.space.y,
+            w: layout.space.w,
+            h: layout.space.h,
+            fill: colors.UI.PanelStrong,
+            alpha: 0.24
+        });
         const bookDrawn = drawTutorialPixelAsset(this.#renderPort, {
             image: this.#assetPort.getUiAsset?.('endingBook1'),
             rect: layout.book
@@ -109,61 +138,6 @@ export class TutorialResultView {
             }
         });
 
-        const drawCentered = (text, ratioY, font, fill) => drawTutorialText(
-            this.#renderPort,
-            {
-                text,
-                x: layout.rightPage.x + (layout.rightPage.w * 0.5),
-                y: layout.rightPage.y + (layout.rightPage.h * ratioY),
-                font,
-                fill,
-                align: 'center'
-            }
-        );
-        drawCentered('the end', 0.11, fonts.SUBTITLE, colors.UI.Muted);
-        drawCentered(
-            result.displayName || 'happily ever after..?',
-            0.24,
-            fonts.HEADING,
-            colors.UI.Accent
-        );
-        drawCentered(
-            result.neutralized ? '로라 무력화 성공' : '로라 무력화 실패',
-            0.38,
-            fonts.BODY,
-            result.neutralized ? colors.UI.Success : colors.UI.Danger
-        );
-        const reasonLabels = {
-            'lora-neutralized': '종료 사유 · 로라 HP 0',
-            'player-defeated': '종료 사유 · 플레이어 HP 0',
-            'turn-limit': '종료 사유 · 로라 행동 12회 완료'
-        };
-        drawCentered(
-            reasonLabels[result.reason] || '종료 사유 · 작전 판정',
-            0.49,
-            fonts.SMALL,
-            colors.UI.Muted
-        );
-        drawCentered(
-            '로라 행동  ' + String(result.loraActionsCompleted || 0) + '/12',
-            0.61,
-            fonts.BODY,
-            colors.UI.Text
-        );
-        drawCentered(
-            '최종 불안정도  ' + String(result.instability || 0),
-            0.72,
-            fonts.BODY,
-            colors.UI.Text
-        );
-        drawTutorialText(this.#renderPort, {
-            text: 'R 재시작 · Esc 나가기',
-            x: layout.centerX,
-            y: toTutorialUiHeight(viewport, 96),
-            font: fonts.SMALL,
-            fill: colors.UI.Muted,
-            align: 'center'
-        });
     }
 
     /**
@@ -173,11 +147,22 @@ export class TutorialResultView {
      */
     getButtonSpecs(viewModel) {
         const layout = this.getLayout(viewModel);
+        const result = viewModel.result || {};
+        const summary = [
+            result.displayName || '결과',
+            result.neutralized ? '로라 무력화 성공' : '로라 무력화 실패',
+            '로라 행동 ' + String(result.loraActionsCompleted || 0) + '/12',
+            '최종 불안정도 ' + String(result.instability || 0)
+        ].join(' · ');
         return [
             {
                 key: 'result-retry',
                 ...layout.buttons[0],
                 label: '재시작하기  [R]',
+                backgroundAssetKey: 'mainButton',
+                backgroundImageAlpha: 0.9,
+                fitHitToBackground: true,
+                tooltip: summary,
                 enabled: !viewModel.presentationLocked,
                 command: { type: TUTORIAL_COMMANDS.RESTART }
             },
@@ -185,6 +170,10 @@ export class TutorialResultView {
                 key: 'result-menu',
                 ...layout.buttons[1],
                 label: '나가기  [Esc]',
+                backgroundAssetKey: 'mainButton',
+                backgroundImageAlpha: 0.9,
+                fitHitToBackground: true,
+                tooltip: summary,
                 enabled: !viewModel.presentationLocked,
                 command: { type: TUTORIAL_COMMANDS.RETURN_MENU }
             }

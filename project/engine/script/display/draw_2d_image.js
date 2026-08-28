@@ -5,13 +5,32 @@
  */
 export function renderDrawImage(context, options) {
     const previousSmoothing = context.imageSmoothingEnabled;
+    const flipX = options.flipX === true;
+    const flipY = options.flipY === true;
+    const draw = () => {
+        if (!flipX && !flipY) {
+            context.drawImage(options.image, options.x, options.y, options.w, options.h);
+            return;
+        }
+        context.save();
+        try {
+            context.translate(
+                options.x + (flipX ? options.w : 0),
+                options.y + (flipY ? options.h : 0)
+            );
+            context.scale(flipX ? -1 : 1, flipY ? -1 : 1);
+            context.drawImage(options.image, 0, 0, options.w, options.h);
+        } finally {
+            context.restore();
+        }
+    };
     if (options.smoothing === undefined) {
-        context.drawImage(options.image, options.x, options.y, options.w, options.h);
+        draw();
         return;
     }
     context.imageSmoothingEnabled = options.smoothing !== false;
     try {
-        context.drawImage(options.image, options.x, options.y, options.w, options.h);
+        draw();
     } finally {
         context.imageSmoothingEnabled = previousSmoothing;
     }

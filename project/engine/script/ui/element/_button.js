@@ -60,6 +60,7 @@ export class ButtonElement extends BaseUIElement {
         this.hoverColor = properties.hoverColor || ColorSchemes.Overlay.Control.Hover;
         this.backgroundImage = properties.backgroundImage || null;
         this.backgroundImageAlpha = properties.backgroundImageAlpha ?? 1;
+        this.backgroundImageFlipX = properties.backgroundImageFlipX === true;
         this.drawBackground = properties.drawBackground !== false;
 
         if (properties.color) this.color = properties.color;
@@ -81,6 +82,7 @@ export class ButtonElement extends BaseUIElement {
         this.pressClickHandled = false;
         this.backgroundImage = null;
         this.backgroundImageAlpha = 1;
+        this.backgroundImageFlipX = false;
         this.drawBackground = true;
     }
 
@@ -186,6 +188,7 @@ export class ButtonElement extends BaseUIElement {
                 w: drawW,
                 h: drawH,
                 alpha: this.alpha * this.backgroundImageAlpha,
+                flipX: this.backgroundImageFlipX,
                 smoothing: false
             });
         }

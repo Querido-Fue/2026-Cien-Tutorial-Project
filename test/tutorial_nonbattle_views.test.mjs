@@ -10,6 +10,7 @@ import { TutorialPauseView } from '../project/engine/script/scene/tutorial/view/
 import { TutorialResultView } from '../project/engine/script/scene/tutorial/view/_tutorial_result_view.js';
 import { TutorialStarterView } from '../project/engine/script/scene/tutorial/view/_tutorial_starter_view.js';
 import { isTutorialRectWithinUi } from '../project/engine/script/scene/tutorial/view/_tutorial_nonbattle_view_helpers.js';
+import { TUTORIAL_UI_LAYOUT_TOKENS } from '../project/engine/script/scene/tutorial/view/_tutorial_ui_layout_tokens.js';
 
 const NOOP_RENDER_PORT = Object.freeze({
     render() {},
@@ -238,6 +239,55 @@ test('스타터 카드와 Pause 메뉴는 보이는 영역 자체를 클릭 계�
         'tutorial/return-menu'
     ]);
     assert.equal(pauseButtons[1].active, true);
+});
+
+test('갤러리 책갈피와 결과 버튼은 Figma 관찰 좌표와 책 내부 흐름을 따른다', () => {
+    const galleryModel = createViewModel(VIEWPORTS[0], {
+        sections: GALLERY_SECTIONS,
+        selectedSectionIndex: 0,
+        selectedSectionId: 'achievements',
+        selectedSectionTitle: '업적',
+        entries: GALLERY_ENTRIES,
+        selectedIndex: 0,
+        selectedEntry: GALLERY_ENTRIES[0],
+        selectionProgress: 1,
+        selectionMinScale: 0.72
+    });
+    const gallery = new TutorialGalleryView(NOOP_RENDER_PORT);
+    const galleryButtons = gallery.getButtonSpecs(galleryModel);
+    const sectionButtons = galleryButtons.slice(0, 5);
+    const bookmarkTokens = [
+        ...TUTORIAL_UI_LAYOUT_TOKENS.GALLERY.LEFT_BOOKMARKS,
+        ...TUTORIAL_UI_LAYOUT_TOKENS.GALLERY.RIGHT_BOOKMARKS
+    ];
+    assert.deepEqual(
+        sectionButtons.map(({ x, y, w, h }) => ({ x, y, w, h })),
+        bookmarkTokens.map((token) => ({
+            x: Math.round(token.x * 1280),
+            y: Math.round(token.y * 720),
+            w: Math.round(token.w * 1280),
+            h: Math.round(token.h * 720)
+        }))
+    );
+    assert.equal(galleryButtons.some((button) => button.key === 'gallery-play'), false);
+    assert.equal(
+        galleryButtons.find((button) => button.key === 'gallery-prev').backgroundImageFlipX,
+        true
+    );
+    assert.equal(
+        galleryButtons.find((button) => button.key === 'gallery-back').fitHitToBackground,
+        true
+    );
+
+    const result = new TutorialResultView(NOOP_RENDER_PORT);
+    const resultButtons = result.getButtonSpecs(createViewModel(VIEWPORTS[0], {
+        result: {},
+        presentationLocked: false
+    }));
+    assert.equal(resultButtons[0].x, resultButtons[1].x);
+    assert.equal(resultButtons[0].w, resultButtons[1].w);
+    assert.ok(resultButtons[0].y + resultButtons[0].h < resultButtons[1].y);
+    assert.equal(resultButtons.every((button) => button.fitHitToBackground), true);
 });
 
 test('비전투 뷰는 장면·모델·저장·명령 큐를 직접 import하지 않는다', async () => {
