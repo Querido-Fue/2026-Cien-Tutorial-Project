@@ -12,8 +12,9 @@ export const TUTORIAL_LEGACY_ASSET_ENTRIES = Object.freeze([
         sourceName: 'old/ui/tutorial/lora-portrait.png',
         expectedDimensions: { width: 200, height: 240 },
         actualDimensions: { width: 200, height: 240 },
+        sourceRect: { x: 45, y: 20, w: 125, h: 125 },
         layer: 'portrait',
-        usage: '로라 HUD 초상화',
+        usage: '로라 상태 패널 좌측 메달 슬롯용 얼굴 초상',
         required: true,
         pixelated: true
     }),

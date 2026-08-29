@@ -337,9 +337,13 @@ test('이동 경로 초기화 버튼은 한 칸 이상 선택한 이동 단계�
     assert.deepEqual(active.command, { type: TUTORIAL_COMMANDS.PLAN_RESET, payload: undefined });
 });
 
-test('플레이어 아이템과 HP는 패널 원본의 슬롯과 하단 게이지에 맞춰진다', () => {
+test('로라와 플레이어 상태는 원본 패널의 초상·슬롯·게이지에 맞춰진다', () => {
     const commands = [];
     const assets = {
+        loraPanelFull: { naturalWidth: 247, naturalHeight: 90 },
+        loraPortraitIcon: { naturalWidth: 125, naturalHeight: 125 },
+        loraHpBar: { naturalWidth: 80, naturalHeight: 4 },
+        loraGaugeBar: { naturalWidth: 80, naturalHeight: 4 },
         playerPanel: { naturalWidth: 232, naturalHeight: 78 },
         playerItemSelected: { naturalWidth: 32, naturalHeight: 32 }
     };
@@ -441,12 +445,52 @@ test('플레이어 아이템과 HP는 패널 원본의 슬롯과 하단 게이�
     assert.equal(itemSpecs.every((spec) => spec.drawBackground === false), true);
 
     view.draw(viewModel);
+    const loraPanel = commands.find((command) => command.image === assets.loraPanelFull);
+    const loraPortrait = commands.find(
+        (command) => command.image === assets.loraPortraitIcon
+    );
+    const loraHpGauge = commands.find((command) => command.image === assets.loraHpBar);
+    const instabilityGauge = commands.find(
+        (command) => command.image === assets.loraGaugeBar
+    );
     const playerPanel = commands.find((command) => command.image === assets.playerPanel);
     const occupiedSlots = commands.filter(
         (command) => command.image === assets.playerItemSelected
     );
     const playerGauge = commands.find(
         (command) => command.fill === '#hp' && command.x === 123 && command.y === 650
+    );
+    assert.deepEqual(
+        { x: loraPanel.x, y: loraPanel.y, w: loraPanel.w, h: loraPanel.h },
+        { x: 915, y: 42, w: 291, h: 106 }
+    );
+    assert.deepEqual(
+        {
+            x: loraPortrait.x,
+            y: loraPortrait.y,
+            w: loraPortrait.w,
+            h: loraPortrait.h,
+            smoothing: loraPortrait.smoothing
+        },
+        { x: 929, y: 58, w: 31, h: 31, smoothing: true }
+    );
+    assert.deepEqual(
+        { x: loraHpGauge.x, y: loraHpGauge.y, w: loraHpGauge.w, h: loraHpGauge.h },
+        { x: 988, y: 108, w: 176, h: 5 }
+    );
+    assert.deepEqual(
+        {
+            x: instabilityGauge.x,
+            y: instabilityGauge.y,
+            w: instabilityGauge.w,
+            h: instabilityGauge.h
+        },
+        { x: 975, y: 124, w: 123, h: 5 }
+    );
+    assert.equal(
+        commands.some((command) => typeof command.text === 'string'
+            && /^(로라|HP|불안정)/.test(command.text)),
+        false
     );
     assert.deepEqual(
         { x: playerPanel.x, y: playerPanel.y, w: playerPanel.w, h: playerPanel.h },

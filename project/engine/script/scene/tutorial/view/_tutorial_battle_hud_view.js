@@ -11,6 +11,13 @@ import {
     fitTutorialAssetRect
 } from './_tutorial_asset_view_helpers.js';
 
+const LORA_STATUS_PANEL_LAYOUT = Object.freeze({
+    SOURCE: Object.freeze({ WIDTH: 247, HEIGHT: 90 }),
+    PORTRAIT: Object.freeze({ X: 12, Y: 14, WIDTH: 26, HEIGHT: 26 }),
+    HP_BAR: Object.freeze({ X: 62, Y: 56, WIDTH: 149, HEIGHT: 4 }),
+    INSTABILITY_BAR: Object.freeze({ X: 51, Y: 70, WIDTH: 149, HEIGHT: 4 })
+});
+
 /**
  * @class TutorialBattleHudView
  * @description 전투 HUD 렌더와 동일 좌표의 직렬화 가능한 버튼 사양을 제공합니다.
@@ -22,7 +29,7 @@ export class TutorialBattleHudView {
 
     /**
      * @param {{render:Function,measureText:Function,wrapText:Function}} renderPort - HUD 렌더 포트입니다.
-     * @param {{getLoraPortrait?:Function}} assetPort - 읽기 전용 초상화 포트입니다.
+     * @param {{getLoraPortrait?:Function,getUiAsset?:Function}} assetPort - 읽기 전용 에셋 포트입니다.
      */
     constructor(renderPort, assetPort = {}) {
         this.#renderPort = renderPort;
@@ -346,69 +353,48 @@ export class TutorialBattleHudView {
         }
     }
 
-    /** 로라 초상과 게이지 카드를 그립니다. @private */
+    /** 로라 원본 패널의 메달 슬롯과 두 게이지 트랙에 상태를 그립니다. @private */
     #drawLoraStatusCard() {
-        const { colors, fonts, hud, layout, snapshot, world } = this.#frame;
+        const { colors, hud, layout, snapshot, world } = this.#frame;
         const rect = layout.hudRects.LORA_CARD;
-        const pad = clampBattleViewNumber(rect.w * 0.035, 7, 14);
-        this.#drawHudCard(rect, 'loraPanel', 0.82);
-        const portraitH = rect.h - (pad * 2);
-        const portraitW = portraitH * (200 / 240);
-        const portraitX = rect.x + pad;
-        const portraitY = rect.y + pad;
-        const portrait = this.#assetPort.getLoraPortrait?.() || null;
-        if (portrait?.complete && portrait.naturalWidth > 0) {
+        const panelImage = this.#assetPort.getUiAsset?.('loraPanelFull');
+        const panelRect = this.#resolveSourcePanelRect(
+            rect,
+            LORA_STATUS_PANEL_LAYOUT.SOURCE,
+            panelImage
+        );
+        drawTutorialPixelAsset(this.#renderPort, {
+            layer: 'ui',
+            image: panelImage,
+            rect: panelRect,
+            mode: 'exact',
+            alpha: 1
+        });
+
+        const portraitRect = this.#resolveSourcePanelPart(
+            panelRect,
+            LORA_STATUS_PANEL_LAYOUT.PORTRAIT,
+            LORA_STATUS_PANEL_LAYOUT.SOURCE
+        );
+        const portrait = this.#assetPort.getUiAsset?.('loraPortraitIcon')
+            || this.#assetPort.getLoraPortrait?.()
+            || null;
+        if (portrait && portraitRect) {
             this.#renderPort.render('ui', {
                 shape: 'image', image: portrait,
-                x: Math.round(portraitX),
-                y: Math.round(portraitY),
-                w: Math.round(portraitW),
-                h: Math.round(portraitH),
-                smoothing: false
+                ...portraitRect,
+                smoothing: true
             });
-        } else {
+        } else if (portraitRect) {
             this.#renderPort.render('ui', {
-                shape: 'roundRect',
-                x: portraitX, y: portraitY, w: portraitW, h: portraitH,
-                radius: this.#uwh(1),
+                shape: 'rect',
+                ...portraitRect,
                 fill: colors.UI.CardHeader,
                 stroke: colors.UI.Border,
                 lineWidth: 1
             });
-            this.#drawText(
-                'ui', 'L', portraitX + (portraitW * 0.5),
-                portraitY + (portraitH * 0.5), fonts.TITLE,
-                colors.UI.Primary, 'center'
-            );
         }
-        const contentX = portraitX + portraitW + pad;
-        const contentRight = rect.x + rect.w - pad;
-        const contentW = Math.max(1, contentRight - contentX);
-        const headerH = rect.h * 0.28;
-        this.#renderPort.render('ui', {
-            shape: 'roundRect',
-            x: contentX - (pad * 0.35),
-            y: rect.y + pad,
-            w: contentW + (pad * 0.35),
-            h: headerH - pad,
-            radius: this.#uwh(0.8),
-            fill: colors.UI.CardHeader
-        });
-        const stateLabel = hud.instabilityState?.label
-            || hud.instabilityState?.id
-            || '상태 확인 중';
-        this.#drawText(
-            'ui', '로라', contentX, rect.y + (headerH * 0.52),
-            fonts.HEADING, colors.UI.Text
-        );
-        this.#drawText(
-            'ui', stateLabel, contentRight, rect.y + (headerH * 0.52),
-            fonts.SMALL,
-            Number(world.presentation.instability) <= 10
-                ? colors.UI.Success
-                : colors.UI.Warning,
-            'right'
-        );
+
         const loraHp = Math.max(0, Number(world.presentation.loraHp) || 0);
         const loraMaxHp = Math.max(1, Number(snapshot.lora?.maxHp) || 100);
         const instability = clampBattleViewNumber(world.presentation.instability, 0, 100);
@@ -419,24 +405,23 @@ export class TutorialBattleHudView {
         const expectedInstability = preview?.available
             ? clampBattleViewNumber(preview.expected?.instability, 0, 100)
             : instability;
-        const gaugeH = clampBattleViewNumber(rect.h * 0.055, 7, 12);
-        const hpLabelY = rect.y + (rect.h * 0.48);
-        this.#drawText(
-            'ui', 'HP  ' + this.#formatTransition(loraHp, expectedLoraHp)
-                + '/' + String(loraMaxHp),
-            contentX, hpLabelY, fonts.SMALL, colors.UI.Text
+        const hpBarRect = this.#resolveSourcePanelPart(
+            panelRect,
+            LORA_STATUS_PANEL_LAYOUT.HP_BAR,
+            LORA_STATUS_PANEL_LAYOUT.SOURCE
         );
-        this.#drawGauge(
-            contentX, rect.y + (rect.h * 0.57), contentW, gaugeH,
+        const instabilityBarRect = this.#resolveSourcePanelPart(
+            panelRect,
+            LORA_STATUS_PANEL_LAYOUT.INSTABILITY_BAR,
+            LORA_STATUS_PANEL_LAYOUT.SOURCE
+        );
+        this.#drawEmbeddedGauge(
+            hpBarRect,
             loraHp / loraMaxHp, colors.UI.GaugeHp,
             expectedLoraHp / loraMaxHp, 'loraHpBar'
         );
-        this.#drawText(
-            'ui', '불안정도  ' + this.#formatTransition(instability, expectedInstability),
-            contentX, rect.y + (rect.h * 0.73), fonts.SMALL, colors.UI.Text
-        );
-        this.#drawGauge(
-            contentX, rect.y + (rect.h * 0.82), contentW, gaugeH,
+        this.#drawEmbeddedGauge(
+            instabilityBarRect,
             instability / 100, colors.UI.GaugeInstability,
             expectedInstability / 100, 'loraGaugeBar'
         );
@@ -559,7 +544,22 @@ export class TutorialBattleHudView {
      * @private
      */
     #resolvePlayerPanelRect(container, inventoryLayout, image = null) {
-        const source = inventoryLayout?.PLAYER_PANEL?.SOURCE;
+        return this.#resolveSourcePanelRect(
+            container,
+            inventoryLayout?.PLAYER_PANEL?.SOURCE,
+            image
+        );
+    }
+
+    /**
+     * 원본 크기가 있는 패널을 예약 영역 안에 비율 유지로 맞춥니다.
+     * @param {object} container - HUD 예약 영역입니다.
+     * @param {object} source - 패널 원본 크기입니다.
+     * @param {object|null} image - 로드된 패널 이미지입니다.
+     * @returns {{x:number,y:number,w:number,h:number}} 실제 패널 사각형입니다.
+     * @private
+     */
+    #resolveSourcePanelRect(container, source, image = null) {
         const sourceWidth = Number(source?.WIDTH);
         const sourceHeight = Number(source?.HEIGHT);
         const dimensions = sourceWidth > 0 && sourceHeight > 0
@@ -582,7 +582,22 @@ export class TutorialBattleHudView {
      * @private
      */
     #resolvePlayerPanelPart(panelRect, part, inventoryLayout) {
-        const source = inventoryLayout?.PLAYER_PANEL?.SOURCE;
+        return this.#resolveSourcePanelPart(
+            panelRect,
+            part,
+            inventoryLayout?.PLAYER_PANEL?.SOURCE
+        );
+    }
+
+    /**
+     * 패널 원본 픽셀 좌표를 현재 렌더 사각형으로 투영합니다.
+     * @param {object} panelRect - 실제 패널 사각형입니다.
+     * @param {object} part - 원본 픽셀 기준 내부 사각형입니다.
+     * @param {object} source - 패널 원본 크기입니다.
+     * @returns {{x:number,y:number,w:number,h:number}|null} 투영된 내부 사각형입니다.
+     * @private
+     */
+    #resolveSourcePanelPart(panelRect, part, source) {
         const sourceWidth = Number(source?.WIDTH);
         const sourceHeight = Number(source?.HEIGHT);
         const partWidth = Number(part?.WIDTH);
@@ -599,6 +614,63 @@ export class TutorialBattleHudView {
             w: Math.max(1, Math.round(partWidth * scaleX)),
             h: Math.max(1, Math.round(partHeight * scaleY))
         };
+    }
+
+    /**
+     * 원본 패널 내부 트랙에 픽셀 게이지와 선택 행동 예상 구간을 그립니다.
+     * @param {object|null} rect - 패널 원본에서 투영한 게이지 사각형입니다.
+     * @param {number} ratio - 현재 게이지 비율입니다.
+     * @param {string} fill - 에셋이 없을 때 사용할 색입니다.
+     * @param {number|null} pendingRatio - 선택 행동 후 예상 비율입니다.
+     * @param {string} assetKey - 픽셀 게이지 에셋 키입니다.
+     * @private
+     */
+    #drawEmbeddedGauge(rect, ratio, fill, pendingRatio, assetKey) {
+        if (!rect) {
+            return;
+        }
+        const colors = this.#frame.colors;
+        const safeRatio = clampBattleViewNumber(ratio, 0, 1);
+        const safePending = pendingRatio !== null
+            && pendingRatio !== undefined
+            && Number.isFinite(Number(pendingRatio))
+            ? clampBattleViewNumber(pendingRatio, 0, 1)
+            : safeRatio;
+        if (safeRatio > 0) {
+            const fillRect = {
+                x: rect.x,
+                y: rect.y,
+                w: Math.max(1, rect.w * safeRatio),
+                h: rect.h
+            };
+            const drewAsset = drawTutorialPixelAsset(this.#renderPort, {
+                layer: 'ui',
+                image: this.#assetPort.getUiAsset?.(assetKey),
+                rect: fillRect,
+                mode: 'exact',
+                alpha: 1
+            });
+            if (!drewAsset) {
+                this.#renderPort.render('ui', {
+                    shape: 'rect',
+                    ...fillRect,
+                    fill
+                });
+            }
+        }
+        if (Math.abs(safePending - safeRatio) <= 0.0001) {
+            return;
+        }
+        const startRatio = Math.min(safeRatio, safePending);
+        const segmentRatio = Math.abs(safePending - safeRatio);
+        this.#renderPort.render('ui', {
+            shape: 'rect',
+            x: rect.x + (rect.w * startRatio),
+            y: rect.y,
+            w: rect.w * segmentRatio,
+            h: rect.h,
+            fill: safePending > safeRatio ? colors.UI.Success : colors.UI.Danger
+        });
     }
 
     /**
@@ -718,13 +790,6 @@ export class TutorialBattleHudView {
                 alpha: 0.32
             });
         }
-    }
-
-    /** @param {*} before @param {*} expected @returns {string} 현재→예상 표시입니다. @private */
-    #formatTransition(before, expected) {
-        const current = Math.round(Number(before) || 0);
-        const next = Math.round(Number(expected) || 0);
-        return current === next ? String(current) : String(current) + '→' + String(next);
     }
 
     /** UI 기준 너비 백분율을 픽셀로 변환합니다. @private */

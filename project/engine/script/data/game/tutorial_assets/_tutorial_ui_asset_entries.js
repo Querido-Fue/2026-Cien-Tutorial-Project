@@ -16,6 +16,7 @@ export const TUTORIAL_UI_ASSET_IDS = Object.freeze({
     starterCard: 'ui.starter.card',
     turnFrame: 'ui.battle.turn-frame',
     loraPanel: 'ui.battle.lora-panel',
+    loraPortraitIcon: 'character.lora.portrait',
     playerPanel: 'ui.battle.player-panel',
     actionButton: 'ui.battle.action-button',
     waitHealButton: 'ui.battle.wait-heal-button',
@@ -379,7 +380,7 @@ export const TUTORIAL_UI_ASSET_ENTRIES = Object.freeze([
         expectedDimensions: { width: 512, height: 300 },
         actualDimensions: { width: 512, height: 300 },
         sourceRect: { x: 16, y: 16, w: 247, h: 90 },
-        usage: '로라 상태 패널 원본 조합 확인용'
+        usage: '얼굴·아이템 슬롯·두 상태 트랙을 포함한 로라 상태 패널'
     }),
     createUiEntry({
         id: TUTORIAL_UI_ASSET_IDS.turnFrameFull,
