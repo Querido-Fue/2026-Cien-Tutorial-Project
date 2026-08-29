@@ -630,7 +630,25 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
             GAP_X_UIWW: 0.45,
             BUTTON_RADIUS_WH: 1
         },
-        INVENTORY: { PAGE_SIZE: 4, COLUMNS: 4, ROWS: 1 },
+        INVENTORY: {
+            PAGE_SIZE: 5,
+            COLUMNS: 5,
+            ROWS: 1,
+            PLAYER_PANEL: {
+                SOURCE: { WIDTH: 232, HEIGHT: 78 },
+                ITEM_SLOT: {
+                    X: 37,
+                    Y: 12,
+                    WIDTH: 32,
+                    HEIGHT: 32,
+                    GAP_X: 0,
+                    GAP_Y: 0
+                },
+                HP_BAR: { X: 47, Y: 55, WIDTH: 167, HEIGHT: 6 },
+                PAGE_PREVIOUS: { X: 12, Y: 14, WIDTH: 14, HEIGHT: 24 },
+                PAGE_NEXT: { X: 206, Y: 14, WIDTH: 14, HEIGHT: 24 }
+            }
+        },
         HUD: {
             STAGE_HEADER: { X_UIWW: 4.8, Y_WH: 6, WIDTH_UIWW: 17, HEIGHT_WH: 4.5 },
             MENU: { X_UIWW: 22.5, Y_WH: 6, WIDTH_UIWW: 8, HEIGHT_WH: 4.5 },

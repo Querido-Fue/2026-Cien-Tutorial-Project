@@ -203,6 +203,144 @@ test('이동 경로 초기화 버튼은 한 칸 이상 선택한 이동 단계�
     assert.deepEqual(active.command, { type: TUTORIAL_COMMANDS.PLAN_RESET, payload: undefined });
 });
 
+test('플레이어 아이템과 HP는 패널 원본의 슬롯과 하단 게이지에 맞춰진다', () => {
+    const commands = [];
+    const assets = {
+        playerPanel: { naturalWidth: 232, naturalHeight: 78 },
+        playerItemSelected: { naturalWidth: 32, naturalHeight: 32 }
+    };
+    const renderPort = {
+        render(layer, command) {
+            commands.push({ layer, ...command });
+        },
+        measureText(text) {
+            return String(text).length * 8;
+        },
+        wrapText(text) {
+            return [String(text)];
+        }
+    };
+    const entries = Array.from({ length: 5 }, (_, index) => ({
+        itemId: 'item-' + String(index),
+        count: 1,
+        known: true,
+        hasIcon: true,
+        usable: index === 0,
+        movementConsumable: false,
+        statusLabel: '사용 가능',
+        label: '아이템 ' + String(index + 1),
+        description: '테스트 아이템'
+    }));
+    const layout = createLayout().resize(VIEWPORTS[0]);
+    const viewModel = {
+        snapshot: {
+            phase: 'move',
+            actionUsed: false,
+            loraActionsCompleted: 0,
+            maxTurns: 12,
+            player: { maxHp: 100 },
+            lora: { maxHp: 100 }
+        },
+        layout,
+        colors: {
+            UI: {
+                Primary: '#a00', PrimaryHover: '#b00', OnPrimary: '#fff',
+                Card: '#fff', CardHeader: '#ddd', ButtonHover: '#ccc',
+                Text: '#111', Muted: '#777', Border: '#333', Success: '#0a0',
+                Warning: '#fa0', Danger: '#d00', GaugeTrack: '#222',
+                GaugeHp: '#hp', GaugeInstability: '#instability',
+                ButtonShadow: '#000', CardShadow: '#000'
+            }
+        },
+        fonts: {
+            TITLE: '24px sans-serif',
+            HEADING: '18px sans-serif',
+            SMALL: '12px sans-serif',
+            MONO: '12px monospace'
+        },
+        world: {
+            presentation: { playerHp: 50, loraHp: 100, instability: 70 }
+        },
+        hud: {
+            attackSelected: false,
+            attackWeapon: 'melee',
+            cleanseSelected: false,
+            focusedControlKey: 'item-item-0',
+            movePreview: { ok: true, stepsUsed: 0 },
+            instabilityState: { label: '불안정' },
+            readability: { playerPreview: null, inspectedItem: null },
+            controls: {
+                ready: true,
+                actionReady: false,
+                meleeTargetCount: 0,
+                bowTargetCount: 0,
+                hasBow: false
+            },
+            inventory: { entries, page: 0, pageCount: 1 },
+            config: {
+                actions: TUTORIAL_GAME_DATA.LAYOUT.ACTIONS,
+                inventory: TUTORIAL_GAME_DATA.LAYOUT.INVENTORY,
+                itemIcon: TUTORIAL_GAME_DATA.SPRITES.ITEM,
+                floorTransitionAfterTurn: 6
+            }
+        }
+    };
+    const view = new TutorialBattleHudView(renderPort, {
+        getUiAsset(key) {
+            return assets[key] || null;
+        }
+    });
+
+    const itemSpecs = view.getButtonSpecs(viewModel)
+        .filter((spec) => spec.key.startsWith('item-'));
+    assert.equal(TUTORIAL_GAME_DATA.LAYOUT.INVENTORY.PAGE_SIZE, 5);
+    assert.equal(itemSpecs.length, 5);
+    assert.deepEqual(
+        { x: itemSpecs[0].x, y: itemSpecs[0].y, w: itemSpecs[0].w, h: itemSpecs[0].h },
+        { x: 111, y: 599, w: 38, h: 38 }
+    );
+    assert.deepEqual(
+        { x: itemSpecs[4].x, y: itemSpecs[4].y, w: itemSpecs[4].w, h: itemSpecs[4].h },
+        { x: 262, y: 599, w: 38, h: 38 }
+    );
+    assert.equal(itemSpecs.every((spec) => spec.label === ''), true);
+    assert.equal(itemSpecs.every((spec) => spec.drawBackground === false), true);
+
+    view.draw(viewModel);
+    const playerPanel = commands.find((command) => command.image === assets.playerPanel);
+    const occupiedSlots = commands.filter(
+        (command) => command.image === assets.playerItemSelected
+    );
+    const playerGauge = commands.find(
+        (command) => command.fill === '#hp' && command.x === 123 && command.y === 650
+    );
+    assert.deepEqual(
+        { x: playerPanel.x, y: playerPanel.y, w: playerPanel.w, h: playerPanel.h },
+        { x: 67, y: 585, w: 274, h: 92 }
+    );
+    assert.equal(occupiedSlots.length, 5);
+    assert.deepEqual(
+        {
+            x: occupiedSlots[0].x,
+            y: occupiedSlots[0].y,
+            w: occupiedSlots[0].w,
+            h: occupiedSlots[0].h
+        },
+        { x: 111, y: 599, w: 38, h: 38 }
+    );
+    assert.deepEqual(
+        { x: playerGauge.x, y: playerGauge.y, w: playerGauge.w, h: playerGauge.h },
+        { x: 123, y: 650, w: 98.5, h: 7 }
+    );
+    assert.equal(
+        commands.some((command) => command.fill === '#222'
+            && command.x === 123 && command.y === 650),
+        false
+    );
+    assert.equal(commands.some((command) => command.text === 'PLAYER · HP'), false);
+    assert.equal(commands.some((command) => command.text === '50/100'), false);
+});
+
 test('전투 조사 포커스는 마우스 직접 선택과 키보드 순환에서 같은 키를 사용한다', () => {
     const focus = new TutorialBattleFocusController();
     focus.setKeys(['battle-heal', 'item-mirror']);

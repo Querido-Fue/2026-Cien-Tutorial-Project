@@ -6,7 +6,10 @@ import {
     truncateBattleViewText,
     wrapBattleViewText
 } from './_tutorial_battle_view_helpers.js';
-import { drawTutorialPixelAsset } from './_tutorial_asset_view_helpers.js';
+import {
+    drawTutorialPixelAsset,
+    fitTutorialAssetRect
+} from './_tutorial_asset_view_helpers.js';
 
 /**
  * @class TutorialBattleHudView
@@ -193,51 +196,35 @@ export class TutorialBattleHudView {
 
             const inventoryRect = layout.hudRects.PLAYER_STATUS;
             const inventoryLayout = hud.config.inventory;
-            const inventoryColumns = Number(inventoryLayout.COLUMNS) || 3;
-            const inventoryRows = Number(inventoryLayout.ROWS) || 2;
-            const inventoryPad = Math.max(5, inventoryRect.w * 0.045);
-            const inventoryGapX = Math.max(3, inventoryRect.w * 0.025);
-            const itemGapY = 0;
-            const headerH = inventoryRect.h * 0.47;
-            const inventoryY = inventoryRect.y + headerH;
-            const inventoryColumnW = (
-                inventoryRect.w
-                - (inventoryPad * 2)
-                - (inventoryGapX * (inventoryColumns - 1))
-            ) / inventoryColumns;
-            const availableItemH = (
-                inventoryRect.y + inventoryRect.h - inventoryPad - inventoryY
-                - (itemGapY * (inventoryRows - 1))
-            ) / inventoryRows;
-            const itemH = clampBattleViewNumber(availableItemH, 26, 44);
+            const playerPanelRect = this.#resolvePlayerPanelRect(
+                inventoryRect,
+                inventoryLayout,
+                this.#assetPort.getUiAsset?.('playerPanel')
+            );
             const itemIconLayout = hud.config.itemIcon;
             hud.inventory.entries.forEach((entry, index) => {
-                const column = index % inventoryColumns;
-                const row = Math.floor(index / inventoryColumns);
+                const slotRect = this.#getInventorySlotRect(
+                    index,
+                    playerPanelRect,
+                    inventoryLayout
+                );
+                if (!slotRect) {
+                    return;
+                }
                 const iconWidth = entry.known && entry.hasIcon
-                    ? itemH * itemIconLayout.BUTTON_ICON_SIZE_RATIO
+                    ? Math.min(slotRect.w, slotRect.h)
+                        * itemIconLayout.BUTTON_ICON_SIZE_RATIO
                     : 0;
-                const iconGap = iconWidth > 0
-                    ? this.#uww(itemIconLayout.BUTTON_ICON_GAP_UIWW)
-                    : 0;
-                const label = '×' + String(entry.count);
                 specs.push({
                     key: 'item-' + entry.itemId,
-                    x: inventoryRect.x
-                        + inventoryPad
-                        + (column * (inventoryColumnW + inventoryGapX)),
-                    y: inventoryY + (row * (itemH + itemGapY)),
-                    w: inventoryColumnW,
-                    h: itemH,
-                    label,
+                    ...slotRect,
+                    label: '',
                     tooltip: '[' + entry.statusLabel + '] ' + entry.label
-                        + ': ' + entry.description,
-                    backgroundAssetKey: 'waitHealButton',
-                    backgroundImageAlpha: 0.86,
-                    fitHitToBackground: true,
+                        + ' ×' + String(entry.count) + ': ' + entry.description,
+                    drawBackground: false,
                     iconId: iconWidth > 0 ? entry.itemId : null,
                     iconWidth,
-                    itemSpacing: iconGap,
+                    itemSpacing: 0,
                     enabled: entry.usable,
                     active: entry.movementConsumable && hud.cleanseSelected,
                     focused: hud.focusedControlKey === 'item-' + entry.itemId,
@@ -254,37 +241,49 @@ export class TutorialBattleHudView {
             });
 
             if (hud.inventory.pageCount > 1) {
-                const navH = clampBattleViewNumber(headerH * 0.54, 20, 30);
-                const navW = navH;
-                const navGap = this.#uww(0.35);
-                const right = inventoryRect.x + inventoryRect.w - inventoryPad;
-                specs.push({
-                    key: 'inventory-prev',
-                    x: right - (navW * 2) - navGap,
-                    y: inventoryRect.y + ((headerH - navH) * 0.5),
-                    w: navW,
-                    h: navH,
-                    label: '◀',
-                    idleColor: colors.UI.CardHeader,
-                    hoverColor: colors.UI.ButtonHover,
-                    command: {
-                        type: TUTORIAL_COMMANDS.INVENTORY_PAGE_SHIFT,
-                        payload: { delta: -1 }
+                const pageButtons = [
+                    {
+                        key: 'inventory-prev',
+                        rect: this.#resolvePlayerPanelPart(
+                            playerPanelRect,
+                            inventoryLayout.PLAYER_PANEL?.PAGE_PREVIOUS,
+                            inventoryLayout
+                        ),
+                        flipX: true,
+                        delta: -1,
+                        tooltip: '이전 아이템 페이지'
+                    },
+                    {
+                        key: 'inventory-next',
+                        rect: this.#resolvePlayerPanelPart(
+                            playerPanelRect,
+                            inventoryLayout.PLAYER_PANEL?.PAGE_NEXT,
+                            inventoryLayout
+                        ),
+                        flipX: false,
+                        delta: 1,
+                        tooltip: '다음 아이템 페이지'
                     }
-                });
-                specs.push({
-                    key: 'inventory-next',
-                    x: right - navW,
-                    y: inventoryRect.y + ((headerH - navH) * 0.5),
-                    w: navW,
-                    h: navH,
-                    label: '▶',
-                    idleColor: colors.UI.CardHeader,
-                    hoverColor: colors.UI.ButtonHover,
-                    command: {
-                        type: TUTORIAL_COMMANDS.INVENTORY_PAGE_SHIFT,
-                        payload: { delta: 1 }
+                ];
+                pageButtons.forEach((button) => {
+                    if (!button.rect) {
+                        return;
                     }
+                    specs.push({
+                        key: button.key,
+                        ...button.rect,
+                        label: '',
+                        tooltip: button.tooltip,
+                        backgroundAssetKey: 'galleryTurnButton',
+                        backgroundImageFlipX: button.flipX,
+                        backgroundImageAlpha: 1,
+                        drawSolidBackground: false,
+                        fitHitToBackground: true,
+                        command: {
+                            type: TUTORIAL_COMMANDS.INVENTORY_PAGE_SHIFT,
+                            payload: { delta: button.delta }
+                        }
+                    });
                 });
             }
             return specs;
@@ -443,38 +442,59 @@ export class TutorialBattleHudView {
         );
     }
 
-    /** 플레이어 HP 라벨과 게이지를 그립니다. @private */
+    /** 플레이어 슬롯과 HP 게이지를 패널 원본 좌표에 맞춰 그립니다. @private */
     #drawPlayerStatus() {
-        const { colors, fonts, hud, layout, snapshot, world } = this.#frame;
+        const { colors, hud, layout, snapshot, world } = this.#frame;
         const rect = layout.hudRects.PLAYER_STATUS;
+        const inventoryLayout = hud.config.inventory;
+        const playerPanelImage = this.#assetPort.getUiAsset?.('playerPanel');
+        const playerPanelRect = this.#resolvePlayerPanelRect(
+            rect,
+            inventoryLayout,
+            playerPanelImage
+        );
         const playerHp = Math.max(0, Number(world.presentation.playerHp) || 0);
         const playerMaxHp = Math.max(1, Number(snapshot.player?.maxHp) || 100);
         const preview = hud.readability?.playerPreview;
         const expectedPlayerHp = preview?.available
             ? Math.max(0, Number(preview.expected?.playerHp) || 0)
             : playerHp;
-        const gaugeH = clampBattleViewNumber(rect.h * 0.1, 7, 10);
         drawTutorialPixelAsset(this.#renderPort, {
             layer: 'ui',
-            image: this.#assetPort.getUiAsset?.('playerPanel'),
-            rect,
-            alpha: 0.72
+            image: playerPanelImage,
+            rect: playerPanelRect,
+            mode: 'exact',
+            alpha: 1
         });
-        const pad = Math.max(7, rect.w * 0.04);
-        this.#drawText(
-            'ui', 'PLAYER · HP', rect.x + pad, rect.y + (rect.h * 0.2),
-            fonts.SMALL, colors.UI.Text
+        hud.inventory.entries.forEach((entry, index) => {
+            const slotRect = this.#getInventorySlotRect(
+                index,
+                playerPanelRect,
+                inventoryLayout
+            );
+            if (!slotRect) {
+                return;
+            }
+            drawTutorialPixelAsset(this.#renderPort, {
+                layer: 'ui',
+                image: this.#assetPort.getUiAsset?.('playerItemSelected'),
+                rect: slotRect,
+                mode: 'exact',
+                alpha: 1
+            });
+        });
+        const hpBarRect = this.#resolvePlayerPanelPart(
+            playerPanelRect,
+            inventoryLayout.PLAYER_PANEL?.HP_BAR,
+            inventoryLayout
         );
-        this.#drawText(
-            'ui', this.#formatTransition(playerHp, expectedPlayerHp)
-                + '/' + String(playerMaxHp),
-            rect.x + rect.w - pad, rect.y + (rect.h * 0.2),
-            fonts.MONO, colors.UI.Muted, 'right'
-        );
+        if (!hpBarRect) {
+            return;
+        }
         this.#drawGauge(
-            rect.x + pad, rect.y + (rect.h * 0.31), rect.w - (pad * 2), gaugeH,
+            hpBarRect.x, hpBarRect.y, hpBarRect.w, hpBarRect.h,
             playerHp / playerMaxHp, colors.UI.GaugeHp,
-            expectedPlayerHp / playerMaxHp
+            expectedPlayerHp / playerMaxHp, null, false
         );
     }
 
@@ -530,6 +550,85 @@ export class TutorialBattleHudView {
         );
     }
 
+    /**
+     * 플레이어 패널 원본 비율을 유지한 실제 렌더 사각형을 계산합니다.
+     * @param {object} container - HUD가 예약한 플레이어 패널 영역입니다.
+     * @param {object} inventoryLayout - 인벤토리와 패널 내부 좌표 데이터입니다.
+     * @param {object|null} image - 로드된 플레이어 패널 이미지입니다.
+     * @returns {{x:number,y:number,w:number,h:number}} 실제 패널 사각형입니다.
+     * @private
+     */
+    #resolvePlayerPanelRect(container, inventoryLayout, image = null) {
+        const source = inventoryLayout?.PLAYER_PANEL?.SOURCE;
+        const sourceWidth = Number(source?.WIDTH);
+        const sourceHeight = Number(source?.HEIGHT);
+        const dimensions = sourceWidth > 0 && sourceHeight > 0
+            ? { width: sourceWidth, height: sourceHeight }
+            : null;
+        return fitTutorialAssetRect(image || dimensions, container) || {
+            x: Math.round(container.x),
+            y: Math.round(container.y),
+            w: Math.max(1, Math.round(container.w)),
+            h: Math.max(1, Math.round(container.h))
+        };
+    }
+
+    /**
+     * 패널 원본 픽셀 좌표를 현재 렌더 사각형으로 투영합니다.
+     * @param {object} panelRect - 실제 플레이어 패널 사각형입니다.
+     * @param {object} part - 원본 픽셀 기준 내부 사각형입니다.
+     * @param {object} inventoryLayout - 인벤토리와 패널 내부 좌표 데이터입니다.
+     * @returns {{x:number,y:number,w:number,h:number}|null} 투영된 내부 사각형입니다.
+     * @private
+     */
+    #resolvePlayerPanelPart(panelRect, part, inventoryLayout) {
+        const source = inventoryLayout?.PLAYER_PANEL?.SOURCE;
+        const sourceWidth = Number(source?.WIDTH);
+        const sourceHeight = Number(source?.HEIGHT);
+        const partWidth = Number(part?.WIDTH);
+        const partHeight = Number(part?.HEIGHT);
+        if (!(sourceWidth > 0) || !(sourceHeight > 0)
+            || !(partWidth > 0) || !(partHeight > 0)) {
+            return null;
+        }
+        const scaleX = panelRect.w / sourceWidth;
+        const scaleY = panelRect.h / sourceHeight;
+        return {
+            x: Math.round(panelRect.x + (Number(part.X) * scaleX)),
+            y: Math.round(panelRect.y + (Number(part.Y) * scaleY)),
+            w: Math.max(1, Math.round(partWidth * scaleX)),
+            h: Math.max(1, Math.round(partHeight * scaleY))
+        };
+    }
+
+    /**
+     * 인벤토리 항목 인덱스를 플레이어 패널의 슬롯 사각형으로 변환합니다.
+     * @param {number} index - 현재 페이지 안의 항목 인덱스입니다.
+     * @param {object} panelRect - 실제 플레이어 패널 사각형입니다.
+     * @param {object} inventoryLayout - 인벤토리와 패널 내부 좌표 데이터입니다.
+     * @returns {{x:number,y:number,w:number,h:number}|null} 항목 슬롯 사각형입니다.
+     * @private
+     */
+    #getInventorySlotRect(index, panelRect, inventoryLayout) {
+        const slot = inventoryLayout?.PLAYER_PANEL?.ITEM_SLOT;
+        if (!slot) {
+            return null;
+        }
+        const columns = Math.max(1, Number(inventoryLayout.COLUMNS) || 1);
+        const column = index % columns;
+        const row = Math.floor(index / columns);
+        return this.#resolvePlayerPanelPart(panelRect, {
+            X: Number(slot.X) + (column * (
+                Number(slot.WIDTH) + (Number(slot.GAP_X) || 0)
+            )),
+            Y: Number(slot.Y) + (row * (
+                Number(slot.HEIGHT) + (Number(slot.GAP_Y) || 0)
+            )),
+            WIDTH: slot.WIDTH,
+            HEIGHT: slot.HEIGHT
+        }, inventoryLayout);
+    }
+
     /** 그림자와 테두리가 있는 HUD 카드를 그립니다. @private */
     #drawHudCard(rect, assetKey = null, assetAlpha = 1) {
         const colors = this.#frame.colors;
@@ -555,8 +654,30 @@ export class TutorialBattleHudView {
         }
     }
 
-    /** 현재값과 선택 행동의 예상 구간을 함께 그립니다. @private */
-    #drawGauge(x, y, w, h, ratio, fill, pendingRatio = null, assetKey = null) {
+    /**
+     * 현재값과 선택 행동의 예상 구간을 함께 그립니다.
+     * @param {number} x - 게이지 왼쪽 좌표입니다.
+     * @param {number} y - 게이지 위쪽 좌표입니다.
+     * @param {number} w - 게이지 너비입니다.
+     * @param {number} h - 게이지 높이입니다.
+     * @param {number} ratio - 현재 게이지 비율입니다.
+     * @param {string} fill - 현재 게이지 색입니다.
+     * @param {number|null} pendingRatio - 선택 행동 후 예상 비율입니다.
+     * @param {string|null} assetKey - 게이지 위에 얹을 에셋 키입니다.
+     * @param {boolean} drawTrack - 빈 게이지 트랙을 별도로 그릴지 여부입니다.
+     * @private
+     */
+    #drawGauge(
+        x,
+        y,
+        w,
+        h,
+        ratio,
+        fill,
+        pendingRatio = null,
+        assetKey = null,
+        drawTrack = true
+    ) {
         const colors = this.#frame.colors;
         const safeRatio = clampBattleViewNumber(ratio, 0, 1);
         const safePending = pendingRatio !== null
@@ -564,10 +685,12 @@ export class TutorialBattleHudView {
             && Number.isFinite(Number(pendingRatio))
             ? clampBattleViewNumber(pendingRatio, 0, 1)
             : safeRatio;
-        this.#renderPort.render('ui', {
-            shape: 'roundRect', x, y, w, h,
-            radius: h * 0.5, fill: colors.UI.GaugeTrack
-        });
+        if (drawTrack) {
+            this.#renderPort.render('ui', {
+                shape: 'roundRect', x, y, w, h,
+                radius: h * 0.5, fill: colors.UI.GaugeTrack
+            });
+        }
         if (safeRatio > 0) {
             this.#renderPort.render('ui', {
                 shape: 'roundRect', x, y, w: w * safeRatio, h,
