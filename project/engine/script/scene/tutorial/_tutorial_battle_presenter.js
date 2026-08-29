@@ -226,6 +226,7 @@ export class TutorialBattlePresenter {
             }));
             break;
         case 'item-picked':
+        case 'record-picked':
             cues.push(freezeCue({
                 type: CUE_TYPES.AUDIO,
                 id: AUDIO_IDS.ITEM_EQUIP,
@@ -597,6 +598,7 @@ export class TutorialBattlePresenter {
             'player-damaged': '플레이어가 ' + String(damage) + ' 피해',
             'item-used': itemLabel + ' 사용',
             'player-waited': '플레이어 대기',
+            'record-picked': '기록 획득',
             'event-tile-cleansed': '이벤트 타일을 positive로 정화',
             'extra-player-turn': '거울 효과 · 플레이어 추가 턴 예약',
             'mob-attack': '몹 공격 ' + String(damage) + ' 피해',

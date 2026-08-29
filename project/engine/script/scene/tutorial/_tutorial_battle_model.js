@@ -77,6 +77,10 @@ export class TutorialBattleModel {
             heights: floor.heights.map((row) => [...row]),
             walls: floor.walls.map((wall) => ({ ...wall, destroyed: false })),
             items: floor.items.map((item) => ({ ...item, collected: false })),
+            records: floor.records.map((record) => ({
+                ...record,
+                collected: this.#knowledge.unlockedRecordIds.has(record.recordId)
+            })),
             eventTiles: floor.eventTiles.map((eventTile) => ({
                 ...eventTile,
                 originalType: eventTile.type,
@@ -214,6 +218,12 @@ export class TutorialBattleModel {
         const item = floor.items.find((entry) => !entry.collected && this.#isSamePosition(entry, x, y));
         if (item) {
             return { id: item.id, itemId: item.itemId, type: 'item', x, y };
+        }
+        const record = floor.records.find((entry) => (
+            !entry.collected && this.#isSamePosition(entry, x, y)
+        ));
+        if (record) {
+            return { id: record.id, recordId: record.recordId, type: 'record', x, y };
         }
         const teleport = floor.teleports.find((entry) => this.#isSamePosition(entry, x, y));
         if (teleport) {
@@ -1006,6 +1016,7 @@ export class TutorialBattleModel {
             knowledge: {
                 discoveredItemIds: [...this.#knowledge.discoveredItemIds],
                 identifiedItemIds: [...this.#knowledge.identifiedItemIds],
+                unlockedRecordIds: [...this.#knowledge.unlockedRecordIds],
                 revealedTrapIds: [],
                 unlockedCutsceneIds: []
             },
@@ -1269,11 +1280,15 @@ export class TutorialBattleModel {
         };
     }
 
-    /** 타일의 아이템과 이벤트 효과를 적용합니다. @private */
+    /** 타일의 아이템·기록과 이벤트 효과를 적용합니다. @private */
     #processTileEntry(events) {
         const item = this.#findItemAt(this.player.x, this.player.y);
         if (item) {
             this.#pickupFloorItem(item, events);
+        }
+        const record = this.#findRecordAt(this.player.x, this.player.y);
+        if (record) {
+            this.#pickupFloorRecord(record, events);
         }
         const eventTile = this.#findEventTileAt(this.player.x, this.player.y);
         if (eventTile) {
@@ -1333,6 +1348,18 @@ export class TutorialBattleModel {
             label: this.#config.items[item.itemId]?.label ?? item.itemId,
             x: item.x,
             y: item.y
+        }));
+    }
+
+    /** 바닥 기록을 영구 해금 지식에 추가합니다. @private */
+    #pickupFloorRecord(record, events) {
+        record.collected = true;
+        this.#knowledge.unlockedRecordIds.add(record.recordId);
+        events.push(this.#createEvent('record-picked', {
+            instanceId: record.id,
+            recordId: record.recordId,
+            x: record.x,
+            y: record.y
         }));
     }
 
@@ -1586,6 +1613,13 @@ export class TutorialBattleModel {
     #findItemAt(x, y) {
         return this.#getFloor().items.find((item) => (
             !item.collected && this.#isSamePosition(item, x, y)
+        )) ?? null;
+    }
+
+    /** 현재 좌표의 미획득 기록을 찾습니다. @private */
+    #findRecordAt(x, y) {
+        return this.#getFloor().records.find((record) => (
+            !record.collected && this.#isSamePosition(record, x, y)
         )) ?? null;
     }
 
@@ -1897,6 +1931,18 @@ export class TutorialBattleModel {
                     return { itemId: entry.itemId, hidden: entry.hidden === true };
                 }
             );
+            const records = this.#normalizeEntityList(
+                floor.records,
+                `${prefix}.records`,
+                width,
+                height,
+                (entry, label) => {
+                    if (typeof entry.recordId !== 'string' || entry.recordId.length === 0) {
+                        throw new TypeError(`TutorialBattleModel: ${label}.recordId가 필요합니다.`);
+                    }
+                    return { recordId: entry.recordId };
+                }
+            );
             const eventTiles = this.#normalizeEntityList(
                 floor.eventTiles,
                 `${prefix}.eventTiles`,
@@ -1951,6 +1997,7 @@ export class TutorialBattleModel {
                 heights: Object.freeze(heights.map((row) => Object.freeze(row))),
                 walls: Object.freeze(walls.map((entry) => Object.freeze(entry))),
                 items: Object.freeze(floorItems.map((entry) => Object.freeze(entry))),
+                records: Object.freeze(records.map((entry) => Object.freeze(entry))),
                 eventTiles: Object.freeze(eventTiles.map((entry) => Object.freeze(entry))),
                 teleports: Object.freeze(teleports.map((entry) => Object.freeze(entry))),
                 mobs: Object.freeze(mobs.map((entry) => Object.freeze(entry)))
@@ -2027,6 +2074,7 @@ export class TutorialBattleModel {
         return {
             discoveredItemIds: toSet(knowledge?.discoveredItemIds),
             identifiedItemIds: toSet(knowledge?.identifiedItemIds),
+            unlockedRecordIds: toSet(knowledge?.unlockedRecordIds),
             revealedTrapIds: new Set(),
             unlockedCutsceneIds: new Set()
         };

@@ -19,7 +19,8 @@ import {
     TUTORIAL_META_VERSION,
     TutorialMetaVersionError,
     unlockTutorialAchievement,
-    unlockTutorialCutscene
+    unlockTutorialCutscene,
+    unlockTutorialRecord
 } from '../project/engine/script/scene/tutorial/_tutorial_meta_progress.js';
 
 test('확정 일기와 업적명·설명·조건은 문서 순서를 보존한다', () => {
@@ -172,6 +173,7 @@ test('갤러리는 업적·일기·엔딩·컷씬을 분리하고 저장 메타�
         openingWatched: true,
         unlockedCutsceneIds: ['opening', 'true'],
         unlockedAchievementIds: ['steve-pickaxe'],
+        unlockedRecordIds: ['lora-diary:1', 'developer-diary:2'],
         endingIds: ['true']
     };
     const gallery = new TutorialGalleryController({
@@ -187,13 +189,26 @@ test('갤러리는 업적·일기·엔딩·컷씬을 분리하고 저장 메타�
     snapshot = gallery.getSnapshot(meta);
     assert.equal(snapshot.selectedSectionId, 'lora-diary');
     assert.equal(snapshot.entries.length, 7);
-    assert.equal(snapshot.entries.every((entry) => entry.unlocked), true);
+    assert.equal(snapshot.entries[0].unlocked, true);
+    assert.equal(snapshot.entries[1].unlocked, false);
     assert.equal(snapshot.entries[0].body, TUTORIAL_CONTENT_DATA.DIARIES.LORA[0]);
+    assert.equal(snapshot.entries[1].body, '???');
 
     gallery.shiftSection(1);
     snapshot = gallery.getSnapshot(meta);
     assert.equal(snapshot.selectedSectionId, 'developer-diary');
+    gallery.shiftEntry(1, meta);
+    snapshot = gallery.getSnapshot(meta);
+    assert.equal(snapshot.entries[1].unlocked, true);
     assert.equal(snapshot.entries[1].body, TUTORIAL_CONTENT_DATA.DIARIES.DEVELOPER[1]);
+
+    assert.equal(gallery.selectEntry('lora-diary:7', meta), true);
+    snapshot = gallery.getSnapshot(meta);
+    assert.equal(snapshot.selectedSectionId, 'lora-diary');
+    assert.equal(snapshot.selectedIndex, 6);
+    assert.equal(snapshot.selectedEntry.unlocked, false);
+
+    gallery.selectSection('developer-diary');
 
     gallery.shiftSection(1);
     snapshot = gallery.getSnapshot(meta);
@@ -219,6 +234,7 @@ test('메타 저장은 해금 멱등성·손상 정규화·완료 횟수 경계�
         discoveredTrapIds: 'broken',
         unlockedCutsceneIds: ['opening', 'opening', null],
         unlockedAchievementIds: ['peekaboo', 'peekaboo', {}],
+        unlockedRecordIds: ['lora-diary:1', '', 'lora-diary:1', 7],
         bestScore: -20,
         endingIds: ['true', 'true']
     });
@@ -231,6 +247,7 @@ test('메타 저장은 해금 멱등성·손상 정규화·완료 횟수 경계�
         revealedEventTileIds: [],
         unlockedCutsceneIds: ['opening'],
         unlockedAchievementIds: ['peekaboo'],
+        unlockedRecordIds: ['lora-diary:1'],
         bestScore: 0,
         endingIds: ['true']
     });
@@ -240,9 +257,12 @@ test('메타 저장은 해금 멱등성·손상 정규화·완료 횟수 경계�
     meta = unlockTutorialCutscene(meta, 'opening');
     meta = unlockTutorialAchievement(meta, 'peekaboo');
     meta = unlockTutorialAchievement(meta, 'peekaboo');
+    meta = unlockTutorialRecord(meta, 'lora-diary:1');
+    meta = unlockTutorialRecord(meta, 'lora-diary:1');
     meta = markTutorialOpeningWatched(meta);
     assert.deepEqual(meta.unlockedCutsceneIds, ['opening']);
     assert.deepEqual(meta.unlockedAchievementIds, ['peekaboo']);
+    assert.deepEqual(meta.unlockedRecordIds, ['lora-diary:1']);
     assert.equal(meta.playCount, 0, '중단 플레이의 해금은 완료 횟수를 늘리지 않아야 합니다.');
 
     const completed = recordTutorialResult({ ...meta, bestScore: 50 }, {
@@ -292,6 +312,20 @@ test('v1 메타는 함정 용어를 이벤트 타일 용어로 순차 이관하�
     ]);
     assert.equal('discoveredTrapIds' in migrated, false);
     assert.equal(migrated.bestScore, 77);
+    assert.deepEqual(migrated.unlockedRecordIds, []);
+});
+
+test('v4 메타는 기존 진행도를 보존하며 기록 해금 목록을 초기화한다', () => {
+    const migrated = normalizeTutorialMeta({
+        version: 4,
+        playCount: 3,
+        unlockedAchievementIds: ['peekaboo'],
+        unlockedRecordIds: ['developer-diary:1', 'developer-diary:1']
+    });
+    assert.equal(migrated.version, TUTORIAL_META_VERSION);
+    assert.equal(migrated.playCount, 3);
+    assert.deepEqual(migrated.unlockedAchievementIds, ['peekaboo']);
+    assert.deepEqual(migrated.unlockedRecordIds, ['developer-diary:1']);
 });
 
 test('현재보다 새로운 메타는 읽기와 저장 모두 거부해 원본 덮어쓰기를 막는다', async () => {

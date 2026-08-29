@@ -95,6 +95,7 @@ export class TutorialAudioDirector {
             || commandType === COMMANDS.CUTSCENE_NEXT) {
             cueId = TUTORIAL_UI_AUDIO_IDS.BOOK_TURN;
         } else if (commandType === COMMANDS.RETURN_MENU
+            || commandType === COMMANDS.CLOSE_RECORD
             || commandType === COMMANDS.CUTSCENE_CLOSE) {
             cueId = TUTORIAL_UI_AUDIO_IDS.BOOK_CLOSE;
         } else if (commandType === COMMANDS.CHOOSE_STARTER) {
@@ -142,7 +143,7 @@ export class TutorialAudioDirector {
                 ? TUTORIAL_BGM_IDS.ENDING_STABILIZED
                 : TUTORIAL_BGM_IDS.ENDING_SUBDUED;
         }
-        if (state.mode === 'battle' || state.mode === 'pause') {
+        if (state.mode === 'battle' || state.mode === 'pause' || state.mode === 'record') {
             return Number(state.floorIndex) >= 1
                 ? TUTORIAL_BGM_IDS.FLOOR_1
                 : TUTORIAL_BGM_IDS.OPENING;

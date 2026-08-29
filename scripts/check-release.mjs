@@ -29,8 +29,8 @@ for (const cycle of graph.cycles) {
 }
 errors.push(...provenance.errors, ...source.errors);
 
-if (TUTORIAL_META_VERSION !== 4) {
-    errors.push(`튜토리얼 메타 버전이 릴리스 계약 4와 다릅니다: ${TUTORIAL_META_VERSION}`);
+if (TUTORIAL_META_VERSION !== 5) {
+    errors.push(`튜토리얼 메타 버전이 릴리스 계약 5와 다릅니다: ${TUTORIAL_META_VERSION}`);
 }
 if (NWJS_PACKAGE_CONTRACT.version !== '0.108.0') {
     errors.push(`NW.js 고정 버전이 바뀌었습니다: ${NWJS_PACKAGE_CONTRACT.version}`);

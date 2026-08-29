@@ -1,4 +1,4 @@
-export const TUTORIAL_META_VERSION = 4;
+export const TUTORIAL_META_VERSION = 5;
 
 /**
  * @typedef {object} TutorialMeta
@@ -10,6 +10,7 @@ export const TUTORIAL_META_VERSION = 4;
  * @property {string[]} revealedEventTileIds - 발견한 이벤트 타일 ID 목록입니다.
  * @property {string[]} unlockedCutsceneIds - 해금한 컷씬 ID 목록입니다.
  * @property {string[]} unlockedAchievementIds - 해금한 업적 ID 목록입니다.
+ * @property {string[]} unlockedRecordIds - 맵에서 획득한 일기·개발자 기록 ID 목록입니다.
  * @property {number} bestScore - v2 저장 호환을 위해 읽기만 하는 미사용 점수입니다.
  * @property {string[]} endingIds - 확인한 엔딩 ID 목록입니다.
  */
@@ -65,6 +66,7 @@ export function createDefaultTutorialMeta() {
         revealedEventTileIds: [],
         unlockedCutsceneIds: [],
         unlockedAchievementIds: [],
+        unlockedRecordIds: [],
         bestScore: 0,
         endingIds: []
     };
@@ -87,6 +89,7 @@ export function normalizeTutorialMetaShape(value) {
         revealedEventTileIds: normalizeIdList(source.revealedEventTileIds),
         unlockedCutsceneIds: normalizeIdList(source.unlockedCutsceneIds),
         unlockedAchievementIds: normalizeIdList(source.unlockedAchievementIds),
+        unlockedRecordIds: normalizeIdList(source.unlockedRecordIds),
         bestScore: normalizeNonNegativeInteger(source.bestScore),
         endingIds: normalizeIdList(source.endingIds)
     };

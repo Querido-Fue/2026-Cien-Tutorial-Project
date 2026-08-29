@@ -505,7 +505,9 @@ export class TutorialGalleryView {
                 backgroundAssetKey: 'galleryExitButton',
                 backgroundImageAlpha: 1,
                 fitHitToBackground: true,
-                command: { type: TUTORIAL_COMMANDS.RETURN_MENU }
+                command: {
+                    type: viewModel.closeCommandType || TUTORIAL_COMMANDS.RETURN_MENU
+                }
             }
         ];
         if (playable) {

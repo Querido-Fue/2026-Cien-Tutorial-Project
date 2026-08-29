@@ -83,7 +83,7 @@ test('릴리스 정적 감사는 순환·누락·임시 계약 없이 모든 에
 });
 
 test('저장·패키징 릴리스 계약은 버전과 파일당 한 클래스 경계를 고정한다', async () => {
-    assert.equal(TUTORIAL_META_VERSION, 4);
+    assert.equal(TUTORIAL_META_VERSION, 5);
     assert.equal(NWJS_PACKAGE_CONTRACT.version, '0.108.0');
     assert.equal(NWJS_PACKAGE_CONTRACT.platform, 'win');
     assert.equal(NWJS_PACKAGE_CONTRACT.architecture, 'x64');

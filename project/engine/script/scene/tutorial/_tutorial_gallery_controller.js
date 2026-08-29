@@ -51,6 +51,32 @@ export class TutorialGalleryController {
     }
 
     /**
+     * 안정 ID로 특정 갤러리 항목을 찾아 해당 섹션과 페이지를 선택합니다.
+     * @param {string} entryId - 선택할 항목 ID입니다.
+     * @param {object} meta - 현재 메타 진행도입니다.
+     * @returns {boolean} 항목을 찾아 선택했는지 여부입니다.
+     */
+    selectEntry(entryId, meta = {}) {
+        if (typeof entryId !== 'string' || !entryId) {
+            return false;
+        }
+        for (let sectionIndex = 0;
+            sectionIndex < this.#content.GALLERY.sections.length;
+            sectionIndex++) {
+            const section = this.#content.GALLERY.sections[sectionIndex];
+            const entries = this.#createEntries(section, meta);
+            const entryIndex = entries.findIndex((entry) => entry.id === entryId);
+            if (entryIndex < 0) {
+                continue;
+            }
+            this.#sectionIndex = sectionIndex;
+            this.#entryIndices.set(section.id, entryIndex);
+            return true;
+        }
+        return false;
+    }
+
+    /**
      * 현재 섹션의 항목을 순환합니다.
      * @param {number} delta - 이동할 항목 수입니다.
      * @param {object} meta - 현재 메타 진행도입니다.
@@ -135,10 +161,18 @@ export class TutorialGalleryController {
             });
         }
         if (section.source === 'lora-diary') {
-            return this.#createDiaryEntries('lora-diary', this.#content.DIARIES.LORA);
+            return this.#createDiaryEntries(
+                this.#content.RECORDS.LORA,
+                this.#content.DIARIES.LORA,
+                meta
+            );
         }
         if (section.source === 'developer-diary') {
-            return this.#createDiaryEntries('developer-diary', this.#content.DIARIES.DEVELOPER);
+            return this.#createDiaryEntries(
+                this.#content.RECORDS.DEVELOPER,
+                this.#content.DIARIES.DEVELOPER,
+                meta
+            );
         }
         if (section.source === 'endings') {
             const endingIds = toIdList(meta.endingIds);
@@ -189,18 +223,28 @@ export class TutorialGalleryController {
         return [];
     }
 
-    /** @param {string} prefix @param {readonly string[]} entries @returns {Readonly<object>[]} 일기 항목입니다. @private */
-    #createDiaryEntries(prefix, entries) {
-        return entries.map((body, index) => Object.freeze({
-            id: prefix + ':' + String(index + 1),
-            kind: 'diary',
-            title: '기록 ' + String(index + 1),
-            secondary: '',
-            body,
-            unlocked: true,
-            playable: false,
-            replayCutsceneId: null
-        }));
+    /**
+     * @param {readonly object[]} records - 안정 ID 기록 정보입니다.
+     * @param {readonly string[]} bodies - 문서 순서를 보존한 본문입니다.
+     * @param {object} meta - 현재 메타 진행도입니다.
+     * @returns {Readonly<object>[]} 해금 상태가 적용된 일기 항목입니다.
+     * @private
+     */
+    #createDiaryEntries(records, bodies, meta) {
+        const unlockedIds = toIdList(meta.unlockedRecordIds);
+        return records.map((record, index) => {
+            const unlocked = unlockedIds.includes(record.id);
+            return Object.freeze({
+                id: record.id,
+                kind: 'diary',
+                title: record.title || ('기록 ' + String(index + 1)),
+                secondary: '',
+                body: unlocked ? String(bodies[index] || '') : '???',
+                unlocked,
+                playable: false,
+                replayCutsceneId: null
+            });
+        });
     }
 
     /** @param {string} id @returns {{id:string,title:string,cards:readonly object[]}} 컷씬 정의입니다. @private */

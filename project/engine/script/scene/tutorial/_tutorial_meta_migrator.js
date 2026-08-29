@@ -71,6 +71,15 @@ export class TutorialMetaMigrator {
             delete migrated.discoveredTrapIds;
             return migrated;
         }
+        if (version === 4) {
+            return {
+                ...source,
+                version: 5,
+                unlockedRecordIds: Array.isArray(source.unlockedRecordIds)
+                    ? [...source.unlockedRecordIds]
+                    : []
+            };
+        }
         throw new RangeError(`지원하지 않는 튜토리얼 메타 이관 단계입니다: ${version}`);
     }
 }

@@ -99,6 +99,13 @@ test('기획 데이터의 9×8 좌표와 두 스타터를 고정한다', () => {
         ['f1-eyeliner', 'eyeliner', 4, 6],
         ['f1-pickaxe', 'diamond-pickaxe', 7, 6]
     ]);
+    assert.deepEqual(positionTuples(firstFloor.records, 'recordId'), [
+        ['f1-lora-diary-1', 'lora-diary:1', 3, 4],
+        ['f1-lora-diary-2', 'lora-diary:2', 1, 4],
+        ['f1-lora-diary-3', 'lora-diary:3', 3, 1],
+        ['f1-lora-diary-4', 'lora-diary:4', 7, 3],
+        ['f1-developer-diary-1', 'developer-diary:1', 1, 6]
+    ]);
     assert.deepEqual(positionTuples(firstFloor.eventTiles, 'type'), [
         ['f1-event-1', 'damage', 0, 2],
         ['f1-event-3-a', 'instability-up', 6, 2],
@@ -130,6 +137,13 @@ test('기획 데이터의 9×8 좌표와 두 스타터를 고정한다', () => {
         ['b1-memory-photo', 'memory-photo', 8, 3],
         ['b1-mirror', 'mirror', 4, 5],
         ['b1-haste', 'haste', 7, 7]
+    ]);
+    assert.deepEqual(positionTuples(basement.records, 'recordId'), [
+        ['b1-lora-diary-5', 'lora-diary:5', 4, 3],
+        ['b1-lora-diary-6', 'lora-diary:6', 1, 3],
+        ['b1-lora-diary-7', 'lora-diary:7', 8, 1],
+        ['b1-developer-diary-2', 'developer-diary:2', 3, 6],
+        ['b1-developer-diary-3', 'developer-diary:3', 5, 7]
     ]);
     assert.deepEqual(positionTuples(basement.eventTiles, 'type'), [
         ['b1-event-4-a', 'instability-down', 2, 0],
@@ -190,6 +204,44 @@ test('이동을 먼저 써야 행동할 수 있고 W-A-D-D 경로는 재방문�
     assert.equal(model.commitPath([{ x: 5, y: 3 }]).reason, 'movement-unavailable');
     assert.equal(model.wait().ok, true);
     assert.equal(model.getSnapshot().turn, 'lora');
+});
+
+test('맵 기록은 진입 순간 한 번만 획득하고 영구 해금 지식을 새 런에 복원한다', () => {
+    const model = createModel();
+    const moved = model.commitPath([
+        { x: 4, y: 4 },
+        { x: 3, y: 4 },
+        { x: 2, y: 4 },
+        { x: 1, y: 4 }
+    ]);
+    assert.equal(moved.ok, true);
+    assert.deepEqual(
+        moved.events.filter(({ type }) => type === 'record-picked').map(
+            ({ recordId }) => recordId
+        ),
+        ['lora-diary:1', 'lora-diary:2']
+    );
+    assert.deepEqual(model.getSnapshot().knowledge.unlockedRecordIds, [
+        'lora-diary:1',
+        'lora-diary:2'
+    ]);
+    assert.equal(model.getCurrentFloorState().records.filter(
+        ({ collected }) => collected
+    ).length, 2);
+
+    const replay = new TutorialBattleModel(TUTORIAL_GAME_DATA, {
+        knowledge: { unlockedRecordIds: ['lora-diary:1', 'developer-diary:1'] }
+    });
+    const replayFloor = replay.getCurrentFloorState();
+    assert.equal(replayFloor.records.find(
+        ({ recordId }) => recordId === 'lora-diary:1'
+    ).collected, true);
+    assert.equal(replayFloor.records.find(
+        ({ recordId }) => recordId === 'developer-diary:1'
+    ).collected, true);
+    assert.equal(replayFloor.records.find(
+        ({ recordId }) => recordId === 'lora-diary:2'
+    ).collected, false);
 });
 
 test('짝 포탈은 진입 즉시 반대편을 삽입하고 남은 이동력을 유지한다', () => {

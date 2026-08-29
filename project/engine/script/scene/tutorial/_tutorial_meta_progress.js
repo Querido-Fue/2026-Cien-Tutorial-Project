@@ -123,6 +123,15 @@ export function unlockTutorialAchievement(meta, id) {
     };
 }
 
+/** @param {*} meta @param {*} id @returns {object} */
+export function unlockTutorialRecord(meta, id) {
+    const normalizedMeta = normalizeTutorialMeta(meta);
+    return {
+        ...normalizedMeta,
+        unlockedRecordIds: appendUniqueId(normalizedMeta.unlockedRecordIds, id)
+    };
+}
+
 /** @param {*} meta @param {{endingId?:*}} [result] @returns {object} */
 export function recordTutorialResult(meta, result = {}) {
     const normalizedMeta = normalizeTutorialMeta(meta);

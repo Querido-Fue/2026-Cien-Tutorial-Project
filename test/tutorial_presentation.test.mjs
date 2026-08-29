@@ -62,6 +62,7 @@ test('대표 모델 이벤트는 같은 입력에서 같은 직렬화 가능한 
             { type: 'lora-damaged', damage: 50, hp: 50 },
             { type: 'instability-changed', before: 70, after: 60, change: -10 },
             { type: 'item-picked', itemId: 'music-box', x: 8, y: 2 },
+            { type: 'record-picked', recordId: 'lora-diary:1', x: 3, y: 4 },
             { type: 'item-used', itemId: 'music-box' },
             { type: 'teleported', from: { x: 0, y: 0 }, to: { x: 8, y: 7 } },
             { type: 'floor-transition', floorIndex: 1, player: { x: 4, y: 4 } },
@@ -105,6 +106,11 @@ test('대표 모델 이벤트는 같은 입력에서 같은 직렬화 가능한 
     ]) {
         assert.equal(audioIds.includes(expected), true, `${expected} audio cue가 없습니다.`);
     }
+    assert.equal(first.some((cue) => (
+        cue.type === TUTORIAL_PRESENTATION_CUE_TYPES.EVENT_LOG
+        && cue.sourceEventType === 'record-picked'
+        && cue.message === '기록 획득'
+    )), true);
 });
 
 test('피드백 큐는 cue 순서와 수명을 소유하고 오디오를 별도로 drain한다', () => {

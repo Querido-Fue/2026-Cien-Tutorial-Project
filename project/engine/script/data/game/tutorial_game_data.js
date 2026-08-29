@@ -83,6 +83,13 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
             BUTTON_ICON_SIZE_RATIO: 0.66,
             BUTTON_ICON_GAP_UIWW: 0.25
         },
+        RECORD: {
+            WORLD_HALO_SIZE_TILE_RATIO: 0.34,
+            WORLD_HALO_ALPHA: 0.18,
+            WORLD_COVER_WIDTH_TILE_RATIO: 0.24,
+            WORLD_COVER_HEIGHT_TILE_RATIO: 0.3,
+            WORLD_PAGE_INSET_RATIO: 0.16
+        },
         LORA: {
             BASE_SIZE_TILE_RATIO: 0.64,
             SPRITE_SIZE_TILE_RATIO: 0.84,
@@ -175,6 +182,13 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
                 { id: 'f1-eyeliner', itemId: 'eyeliner', x: 4, y: 6 },
                 { id: 'f1-pickaxe', itemId: 'diamond-pickaxe', x: 7, y: 6 }
             ],
+            records: [
+                { id: 'f1-lora-diary-1', recordId: 'lora-diary:1', x: 3, y: 4 },
+                { id: 'f1-lora-diary-2', recordId: 'lora-diary:2', x: 1, y: 4 },
+                { id: 'f1-lora-diary-3', recordId: 'lora-diary:3', x: 3, y: 1 },
+                { id: 'f1-lora-diary-4', recordId: 'lora-diary:4', x: 7, y: 3 },
+                { id: 'f1-developer-diary-1', recordId: 'developer-diary:1', x: 1, y: 6 }
+            ],
             eventTiles: [
                 { id: 'f1-event-1', type: 'damage', x: 0, y: 2 },
                 { id: 'f1-event-3-a', type: 'instability-up', x: 6, y: 2 },
@@ -214,6 +228,13 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
                 { id: 'b1-memory-photo', itemId: 'memory-photo', x: 8, y: 3 },
                 { id: 'b1-mirror', itemId: 'mirror', x: 4, y: 5 },
                 { id: 'b1-haste', itemId: 'haste', x: 7, y: 7 }
+            ],
+            records: [
+                { id: 'b1-lora-diary-5', recordId: 'lora-diary:5', x: 4, y: 3 },
+                { id: 'b1-lora-diary-6', recordId: 'lora-diary:6', x: 1, y: 3 },
+                { id: 'b1-lora-diary-7', recordId: 'lora-diary:7', x: 8, y: 1 },
+                { id: 'b1-developer-diary-2', recordId: 'developer-diary:2', x: 3, y: 6 },
+                { id: 'b1-developer-diary-3', recordId: 'developer-diary:3', x: 5, y: 7 }
             ],
             eventTiles: [
                 { id: 'b1-event-4-a', type: 'instability-down', x: 2, y: 0 },

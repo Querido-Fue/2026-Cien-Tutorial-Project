@@ -53,6 +53,13 @@ export const TUTORIAL_MODE_POLICIES = Object.freeze({
         canReturnMenu: true,
         canRestartRun: false,
         acceptsBattleInput: false
+    }),
+    [TUTORIAL_MODES.RECORD]: Object.freeze({
+        view: 'gallery',
+        buttons: 'gallery',
+        canReturnMenu: false,
+        canRestartRun: false,
+        acceptsBattleInput: false
     })
 });
 

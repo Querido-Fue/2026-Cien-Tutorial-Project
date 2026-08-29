@@ -58,7 +58,7 @@ tween은 계속 `TutorialAnimationTimeline`이 담당해 중복 이동을 만들
 
 ## 4. 모델 event 목록과 현재 cue
 
-모델이 생성하는 전체 27개 타입은 `_tutorial_presentation_contract.js`의
+모델이 생성하는 전체 28개 타입은 `_tutorial_presentation_contract.js`의
 `TUTORIAL_MODEL_EVENT_TYPES`가 단일 문서화 목록이다.
 
 | 모델 event | 현재 생성 cue |
@@ -71,6 +71,7 @@ tween은 계속 `TutorialAnimationTimeline`이 담당해 중복 이동을 만들
 | `instability-changed` | log, instability-transition, 감소 시 stabilize |
 | `item-dropped` | log |
 | `item-picked` | log, item-equip audio |
+| `record-picked` | log, item-equip audio; scene이 해당 기록의 갤러리 책 팝업을 연다 |
 | `item-used` | log, actor-animation(`item`), item-apply audio |
 | `lora-attack` | log, actor-animation(`melee`/`area`/`idle`), 비대기 시 공격 audio |
 | `lora-damaged` | log, health-transition, 플레이어 공격 audio, impact 지연 floating-text·actor-animation(`hit`/`death`)·shake·flash·hurt/death audio |

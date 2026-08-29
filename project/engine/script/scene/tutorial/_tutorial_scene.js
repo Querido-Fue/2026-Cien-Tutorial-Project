@@ -43,7 +43,8 @@ import {
     recordTutorialResult,
     saveTutorialMeta,
     unlockTutorialAchievement,
-    unlockTutorialCutscene
+    unlockTutorialCutscene,
+    unlockTutorialRecord
 } from './_tutorial_meta_progress.js';
 import {
     TUTORIAL_COMMANDS as COMMANDS,
@@ -80,6 +81,7 @@ import { TutorialSpriteAnimator } from './_tutorial_sprite_animator.js';
 import { TutorialSpriteClipResolver } from './_tutorial_sprite_clip_resolver.js';
 import { TutorialSpriteCueRouter } from './_tutorial_sprite_cue_router.js';
 import { TutorialSpriteRoster } from './_tutorial_sprite_roster.js';
+import { TutorialRecordPopupQueue } from './_tutorial_record_popup_queue.js';
 import { TutorialBattleFeedbackView } from './view/_tutorial_battle_feedback_view.js';
 import { TutorialBattleHudView } from './view/_tutorial_battle_hud_view.js';
 import { TutorialBattleLayout } from './view/_tutorial_battle_layout.js';
@@ -150,6 +152,7 @@ export class TutorialScene extends BaseScene {
             content: this.content,
             cutscenes: this.data.CUTSCENES
         });
+        this.recordPopups = new TutorialRecordPopupQueue();
         this.achievementEvaluator = new TutorialAchievementEvaluator(
             this.content.ACHIEVEMENTS
         );
@@ -335,9 +338,15 @@ export class TutorialScene extends BaseScene {
 
         this.#ensureButtons();
         this.buttonHost.update();
+        if (this.#openNextRecordPopup()) {
+            this.#ensureButtons();
+            this.audioDirector.sync(this.#createAudioState());
+            this.#captureKeyboardLatch();
+            return;
+        }
         this.#prepareKeyboardEdges();
         this.#handleKeyboardInput();
-        if (this.mode === MODES.PAUSE) {
+        if (this.mode === MODES.PAUSE || this.mode === MODES.RECORD) {
             this.audioDirector.sync(this.#createAudioState());
             this.#captureKeyboardLatch();
             return;
@@ -448,6 +457,9 @@ export class TutorialScene extends BaseScene {
                     break;
                 case COMMANDS.GALLERY_PLAY:
                     this.#applyGalleryPlay();
+                    break;
+                case COMMANDS.CLOSE_RECORD:
+                    this.#applyCloseRecord();
                     break;
                 case COMMANDS.CUTSCENE_NEXT:
                     this.#applyCutsceneNext();
@@ -564,6 +576,7 @@ export class TutorialScene extends BaseScene {
         this.pendingCutscenes = [];
         this.pendingEndingCutsceneId = null;
         this.runCutsceneIds.clear();
+        this.recordPopups.clear();
         this.battleFocus.reset();
         this.guidance.reset();
         this.loraTurnState = null;
@@ -723,6 +736,7 @@ export class TutorialScene extends BaseScene {
         this.pendingCutscenes = [];
         this.pendingEndingCutsceneId = null;
         this.runCutsceneIds.clear();
+        this.recordPopups.clear();
         this.cutsceneReturnMode = nextMode;
         this.model = null;
         this.floorView = null;
@@ -767,6 +781,7 @@ export class TutorialScene extends BaseScene {
         const knowledge = {
             discoveredItemIds: [...this.meta.identifiedItemIds],
             identifiedItemIds: [...this.meta.identifiedItemIds],
+            unlockedRecordIds: [...this.meta.unlockedRecordIds],
             revealedTrapIds: [...this.meta.revealedEventTileIds],
             unlockedCutsceneIds: [...this.meta.unlockedCutsceneIds]
         };
@@ -779,6 +794,7 @@ export class TutorialScene extends BaseScene {
         this.pendingCutscenes = [];
         this.pendingEndingCutsceneId = null;
         this.runCutsceneIds = new Set();
+        this.recordPopups.clear();
         const openingCutsceneIds = this.cutsceneTriggers.beginRun(this.meta);
         this.attackSelected = false;
         this.attackWeapon = 'melee';
@@ -825,7 +841,7 @@ export class TutorialScene extends BaseScene {
 
     /** 갤러리 섹션을 키보드 또는 섹션 ID로 전환합니다. @param {object} payload @private */
     #applyGallerySectionShift(payload) {
-        if (this.mode !== MODES.GALLERY || this.cutscenes.isOpen()) {
+        if (!this.#isGalleryMode() || this.cutscenes.isOpen()) {
             return;
         }
         if (typeof payload?.sectionId === 'string') {
@@ -842,7 +858,7 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #applyGalleryShift(payload) {
-        if (this.mode !== MODES.GALLERY || this.cutscenes.isOpen()) {
+        if (!this.#isGalleryMode() || this.cutscenes.isOpen()) {
             return;
         }
         const delta = Number(payload?.delta) || 0;
@@ -855,14 +871,60 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #applyGalleryPlay() {
-        if (this.mode !== MODES.GALLERY || this.cutscenes.isOpen()) {
+        if (!this.#isGalleryMode() || this.cutscenes.isOpen()) {
             return;
         }
         const entry = this.galleryController.getSelectedEntry(this.meta);
         if (!entry?.playable || typeof entry.replayCutsceneId !== 'string') {
             return;
         }
-        this.#openCutscene(entry.replayCutsceneId, MODES.GALLERY, true);
+        this.#openCutscene(entry.replayCutsceneId, this.mode, true);
+    }
+
+    /** 현재 화면이 메뉴 갤러리 또는 전투 중 수집물 팝업인지 확인합니다. @private */
+    #isGalleryMode() {
+        return this.mode === MODES.GALLERY || this.mode === MODES.RECORD;
+    }
+
+    /** 현재 기록 팝업을 닫고 다음 기록 또는 중단된 전투로 복귀합니다. @private */
+    #applyCloseRecord() {
+        if (this.mode !== MODES.RECORD || this.cutscenes.isOpen()) {
+            return;
+        }
+        this.recordPopups.closeActive();
+        this.mode = MODES.BATTLE;
+        this.#refreshBattleCache();
+        if (this.#openNextRecordPopup()) {
+            return;
+        }
+        this.#enterResultIfNeeded();
+    }
+
+    /**
+     * 전투가 다른 오버레이로 점유되지 않았을 때 다음 기록을 갤러리 책으로 엽니다.
+     * @returns {boolean} 기록 팝업을 열었는지 여부입니다.
+     * @private
+     */
+    #openNextRecordPopup() {
+        if (this.mode !== MODES.BATTLE
+            || this.cutscenes.isOpen()
+            || this.presentationTimeline.isLocked()
+            || !this.model) {
+            return false;
+        }
+        let recordId = this.recordPopups.openNext();
+        while (recordId) {
+            if (this.galleryController.selectEntry(recordId, this.meta)) {
+                this.mode = MODES.RECORD;
+                this.hoveredTile = null;
+                this.hoveredTileKey = '';
+                this.buttonHost.invalidate();
+                return true;
+            }
+            this.recordPopups.closeActive();
+            recordId = this.recordPopups.openNext();
+        }
+        return false;
     }
 
     /**
@@ -923,6 +985,7 @@ export class TutorialScene extends BaseScene {
         this.cutsceneReturnMode = this.mode;
         if (this.mode === MODES.BATTLE) {
             this.#refreshBattleCache();
+            this.#openNextRecordPopup();
         }
     }
 
@@ -1295,6 +1358,9 @@ export class TutorialScene extends BaseScene {
         this.audioDirector.notifyAchievements(achievementCount);
         this.lastPresentationSnapshot = cloneCheckpointValue(nextSnapshot);
         this.#syncMetaFromModel();
+        this.recordPopups.enqueue(toList(result?.events)
+            .filter((event) => event?.type === 'record-picked')
+            .map((event) => event.recordId));
         for (const cutsceneId of this.cutsceneTriggers.consume(result?.events)) {
             if (this.#isEndingCutsceneId(cutsceneId)) {
                 this.pendingEndingCutsceneId = cutsceneId;
@@ -1320,7 +1386,7 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * 사용 아이템과 발동 함정을 반복 플레이 메타에 반영합니다.
+     * 사용 아이템과 획득 기록을 반복 플레이 메타에 반영합니다.
      * @private
      */
     #syncMetaFromModel() {
@@ -1328,6 +1394,7 @@ export class TutorialScene extends BaseScene {
             return;
         }
         let nextMeta = this.meta;
+        let recordUnlocked = false;
         const snapshot = this.#getSnapshot();
         for (const itemId of toList(snapshot?.usedItems)) {
             const normalizedId = typeof itemId === 'string' ? itemId : itemId?.itemId;
@@ -1340,7 +1407,16 @@ export class TutorialScene extends BaseScene {
                 nextMeta = identifyTutorialItem(nextMeta, itemId);
             }
         }
-        this.#replaceMeta(nextMeta);
+        for (const recordId of toList(snapshot?.knowledge?.unlockedRecordIds)) {
+            if (typeof recordId !== 'string') {
+                continue;
+            }
+            if (!nextMeta.unlockedRecordIds.includes(recordId)) {
+                recordUnlocked = true;
+            }
+            nextMeta = unlockTutorialRecord(nextMeta, recordId);
+        }
+        this.#replaceMeta(nextMeta, { persist: recordUnlocked });
     }
 
     /**
@@ -1348,7 +1424,7 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #enterResultIfNeeded() {
-        if (!this.model || this.resultRecorded) {
+        if (!this.model || this.resultRecorded || this.recordPopups.hasWork()) {
             return;
         }
         const snapshot = this.#getSnapshot();
@@ -1412,14 +1488,15 @@ export class TutorialScene extends BaseScene {
     /**
      * 새 메타가 달라졌을 때만 교체하고 저장합니다.
      * @param {object} nextMeta - 새 메타입니다.
+     * @param {{persist?:boolean}} [options={}] - 런 중에도 즉시 확정할지 여부입니다.
      * @private
      */
-    #replaceMeta(nextMeta) {
+    #replaceMeta(nextMeta, { persist = false } = {}) {
         if (!nextMeta || isSameMeta(this.meta, nextMeta)) {
             return;
         }
         this.meta = nextMeta;
-        if (!this.metaStaging) {
+        if (!this.metaStaging || persist) {
             this.committedMeta = cloneCheckpointValue(this.meta);
             this.#saveMeta(this.committedMeta);
         }
@@ -1809,7 +1886,7 @@ export class TutorialScene extends BaseScene {
             return;
         }
 
-        if (this.mode === MODES.GALLERY) {
+        if (this.#isGalleryMode()) {
             const direction = KEY_DIRECTIONS.find(
                 (entry) => this.#wasAnyKeyPressed(entry.codes)
             );
@@ -1826,7 +1903,11 @@ export class TutorialScene extends BaseScene {
             } else if (this.#wasKeyPressed(KEY_CODES.CONFIRM)) {
                 enqueueSimulationCommand({ type: COMMANDS.GALLERY_PLAY });
             } else if (this.#wasKeyPressed(KEY_CODES.CANCEL)) {
-                enqueueSimulationCommand({ type: COMMANDS.RETURN_MENU });
+                enqueueSimulationCommand({
+                    type: this.mode === MODES.RECORD
+                        ? COMMANDS.CLOSE_RECORD
+                        : COMMANDS.RETURN_MENU
+                });
             }
             return;
         }
@@ -2183,6 +2264,10 @@ export class TutorialScene extends BaseScene {
         return Object.freeze({
             ...this.#createNonbattleViewFrame(),
             ...gallery,
+            closeCommandType: this.mode === MODES.RECORD
+                ? COMMANDS.CLOSE_RECORD
+                : COMMANDS.RETURN_MENU,
+            recordPopup: this.mode === MODES.RECORD,
             selectionProgress: Number(
                 this.presentationTimeline.getState().menuSelectionProgress
             ) || 0,
@@ -2444,6 +2529,7 @@ export class TutorialScene extends BaseScene {
                     actionPlayerScale: this.data.ANIMATION.ACTION_PLAYER_SCALE,
                     actionLoraScale: this.data.ANIMATION.ACTION_LORA_SCALE,
                     itemIcon: this.data.SPRITES.ITEM,
+                    recordIcon: this.data.SPRITES.RECORD,
                     loraSprite: this.data.SPRITES.LORA
                 })
             }),

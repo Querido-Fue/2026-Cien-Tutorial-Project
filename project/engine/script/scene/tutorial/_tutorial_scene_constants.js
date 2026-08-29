@@ -9,7 +9,8 @@ export const TUTORIAL_MODES = Object.freeze({
     BATTLE: 'battle',
     PAUSE: 'pause',
     RESULT: 'result',
-    GALLERY: 'gallery'
+    GALLERY: 'gallery',
+    RECORD: 'record'
 });
 
 /**
@@ -30,6 +31,7 @@ export const TUTORIAL_COMMANDS = Object.freeze({
     GALLERY_SECTION_SHIFT: 'tutorial/gallery-section-shift',
     GALLERY_SHIFT: 'tutorial/gallery-shift',
     GALLERY_PLAY: 'tutorial/gallery-play',
+    CLOSE_RECORD: 'tutorial/close-record',
     CUTSCENE_NEXT: 'tutorial/cutscene-next',
     CUTSCENE_CLOSE: 'tutorial/cutscene-close',
     PLAN_STEP: 'tutorial/plan-step',

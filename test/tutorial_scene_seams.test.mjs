@@ -39,7 +39,8 @@ const EXPECTED_MODES = Object.freeze({
     BATTLE: 'battle',
     PAUSE: 'pause',
     RESULT: 'result',
-    GALLERY: 'gallery'
+    GALLERY: 'gallery',
+    RECORD: 'record'
 });
 
 const EXPECTED_COMMANDS = Object.freeze({
@@ -56,6 +57,7 @@ const EXPECTED_COMMANDS = Object.freeze({
     GALLERY_SECTION_SHIFT: 'tutorial/gallery-section-shift',
     GALLERY_SHIFT: 'tutorial/gallery-shift',
     GALLERY_PLAY: 'tutorial/gallery-play',
+    CLOSE_RECORD: 'tutorial/close-record',
     CUTSCENE_NEXT: 'tutorial/cutscene-next',
     CUTSCENE_CLOSE: 'tutorial/cutscene-close',
     PLAN_STEP: 'tutorial/plan-step',
@@ -181,7 +183,8 @@ test('모드 정책 표는 기존 표시·복귀·재시작·전투 입력 경�
         [TUTORIAL_MODES.BATTLE, 'battle', 'battle', true, true, true],
         [TUTORIAL_MODES.PAUSE, 'pause', 'pause', true, true, false],
         [TUTORIAL_MODES.RESULT, 'result', 'result', true, true, false],
-        [TUTORIAL_MODES.GALLERY, 'gallery', 'gallery', true, false, false]
+        [TUTORIAL_MODES.GALLERY, 'gallery', 'gallery', true, false, false],
+        [TUTORIAL_MODES.RECORD, 'gallery', 'gallery', false, false, false]
     ];
 
     for (const [mode, view, buttons, returnMenu, restart, battle] of expected) {

@@ -232,6 +232,7 @@ test('튜토리얼 오디오 디렉터는 화면 BGM·호흡 loop·UI 명령과 
     assert.deepEqual(calls.filter(([type]) => type === 'loop'), [
         ['loop', TUTORIAL_SFX_IDS.LORA_HEAVY_BREATHING]
     ]);
+    director.sync({ mode: 'record', floorIndex: 1, lora: { hp: 100, instability: 70 } });
     director.sync({ mode: 'battle', floorIndex: 1, lora: { hp: 100, instability: 60 } });
     director.sync({ mode: 'result', result: { endingId: 'true' } });
     director.sync({ mode: 'result', result: { endingId: 'special' } });
@@ -251,6 +252,7 @@ test('튜토리얼 오디오 디렉터는 화면 BGM·호흡 loop·UI 명령과 
     director.consume([{ id: TUTORIAL_SFX_IDS.PLAYER_HEAL }]);
     director.playCommand(TUTORIAL_COMMANDS.GALLERY_SHIFT);
     director.playCommand(TUTORIAL_COMMANDS.RETURN_MENU);
+    director.playCommand(TUTORIAL_COMMANDS.CLOSE_RECORD);
     director.playCommand(TUTORIAL_COMMANDS.CHOOSE_STARTER);
     director.playCommand(TUTORIAL_COMMANDS.START);
     director.notifyAchievements(1);

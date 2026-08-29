@@ -14,10 +14,24 @@ function deepFreeze(value) {
 }
 
 /**
+ * 갤러리와 맵 수집물이 공유할 안정 ID 기록을 만듭니다.
+ * @param {string} sectionId - 갤러리 섹션 ID입니다.
+ * @param {number} count - 문서 순서를 보존할 기록 수입니다.
+ * @returns {object[]} 안정 ID와 표시 정보를 가진 기록입니다.
+ */
+function createDiaryRecordDescriptors(sectionId, count) {
+    return Array.from({ length: count }, (_, index) => ({
+        id: `${sectionId}:${index + 1}`,
+        sectionId,
+        title: `기록 ${index + 1}`
+    }));
+}
+
+/**
  * 확정 콘텐츠 문구와 안정된 모델 사건에 연결한 업적 해금 정책입니다.
  */
 export const TUTORIAL_CONTENT_DATA = deepFreeze({
-    VERSION: 2,
+    VERSION: 3,
     ACHIEVEMENTS: [
         {
             id: 'steve-pickaxe',
@@ -114,6 +128,10 @@ export const TUTORIAL_CONTENT_DATA = deepFreeze({
             '직장을 구했다. 게임과는 관련이 없는 직장이지만, 일이 너무 바빠서 개발을 더 이상 진행할 수 없을 것 같다. 미안하다, 완성시키지 못해서. — 2013년 12월 7일'
         ]
     },
+    RECORDS: {
+        LORA: createDiaryRecordDescriptors('lora-diary', 7),
+        DEVELOPER: createDiaryRecordDescriptors('developer-diary', 3)
+    },
     ENDINGS: [
         {
             id: 'true',
@@ -192,7 +210,7 @@ export const TUTORIAL_CONTENT_DATA = deepFreeze({
             },
             {
                 id: 'developer-diary',
-                title: '개발자의 일기',
+                title: '개발자의 기록',
                 source: 'developer-diary',
                 bookmarkAssetKey: 'galleryBookmarkYellowRight'
             },

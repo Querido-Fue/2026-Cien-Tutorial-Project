@@ -271,6 +271,11 @@ export class TutorialBattleWorldView {
                 entries.push({ type: 'item', value: item });
             }
         }
+        for (const record of toBattleViewList(floor.records)) {
+            if (!record.collected) {
+                entries.push({ type: 'record', value: record });
+            }
+        }
         for (const eventTile of toBattleViewList(floor.eventTiles)) {
             entries.push({ type: 'event-tile', value: eventTile });
         }
@@ -294,6 +299,7 @@ export class TutorialBattleWorldView {
         for (const entry of entries) {
             if (entry.type === 'wall') this.#drawWall(entry.value, activeWallKeys);
             else if (entry.type === 'item') this.#drawWorldItem(entry.value);
+            else if (entry.type === 'record') this.#drawWorldRecord(entry.value);
             else if (entry.type === 'event-tile') this.#drawEventTile(entry.value);
             else if (entry.type === 'teleport') this.#drawTeleport(entry.value);
             else this.#actorView.draw(entry.type, entry.value, this.#frame);
@@ -433,6 +439,56 @@ export class TutorialBattleWorldView {
             colors.UI.Text,
             'center'
         );
+    }
+
+    /** 획득 가능한 일기·개발자 기록을 작은 픽셀 책으로 그립니다. @param {object} entry @private */
+    #drawWorldRecord(entry) {
+        const { colors, layout, world } = this.#frame;
+        const point = this.#projectTile(entry.x, entry.y);
+        const config = world.config.recordIcon;
+        if (!config) {
+            return;
+        }
+        const haloSize = layout.tileSide * config.WORLD_HALO_SIZE_TILE_RATIO;
+        const coverWidth = layout.tileSide * config.WORLD_COVER_WIDTH_TILE_RATIO;
+        const coverHeight = layout.tileSide * config.WORLD_COVER_HEIGHT_TILE_RATIO;
+        const inset = Math.max(1, coverWidth * config.WORLD_PAGE_INSET_RATIO);
+        this.#renderPort.renderGL('object', {
+            shape: 'circle',
+            x: point.x,
+            y: point.y,
+            w: haloSize,
+            h: haloSize,
+            fill: colors.UI.Accent,
+            alpha: Number(config.WORLD_HALO_ALPHA) || 0.18
+        });
+        this.#renderPort.renderGL('object', {
+            shape: 'rect',
+            x: point.x,
+            y: point.y,
+            w: coverWidth,
+            h: coverHeight,
+            fill: colors.UI.Accent,
+            alpha: 0.94
+        });
+        this.#renderPort.renderGL('object', {
+            shape: 'rect',
+            x: point.x + (inset * 0.35),
+            y: point.y,
+            w: Math.max(1, coverWidth - (inset * 1.45)),
+            h: Math.max(1, coverHeight - (inset * 1.2)),
+            fill: colors.UI.Text,
+            alpha: 0.96
+        });
+        this.#renderPort.renderGL('object', {
+            shape: 'rect',
+            x: point.x - (coverWidth * 0.32),
+            y: point.y,
+            w: Math.max(1, inset * 0.62),
+            h: coverHeight,
+            fill: colors.UI.PanelStrong,
+            alpha: 0.88
+        });
     }
 
     /** 이벤트 타일을 그립니다. @param {object} eventTile - 타일 상태입니다. @private */
