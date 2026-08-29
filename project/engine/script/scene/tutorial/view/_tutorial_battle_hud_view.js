@@ -80,6 +80,7 @@ export class TutorialBattleHudView {
             this.#drawLoraStatusCard();
             this.#drawPlayerStatus();
             this.#drawInventoryCard();
+            this.#drawActionCluster();
         } finally {
             this.#frame = null;
         }
@@ -98,114 +99,23 @@ export class TutorialBattleHudView {
         try {
             const specs = [];
             const { colors, hud, layout, snapshot } = viewModel;
-            const controls = hud.controls;
-            const actionRect = layout.hudRects.SECONDARY_ACTIONS;
-            const columns = Number(hud.config.actions.COLUMNS) || 4;
-            const gapX = this.#uww(hud.config.actions.GAP_X_UIWW);
-            const primaryIsMove = snapshot.phase === 'move';
-            const hasPlannedMovement = Number(hud.movePreview?.stepsUsed) > 0;
-            const actionColumnW = (
-                actionRect.w - (gapX * (columns - 1))
-            ) / columns;
-            const actionH = Math.min(
-                actionRect.h,
-                clampBattleViewNumber(this.#uwh(6.5), 40, 56)
-            );
-            const actionY = actionRect.y + ((actionRect.h - actionH) * 0.5);
-            const actionSpecs = [
-                primaryIsMove
-                    ? {
-                        key: 'reset-path',
-                        label: '초기화',
-                        enabled: controls.ready && hasPlannedMovement,
-                        type: TUTORIAL_COMMANDS.PLAN_RESET
-                    }
-                    : {
-                        key: 'melee',
-                        label: hud.attackSelected && hud.attackWeapon === 'melee'
-                            ? '근접 취소'
-                            : '근접',
-                        enabled: controls.actionReady && controls.meleeTargetCount > 0,
-                        active: hud.attackSelected && hud.attackWeapon === 'melee',
-                        type: TUTORIAL_COMMANDS.SELECT_ATTACK,
-                        payload: { weapon: 'melee' }
-                    },
-                {
-                    key: 'ranged',
-                    label: hud.attackSelected && hud.attackWeapon === 'bow'
-                        ? '원거리 취소'
-                        : '원거리',
-                    enabled: controls.actionReady
-                        && controls.hasBow
-                        && controls.bowTargetCount > 0,
-                    active: hud.attackSelected && hud.attackWeapon === 'bow',
-                    type: TUTORIAL_COMMANDS.SELECT_ATTACK,
-                    payload: { weapon: 'bow' }
-                },
-                {
-                    key: 'heal',
-                    label: '회복',
-                    enabled: controls.actionReady,
-                    type: TUTORIAL_COMMANDS.HEAL
-                },
-                {
-                    key: 'idle',
-                    label: '대기',
-                    enabled: controls.actionReady,
-                    type: TUTORIAL_COMMANDS.IDLE
-                }
-            ];
-            actionSpecs.forEach((spec, index) => {
+            const actionGeometry = this.#resolveActionClusterGeometry();
+            const actionSpecs = this.#resolveActionClusterActions();
+            for (const spec of actionSpecs) {
                 specs.push({
-                    key: 'battle-' + spec.key,
-                    x: actionRect.x + (index * (actionColumnW + gapX)),
-                    y: actionY,
-                    w: actionColumnW,
-                    h: actionH,
-                    label: spec.label,
-                    backgroundAssetKey: spec.key === 'heal' || spec.key === 'idle'
-                        ? 'waitHealButton'
-                        : 'actionButton',
-                    backgroundImageAlpha: 0.88,
-                    fitHitToBackground: true,
+                    key: spec.key,
+                    ...actionGeometry[spec.slot],
+                    label: '',
+                    tooltip: spec.label,
+                    drawBackground: false,
+                    drawSolidBackground: false,
                     enabled: spec.enabled,
                     active: spec.active,
-                    focused: hud.focusedControlKey === 'battle-' + spec.key,
+                    focused: spec.focused,
                     inspectable: true,
                     command: { type: spec.type, payload: spec.payload }
                 });
-            });
-
-            const primaryRect = layout.hudRects.PRIMARY_ACTION;
-            const primaryH = Math.min(
-                primaryRect.h,
-                clampBattleViewNumber(this.#uwh(15), 72, 116)
-            );
-            const primaryEnabled = controls.ready && (primaryIsMove
-                ? hud.movePreview?.ok === true
-                : snapshot.phase === 'action' && !snapshot.actionUsed);
-            specs.push({
-                key: 'battle-end',
-                x: primaryRect.x,
-                y: primaryRect.y + ((primaryRect.h - primaryH) * 0.5),
-                w: primaryRect.w,
-                h: primaryH,
-                label: '액션',
-                backgroundAssetKey: 'actionButton',
-                backgroundImageAlpha: 0.82,
-                fitHitToBackground: true,
-                enabled: primaryEnabled,
-                idleColor: colors.UI.Primary,
-                hoverColor: colors.UI.PrimaryHover,
-                textColor: colors.UI.OnPrimary,
-                radius: this.#uwh(1.35),
-                shadow: { blur: 10, color: colors.UI.ButtonShadow },
-                command: {
-                    type: primaryIsMove
-                        ? TUTORIAL_COMMANDS.COMMIT_PATH
-                        : TUTORIAL_COMMANDS.IDLE
-                }
-            });
+            }
 
             const inventoryRect = layout.hudRects.PLAYER_STATUS;
             const inventoryLayout = hud.config.inventory;
@@ -546,6 +456,274 @@ export class TutorialBattleHudView {
             rect.x + rect.w - pad, rect.y + rect.h - pad,
             fonts.SMALL, colors.UI.Muted, 'right'
         );
+    }
+
+    /** 원본 픽셀 에셋을 참고 이미지의 다이아 행동 클러스터로 조립합니다. @private */
+    #drawActionCluster() {
+        const { colors, fonts } = this.#frame;
+        const geometry = this.#resolveActionClusterGeometry();
+        const actionSpecs = this.#resolveActionClusterActions();
+        const actionBySlot = Object.fromEntries(
+            actionSpecs.map((spec) => [spec.slot, spec])
+        );
+        const primaryGroup = ['left', 'right', 'center']
+            .map((slot) => actionBySlot[slot]);
+        const primaryGroupEnabled = primaryGroup.some((spec) => spec?.enabled);
+        const primaryGroupHighlighted = primaryGroup.some(
+            (spec) => spec?.focused || spec?.active
+        );
+        drawTutorialPixelAsset(this.#renderPort, {
+            layer: 'ui',
+            image: this.#assetPort.getUiAsset?.('actionButton'),
+            rect: geometry.frame,
+            mode: 'exact',
+            alpha: primaryGroupHighlighted ? 1 : primaryGroupEnabled ? 0.92 : 0.38
+        });
+
+        const primary = actionBySlot.center;
+        this.#drawText(
+            'ui',
+            primary.label,
+            geometry.center.x + (geometry.center.w * 0.5),
+            geometry.frame.y + (
+                geometry.frame.h * geometry.config.PRIMARY_LABEL_Y_RATIO
+            ),
+            fonts.BUTTON || fonts.SMALL,
+            colors.UI.OnPrimary || colors.UI.Text,
+            'center',
+            primary.enabled ? (primary.focused ? 1 : 0.94) : 0.46
+        );
+
+        for (const slot of ['heal', 'idle']) {
+            const action = actionBySlot[slot];
+            const rect = geometry[slot];
+            const alpha = action.enabled
+                ? (action.focused || action.active ? 1 : 0.9)
+                : 0.38;
+            drawTutorialPixelAsset(this.#renderPort, {
+                layer: 'ui',
+                image: this.#assetPort.getUiAsset?.('waitHealButton'),
+                rect,
+                mode: 'exact',
+                alpha
+            });
+            const iconSize = Math.max(
+                1,
+                Math.round(rect.w * geometry.config.TOP_ICON_SIZE_RATIO)
+            );
+            drawTutorialPixelAsset(this.#renderPort, {
+                layer: 'ui',
+                image: this.#assetPort.getUiAsset?.(
+                    slot === 'heal' ? 'healIcon' : 'waitIcon'
+                ),
+                rect: {
+                    x: Math.round(rect.x + ((rect.w - iconSize) * 0.5)),
+                    y: Math.round(rect.y + ((rect.h - iconSize) * 0.5)),
+                    w: iconSize,
+                    h: iconSize
+                },
+                alpha
+            });
+        }
+        this.#drawActionSpark(geometry.spark, colors.UI.OnPrimary || colors.UI.Text);
+    }
+
+    /**
+     * 현재 전투 상태를 액션 클러스터의 다섯 상호작용으로 변환합니다.
+     * @returns {object[]} 슬롯·명령·활성 상태를 가진 행동 목록입니다.
+     * @private
+     */
+    #resolveActionClusterActions() {
+        const { hud, snapshot } = this.#frame;
+        const controls = hud.controls;
+        const primaryIsMove = snapshot.phase === 'move';
+        const hasPlannedMovement = Number(hud.movePreview?.stepsUsed) > 0;
+        const primaryEnabled = controls.ready && (primaryIsMove
+            ? hud.movePreview?.ok === true
+            : snapshot.phase === 'action' && !snapshot.actionUsed);
+        const values = [
+            primaryIsMove
+                ? {
+                    key: 'battle-reset-path',
+                    slot: 'left',
+                    label: '초기화',
+                    enabled: controls.ready && hasPlannedMovement,
+                    type: TUTORIAL_COMMANDS.PLAN_RESET
+                }
+                : {
+                    key: 'battle-melee',
+                    slot: 'left',
+                    label: hud.attackSelected && hud.attackWeapon === 'melee'
+                        ? '근접 취소'
+                        : '근접',
+                    enabled: controls.actionReady && controls.meleeTargetCount > 0,
+                    active: hud.attackSelected && hud.attackWeapon === 'melee',
+                    type: TUTORIAL_COMMANDS.SELECT_ATTACK,
+                    payload: { weapon: 'melee' }
+                },
+            {
+                key: 'battle-ranged',
+                slot: 'right',
+                label: hud.attackSelected && hud.attackWeapon === 'bow'
+                    ? '원거리 취소'
+                    : '원거리',
+                enabled: controls.actionReady
+                    && controls.hasBow
+                    && controls.bowTargetCount > 0,
+                active: hud.attackSelected && hud.attackWeapon === 'bow',
+                type: TUTORIAL_COMMANDS.SELECT_ATTACK,
+                payload: { weapon: 'bow' }
+            },
+            {
+                key: 'battle-heal',
+                slot: 'heal',
+                label: '회복',
+                enabled: controls.actionReady,
+                type: TUTORIAL_COMMANDS.HEAL
+            },
+            {
+                key: 'battle-idle',
+                slot: 'idle',
+                label: '대기',
+                enabled: controls.actionReady,
+                type: TUTORIAL_COMMANDS.IDLE
+            },
+            {
+                key: 'battle-end',
+                slot: 'center',
+                label: '액션',
+                enabled: primaryEnabled,
+                type: primaryIsMove
+                    ? TUTORIAL_COMMANDS.COMMIT_PATH
+                    : TUTORIAL_COMMANDS.IDLE
+            }
+        ];
+        return values.map((value) => ({
+            ...value,
+            focused: hud.focusedControlKey === value.key
+        }));
+    }
+
+    /**
+     * 액션 프레임의 원본 비율에서 중앙·화살·상단 다이아의 렌더 및 히트 영역을 계산합니다.
+     * @returns {object} 액션 클러스터 기하입니다.
+     * @private
+     */
+    #resolveActionClusterGeometry() {
+        const { hud, layout } = this.#frame;
+        const config = hud.config.actions.CLUSTER;
+        const primaryRect = layout.hudRects.PRIMARY_ACTION;
+        const primaryHeight = Math.min(
+            primaryRect.h,
+            clampBattleViewNumber(
+                this.#uwh(config.PRIMARY_HEIGHT_WH),
+                config.PRIMARY_MIN_HEIGHT_PX,
+                config.PRIMARY_MAX_HEIGHT_PX
+            )
+        );
+        const primaryContainer = {
+            x: primaryRect.x,
+            y: primaryRect.y + ((primaryRect.h - primaryHeight) * 0.5),
+            w: primaryRect.w,
+            h: primaryHeight
+        };
+        const frame = fitTutorialAssetRect(
+            this.#assetPort.getUiAsset?.('actionButton'),
+            primaryContainer
+        ) || {
+            x: Math.round(primaryContainer.x),
+            y: Math.round(primaryContainer.y),
+            w: Math.max(1, Math.round(primaryContainer.w)),
+            h: Math.max(1, Math.round(primaryContainer.h))
+        };
+        const sideWidth = Math.max(
+            1,
+            Math.round(frame.w * config.SIDE_HIT_WIDTH_RATIO)
+        );
+        const sideHeight = Math.max(
+            1,
+            Math.round(frame.h * config.SIDE_HIT_HEIGHT_RATIO)
+        );
+        const hitGap = Math.max(0, Math.round(config.HIT_GAP_PX));
+        const sideY = Math.round(frame.y + ((frame.h - sideHeight) * 0.5));
+        const topSize = Math.max(
+            1,
+            Math.round(
+                frame.w * config.TOP_BUTTON_SIZE_TO_PRIMARY_WIDTH_RATIO
+            )
+        );
+        const topGap = Math.max(
+            0,
+            Math.round(topSize * config.TOP_BUTTON_GAP_TO_PRIMARY_RATIO)
+        );
+        const topY = Math.round(frame.y - topSize - topGap);
+        const topCenters = config.TOP_BUTTON_CENTER_X_RATIOS;
+        const createTopRect = (ratio) => ({
+            x: Math.round(frame.x + (frame.w * ratio) - (topSize * 0.5)),
+            y: topY,
+            w: topSize,
+            h: topSize
+        });
+        const sparkSize = Math.max(
+            3,
+            Math.round(topSize * config.SPARK_SIZE_TO_TOP_BUTTON_RATIO)
+        );
+        return {
+            config,
+            frame,
+            left: {
+                x: frame.x,
+                y: sideY,
+                w: Math.max(1, sideWidth - hitGap),
+                h: sideHeight
+            },
+            right: {
+                x: frame.x + frame.w - sideWidth + hitGap,
+                y: sideY,
+                w: Math.max(1, sideWidth - hitGap),
+                h: sideHeight
+            },
+            center: {
+                x: frame.x + sideWidth + hitGap,
+                y: frame.y,
+                w: Math.max(1, frame.w - (sideWidth * 2) - (hitGap * 2)),
+                h: frame.h
+            },
+            heal: createTopRect(topCenters[0]),
+            idle: createTopRect(topCenters[1]),
+            spark: {
+                x: Math.round(frame.x + (
+                    frame.w * config.SPARK_CENTER_X_RATIO
+                )),
+                y: Math.round(topY - (
+                    topSize * config.SPARK_GAP_TO_TOP_BUTTON_RATIO
+                )),
+                size: sparkSize
+            }
+        };
+    }
+
+    /** 작은 십자 픽셀 반짝임을 액션 클러스터 위에 그립니다. @private */
+    #drawActionSpark(spark, fill) {
+        const thickness = Math.max(1, Math.round(spark.size * 0.24));
+        this.#renderPort.render('ui', {
+            shape: 'rect',
+            x: Math.round(spark.x - (thickness * 0.5)),
+            y: Math.round(spark.y - (spark.size * 0.5)),
+            w: thickness,
+            h: spark.size,
+            fill,
+            alpha: 0.86
+        });
+        this.#renderPort.render('ui', {
+            shape: 'rect',
+            x: Math.round(spark.x - (spark.size * 0.5)),
+            y: Math.round(spark.y - (thickness * 0.5)),
+            w: spark.size,
+            h: thickness,
+            fill,
+            alpha: 0.86
+        });
     }
 
     /**

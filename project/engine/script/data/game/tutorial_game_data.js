@@ -645,9 +645,23 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         },
         HEADER: { X_UIWW: 4, Y_WH: 3.4 },
         ACTIONS: {
-            COLUMNS: 4,
-            GAP_X_UIWW: 0.45,
-            BUTTON_RADIUS_WH: 1
+            BUTTON_RADIUS_WH: 1,
+            CLUSTER: {
+                PRIMARY_HEIGHT_WH: 15,
+                PRIMARY_MIN_HEIGHT_PX: 72,
+                PRIMARY_MAX_HEIGHT_PX: 116,
+                SIDE_HIT_WIDTH_RATIO: 0.18,
+                SIDE_HIT_HEIGHT_RATIO: 0.44,
+                HIT_GAP_PX: 2,
+                TOP_BUTTON_SIZE_TO_PRIMARY_WIDTH_RATIO: 0.2963,
+                TOP_BUTTON_CENTER_X_RATIOS: [0.27, 0.73],
+                TOP_BUTTON_GAP_TO_PRIMARY_RATIO: 0.03,
+                TOP_ICON_SIZE_RATIO: 0.36,
+                PRIMARY_LABEL_Y_RATIO: 0.52,
+                SPARK_CENTER_X_RATIO: 0.36,
+                SPARK_SIZE_TO_TOP_BUTTON_RATIO: 0.12,
+                SPARK_GAP_TO_TOP_BUTTON_RATIO: 0.18
+            }
         },
         INVENTORY: {
             PAGE_SIZE: 5,

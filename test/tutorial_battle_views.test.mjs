@@ -609,6 +609,106 @@ test('이동 경로 초기화 버튼은 한 칸 이상 선택한 이동 단계�
     assert.deepEqual(active.command, { type: TUTORIAL_COMMANDS.PLAN_RESET, payload: undefined });
 });
 
+test('우하단 행동 메뉴는 원본 다이아 프레임 하나와 상단 회복·대기 아이콘으로 조립된다', () => {
+    const commands = [];
+    const assets = {
+        actionButton: { naturalWidth: 135, naturalHeight: 96 },
+        waitHealButton: { naturalWidth: 40, naturalHeight: 40 },
+        healIcon: { naturalWidth: 12, naturalHeight: 12 },
+        waitIcon: { naturalWidth: 12, naturalHeight: 14 }
+    };
+    const renderPort = {
+        render(layer, command) {
+            commands.push({ layer, ...command });
+        },
+        measureText(text) {
+            return String(text).length * 8;
+        },
+        wrapText(text) {
+            return [String(text)];
+        }
+    };
+    const layout = createLayout().resize(VIEWPORTS[0]);
+    const viewModel = {
+        snapshot: {
+            phase: 'action', actionUsed: false, loraActionsCompleted: 0,
+            maxTurns: 12, player: { maxHp: 100 }, lora: { maxHp: 100 }
+        },
+        layout,
+        colors: {
+            UI: {
+                OnPrimary: '#fff', Text: '#eee', Border: '#333',
+                GaugeHp: '#hp', GaugeInstability: '#instability',
+                Success: '#0a0', Danger: '#d00'
+            }
+        },
+        fonts: { BUTTON: '18px LanaPixel', SMALL: '14px LanaPixel' },
+        world: {
+            presentation: { playerHp: 100, loraHp: 100, instability: 70 }
+        },
+        hud: {
+            attackSelected: false,
+            attackWeapon: 'melee',
+            focusedControlKey: null,
+            movePreview: { ok: true, stepsUsed: 0 },
+            readability: { playerPreview: null, inspectedItem: null },
+            controls: {
+                ready: true,
+                actionReady: true,
+                meleeTargetCount: 1,
+                bowTargetCount: 1,
+                hasBow: true
+            },
+            inventory: { entries: [], page: 0, pageCount: 1 },
+            config: {
+                actions: TUTORIAL_GAME_DATA.LAYOUT.ACTIONS,
+                inventory: TUTORIAL_GAME_DATA.LAYOUT.INVENTORY,
+                itemIcon: TUTORIAL_GAME_DATA.SPRITES.ITEM,
+                floorTransitionAfterTurn: 6
+            }
+        }
+    };
+    const view = new TutorialBattleHudView(renderPort, {
+        getUiAsset(key) {
+            return assets[key] || null;
+        }
+    });
+    const actionSpecs = view.getButtonSpecs(viewModel)
+        .filter((spec) => spec.key.startsWith('battle-'));
+
+    assert.deepEqual(
+        actionSpecs.map((spec) => spec.key),
+        ['battle-melee', 'battle-ranged', 'battle-heal', 'battle-idle', 'battle-end']
+    );
+    assert.equal(actionSpecs.every((spec) => spec.label === ''), true);
+    assert.equal(actionSpecs.every((spec) => spec.drawBackground === false), true);
+    for (let leftIndex = 0; leftIndex < actionSpecs.length; leftIndex++) {
+        for (let rightIndex = leftIndex + 1; rightIndex < actionSpecs.length; rightIndex++) {
+            assert.equal(
+                overlaps(actionSpecs[leftIndex], actionSpecs[rightIndex]),
+                false,
+                `${actionSpecs[leftIndex].key}와 ${actionSpecs[rightIndex].key}의 히트 영역이 겹칩니다.`
+            );
+        }
+    }
+    const heal = actionSpecs.find((spec) => spec.key === 'battle-heal');
+    const idle = actionSpecs.find((spec) => spec.key === 'battle-idle');
+    const primary = actionSpecs.find((spec) => spec.key === 'battle-end');
+    assert.equal(heal.y + heal.h < primary.y, true);
+    assert.equal(idle.y + idle.h < primary.y, true);
+    assert.equal(heal.x < idle.x, true);
+
+    view.draw(viewModel);
+    assert.equal(commands.filter((command) => command.image === assets.actionButton).length, 1);
+    assert.equal(commands.filter((command) => command.image === assets.waitHealButton).length, 2);
+    assert.equal(commands.filter((command) => command.image === assets.healIcon).length, 1);
+    assert.equal(commands.filter((command) => command.image === assets.waitIcon).length, 1);
+    assert.equal(commands.filter((command) => command.text === '액션').length, 1);
+    assert.equal(commands.some((command) => (
+        ['근접', '원거리', '회복', '대기'].includes(command.text)
+    )), false);
+});
+
 test('로라와 플레이어 상태는 원본 패널의 초상·슬롯·게이지에 맞춰진다', () => {
     const commands = [];
     const assets = {
