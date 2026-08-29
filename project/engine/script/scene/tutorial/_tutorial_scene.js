@@ -38,16 +38,8 @@ import { TutorialGalleryController } from './_tutorial_gallery_controller.js';
 import { TutorialGuidanceController } from './_tutorial_guidance_controller.js';
 import {
     createDefaultTutorialMeta,
-    identifyTutorialItem,
     isTutorialMetaFutureVersionError,
-    loadTutorialMeta,
-    markTutorialCombatGuideSeen,
-    markTutorialOpeningWatched,
-    recordTutorialResult,
-    saveTutorialMeta,
-    unlockTutorialAchievement,
-    unlockTutorialCutscene,
-    unlockTutorialRecord
+    loadTutorialMeta
 } from './_tutorial_meta_progress.js';
 import {
     TUTORIAL_COMMANDS as COMMANDS,
@@ -66,13 +58,14 @@ import {
     isTutorialBattleMode
 } from './_tutorial_mode_policy.js';
 import {
-    areSerializableValuesEqual as isSameMeta,
     clampNumber,
     cloneTile,
     cloneValue as cloneCheckpointValue,
     toList,
     toTileKey
 } from './_tutorial_value_utils.js';
+import { TutorialKeyboardEdgeTracker } from './_tutorial_keyboard_edge_tracker.js';
+import { TutorialMetaSession } from './_tutorial_meta_session.js';
 import { TutorialAnimationTimeline } from './_tutorial_animation_timeline.js';
 import { TutorialAchievementBanner } from './_tutorial_achievement_banner.js';
 import { TutorialAssetLoader } from './_tutorial_asset_loader.js';
@@ -141,10 +134,7 @@ export class TutorialScene extends BaseScene {
         this.model = null;
         this.floorView = null;
         this.floorActorView = null;
-        this.meta = createDefaultTutorialMeta();
-        this.committedMeta = cloneCheckpointValue(this.meta);
-        this.metaStaging = false;
-        this.metaWritesBlocked = false;
+        this.metaSession = new TutorialMetaSession();
         this.cutscenes = new TutorialCutsceneController(this.data.CUTSCENES);
         const knownCutsceneIds = Object.values(this.data.CUTSCENES).map(
             (entry) => entry.id
@@ -176,7 +166,6 @@ export class TutorialScene extends BaseScene {
         this.resultRecorded = false;
         this.pauseIndex = 0;
         this.destroyed = false;
-        this.saveSequence = Promise.resolve();
         this.timelineRevision = 0;
         this.lastPresentationSnapshot = null;
         this.hoveredTileKey = '';
@@ -323,18 +312,11 @@ export class TutorialScene extends BaseScene {
         this.loraTurnState = null;
 
         this.uiActionHandled = false;
-        this.keyboardLatch = new Map();
-        this.keyboardPressObserved = new Map();
-        this.frameKeyEdges = new Set();
-        const initialEventTime = Number(getKeyboardSnapshot()?.lastEvent?.timeStamp);
-        this.lastKeyboardEventTimestamp = Number.isFinite(initialEventTime)
-            ? initialEventTime
-            : -1;
-        for (const code of WATCHED_KEY_CODES) {
-            const isDown = getKeyboardCodeInput(code) === true;
-            this.keyboardLatch.set(code, isDown);
-            this.keyboardPressObserved.set(code, isDown);
-        }
+        this.keyboardEdges = new TutorialKeyboardEdgeTracker({
+            watchedCodes: WATCHED_KEY_CODES,
+            getCodeInput: getKeyboardCodeInput,
+            getSnapshot: getKeyboardSnapshot
+        });
 
         setPointerLockEnabled(true);
         this.#syncViewport();
@@ -349,8 +331,9 @@ export class TutorialScene extends BaseScene {
             })
             .catch((error) => {
                 console.warn('튜토리얼 진행도 로드 오류:', error);
-                this.metaWritesBlocked = isTutorialMetaFutureVersionError(error);
-                if (this.metaWritesBlocked) {
+                const writesBlocked = isTutorialMetaFutureVersionError(error);
+                this.metaSession.setWritesBlocked(writesBlocked);
+                if (writesBlocked) {
                     console.warn('더 최신 버전의 진행도를 보호하기 위해 이번 실행의 메타 저장을 중지합니다.');
                 }
                 if (!this.destroyed) {
@@ -360,6 +343,11 @@ export class TutorialScene extends BaseScene {
                     });
                 }
             });
+    }
+
+    /** @returns {object} 현재 반복 플레이 진행도입니다. */
+    get meta() {
+        return this.metaSession.current;
     }
 
     /**
@@ -605,7 +593,7 @@ export class TutorialScene extends BaseScene {
      * @override
      */
     destroy() {
-        this.#commitStagedMeta();
+        this.metaSession.commitStaged();
         this.destroyed = true;
         this.timelineRevision += 1;
         this.presentationTimeline.destroy();
@@ -641,9 +629,7 @@ export class TutorialScene extends BaseScene {
         if (this.mode !== MODES.LOADING) {
             return;
         }
-        this.meta = payload?.meta || createDefaultTutorialMeta();
-        this.committedMeta = cloneCheckpointValue(this.meta);
-        this.metaStaging = false;
+        this.metaSession.setLoaded(payload?.meta || createDefaultTutorialMeta());
         this.mode = MODES.MENU;
         this.#appendEvent('진행도를 불러왔습니다.');
     }
@@ -799,7 +785,7 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #leaveRun(nextMode) {
-        this.#commitStagedMeta();
+        this.metaSession.commitStaged();
         this.timelineRevision += 1;
         this.presentationTimeline.cancel();
         this.battleCamera.clear();
@@ -852,7 +838,7 @@ export class TutorialScene extends BaseScene {
         this.presentationTimeline.cancel();
         this.spriteCueRouter.reset();
         this.audioDirector.resetTransient();
-        this.metaStaging = true;
+        this.metaSession.beginStaging();
         this.starterItemId = starterItemId;
         const knowledge = {
             discoveredItemIds: [...this.meta.identifiedItemIds],
@@ -1042,14 +1028,10 @@ export class TutorialScene extends BaseScene {
 
     /** 완료 또는 스킵한 컷씬을 갤러리 해금과 오프닝 정책에 반영합니다. @param {string|null} id @private */
     #recordCutsceneSeen(id) {
-        if (typeof id !== 'string' || !id) {
-            return;
-        }
-        let nextMeta = unlockTutorialCutscene(this.meta, id);
-        if (id === this.content.CUTSCENE_TRIGGERS.openingCutsceneId) {
-            nextMeta = markTutorialOpeningWatched(nextMeta);
-        }
-        this.#replaceMeta(nextMeta);
+        this.metaSession.recordCutsceneSeen(
+            id,
+            this.content.CUTSCENE_TRIGGERS.openingCutsceneId
+        );
     }
 
     /**
@@ -1429,17 +1411,13 @@ export class TutorialScene extends BaseScene {
             result?.events,
             this.meta.unlockedAchievementIds
         );
-        let achievementMeta = this.meta;
-        for (const achievementId of achievementResult.unlockedIds) {
-            achievementMeta = unlockTutorialAchievement(achievementMeta, achievementId);
-        }
-        this.#replaceMeta(achievementMeta);
+        this.metaSession.unlockAchievements(achievementResult.unlockedIds);
         const achievementCount = this.achievementBanner.enqueue(
             achievementResult.notifications
         );
         this.audioDirector.notifyAchievements(achievementCount);
         this.lastPresentationSnapshot = cloneCheckpointValue(nextSnapshot);
-        this.#syncMetaFromModel();
+        this.metaSession.syncBattleSnapshot(nextSnapshot);
         this.recordPopups.enqueue(toList(result?.events)
             .filter((event) => event?.type === 'record-picked')
             .map((event) => event.recordId));
@@ -1465,40 +1443,6 @@ export class TutorialScene extends BaseScene {
                 queued: false
             };
         }
-    }
-
-    /**
-     * 사용 아이템과 획득 기록을 반복 플레이 메타에 반영합니다.
-     * @private
-     */
-    #syncMetaFromModel() {
-        if (!this.model) {
-            return;
-        }
-        let nextMeta = this.meta;
-        let recordUnlocked = false;
-        const snapshot = this.#getSnapshot();
-        for (const itemId of toList(snapshot?.usedItems)) {
-            const normalizedId = typeof itemId === 'string' ? itemId : itemId?.itemId;
-            if (normalizedId) {
-                nextMeta = identifyTutorialItem(nextMeta, normalizedId);
-            }
-        }
-        for (const itemId of toList(snapshot?.knowledge?.identifiedItemIds)) {
-            if (typeof itemId === 'string') {
-                nextMeta = identifyTutorialItem(nextMeta, itemId);
-            }
-        }
-        for (const recordId of toList(snapshot?.knowledge?.unlockedRecordIds)) {
-            if (typeof recordId !== 'string') {
-                continue;
-            }
-            if (!nextMeta.unlockedRecordIds.includes(recordId)) {
-                recordUnlocked = true;
-            }
-            nextMeta = unlockTutorialRecord(nextMeta, recordId);
-        }
-        this.#replaceMeta(nextMeta, { persist: recordUnlocked });
     }
 
     /**
@@ -1541,7 +1485,7 @@ export class TutorialScene extends BaseScene {
         };
         this.mode = MODES.RESULT;
         this.resultRecorded = true;
-        this.#replaceMeta(recordTutorialResult(this.meta, { endingId }));
+        this.metaSession.recordResult(endingId);
         const endingCutsceneId = this.pendingEndingCutsceneId;
         this.pendingEndingCutsceneId = null;
         if (endingCutsceneId === ending.cutsceneId) {
@@ -1565,53 +1509,6 @@ export class TutorialScene extends BaseScene {
         return this.content.ENDINGS.some(
             (ending) => ending.cutsceneId === cutsceneId
         );
-    }
-
-    /**
-     * 새 메타가 달라졌을 때만 교체하고 저장합니다.
-     * @param {object} nextMeta - 새 메타입니다.
-     * @param {{persist?:boolean}} [options={}] - 런 중에도 즉시 확정할지 여부입니다.
-     * @private
-     */
-    #replaceMeta(nextMeta, { persist = false } = {}) {
-        if (!nextMeta || isSameMeta(this.meta, nextMeta)) {
-            return;
-        }
-        this.meta = nextMeta;
-        if (!this.metaStaging || persist) {
-            this.committedMeta = cloneCheckpointValue(this.meta);
-            this.#saveMeta(this.committedMeta);
-        }
-    }
-
-    /** 현재 런에서 쌓인 메타 변경을 이탈 경계에서 한 번만 저장합니다. @private */
-    #commitStagedMeta() {
-        if (!this.metaStaging) {
-            return;
-        }
-        this.metaStaging = false;
-        if (isSameMeta(this.committedMeta, this.meta)) {
-            return;
-        }
-        this.committedMeta = cloneCheckpointValue(this.meta);
-        this.#saveMeta(this.committedMeta);
-    }
-
-    /**
-     * 최신 메타 복제본을 순서대로 비동기 저장합니다.
-     * @param {object} [meta=this.meta] - 확정해 저장할 메타입니다.
-     * @private
-     */
-    #saveMeta(meta = this.meta) {
-        if (this.metaWritesBlocked) {
-            return;
-        }
-        const snapshot = cloneCheckpointValue(meta);
-        this.saveSequence = this.saveSequence
-            .then(() => saveTutorialMeta(snapshot))
-            .catch((error) => {
-                console.warn('튜토리얼 진행도 저장 오류:', error);
-            });
     }
 
     /**
@@ -2233,7 +2130,7 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #wasKeyPressed(code) {
-        return this.frameKeyEdges.has(code);
+        return this.keyboardEdges.wasPressed(code);
     }
 
     /**
@@ -2243,7 +2140,7 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #wasAnyKeyPressed(codes) {
-        return codes.some((code) => this.#wasKeyPressed(code));
+        return this.keyboardEdges.wasAnyPressed(codes);
     }
 
     /**
@@ -2251,36 +2148,7 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #prepareKeyboardEdges() {
-        this.frameKeyEdges.clear();
-        for (const code of WATCHED_KEY_CODES) {
-            const isDown = getKeyboardCodeInput(code) === true;
-            if (isDown && this.keyboardLatch.get(code) !== true) {
-                this.frameKeyEdges.add(code);
-                this.keyboardPressObserved.set(code, true);
-            }
-        }
-
-        const lastEvent = getKeyboardSnapshot()?.lastEvent;
-        const eventTimestamp = Number(lastEvent?.timeStamp);
-        const code = lastEvent?.code;
-        if (!Number.isFinite(eventTimestamp)
-            || eventTimestamp === this.lastKeyboardEventTimestamp
-            || !WATCHED_KEY_CODES.includes(code)) {
-            return;
-        }
-        this.lastKeyboardEventTimestamp = eventTimestamp;
-        if (lastEvent.pressed === true) {
-            if (this.keyboardLatch.get(code) !== true
-                && this.keyboardPressObserved.get(code) !== true) {
-                this.frameKeyEdges.add(code);
-            }
-            this.keyboardPressObserved.set(code, true);
-            return;
-        }
-        if (this.keyboardPressObserved.get(code) !== true) {
-            this.frameKeyEdges.add(code);
-        }
-        this.keyboardPressObserved.set(code, false);
+        this.keyboardEdges.prepare();
     }
 
     /**
@@ -2288,9 +2156,7 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #captureKeyboardLatch() {
-        for (const code of WATCHED_KEY_CODES) {
-            this.keyboardLatch.set(code, getKeyboardCodeInput(code) === true);
-        }
+        this.keyboardEdges.capture();
     }
 
     /**
@@ -2949,7 +2815,7 @@ export class TutorialScene extends BaseScene {
         if (this.mode !== MODES.BATTLE || !this.guidance.dismiss()) {
             return;
         }
-        this.#replaceMeta(markTutorialCombatGuideSeen(this.meta));
+        this.metaSession.markCombatGuideSeen();
         this.buttonHost.invalidate();
     }
 
