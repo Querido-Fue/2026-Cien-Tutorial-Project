@@ -59,8 +59,7 @@ import {
     clampNumber,
     cloneTile,
     cloneValue as cloneCheckpointValue,
-    toList,
-    toTileKey
+    toList
 } from './_tutorial_value_utils.js';
 import { TutorialKeyboardEdgeTracker } from './_tutorial_keyboard_edge_tracker.js';
 import { TutorialKeyboardCommandMapper } from './_tutorial_keyboard_command_mapper.js';
@@ -72,6 +71,7 @@ import { TutorialAssetLoader } from './_tutorial_asset_loader.js';
 import { TutorialAssetPort } from './_tutorial_asset_port.js';
 import { TutorialAudioDirector } from './_tutorial_audio_director.js';
 import { TutorialBattlePresenter } from './_tutorial_battle_presenter.js';
+import { TutorialBattleSelectionController } from './_tutorial_battle_selection_controller.js';
 import { TutorialBattleViewModelFactory } from './_tutorial_battle_view_model_factory.js';
 import { TutorialFeedbackQueue } from './_tutorial_feedback_queue.js';
 import { TutorialInventoryPresenter } from './_tutorial_inventory_presenter.js';
@@ -102,8 +102,6 @@ const TUTORIAL_ASSET_MANIFEST = getData('TUTORIAL_ASSET_MANIFEST');
 const TUTORIAL_SPRITE_CLIPS = getData('TUTORIAL_SPRITE_CLIPS');
 
 const PLAYER_ID = 'player';
-const LORA_ID = 'lora';
-
 /**
  * 반응형 폰트 문자열을 생성합니다.
  * @param {object} spec - 글꼴 규격입니다.
@@ -159,6 +157,7 @@ export class TutorialScene extends BaseScene {
         this.pendingEndingCutsceneId = null;
         this.runCutsceneIds = new Set();
         this.battleFocus = new TutorialBattleFocusController();
+        this.battleSelection = new TutorialBattleSelectionController();
         this.guidance = new TutorialGuidanceController();
         this.starterIndex = Math.max(
             0,
@@ -171,7 +170,6 @@ export class TutorialScene extends BaseScene {
         this.destroyed = false;
         this.timelineRevision = 0;
         this.lastPresentationSnapshot = null;
-        this.hoveredTileKey = '';
         const releaseInfo = options.releaseInfo || {};
         this.releaseInfo = Object.freeze({
             id: String(releaseInfo.id || 'development'),
@@ -312,16 +310,6 @@ export class TutorialScene extends BaseScene {
         this.assetPort.loadAll();
 
         this.elapsedSeconds = 0;
-        this.hoveredTile = null;
-        this.plannedPath = [];
-        this.reachability = new Map();
-        this.actionTargets = [];
-        this.attackSelected = false;
-        this.attackWeapon = 'melee';
-        this.targetIndex = 0;
-        this.cleanseSelected = false;
-        this.cleanseTargets = [];
-        this.cleanseTargetIndex = 0;
         this.loraTurnState = null;
 
         this.uiActionHandled = false;
@@ -755,8 +743,7 @@ export class TutorialScene extends BaseScene {
             return;
         }
         this.pauseIndex = 0;
-        this.hoveredTile = null;
-        this.hoveredTileKey = '';
+        this.battleSelection.clearHover();
         this.mode = MODES.PAUSE;
         this.buttonHost.invalidate();
     }
@@ -821,20 +808,10 @@ export class TutorialScene extends BaseScene {
         this.pauseIndex = 0;
         this.changelogPage = 0;
         this.loraTurnState = null;
-        this.attackSelected = false;
-        this.attackWeapon = 'melee';
-        this.targetIndex = 0;
-        this.cleanseSelected = false;
-        this.cleanseTargets = [];
-        this.cleanseTargetIndex = 0;
         this.inventoryPresenter.reset();
-        this.hoveredTile = null;
-        this.hoveredTileKey = '';
+        this.battleSelection.reset();
         this.battleFocus.reset();
         this.guidance.reset();
-        this.reachability.clear();
-        this.actionTargets = [];
-        this.plannedPath = [];
         this.lastPresentationSnapshot = null;
         this.feedbackQueue.clear();
         this.achievementBanner.clear();
@@ -871,12 +848,7 @@ export class TutorialScene extends BaseScene {
         this.runCutsceneIds = new Set();
         this.recordPopups.clear();
         const openingCutsceneIds = this.cutsceneTriggers.beginRun(this.meta);
-        this.attackSelected = false;
-        this.attackWeapon = 'melee';
-        this.targetIndex = 0;
-        this.cleanseSelected = false;
-        this.cleanseTargets = [];
-        this.cleanseTargetIndex = 0;
+        this.battleSelection.reset(this.model);
         this.inventoryPresenter.reset();
         this.loraTurnState = null;
         this.battleFocus.reset();
@@ -910,8 +882,6 @@ export class TutorialScene extends BaseScene {
             y: Number(this.model.player?.y) || 0,
             floorIndex: Number(this.model.floorIndex) || 0
         });
-        this.hoveredTileKey = '';
-        this.#resetPlannedPath();
         this.#refreshBattleCache();
         this.#syncSpriteRoster();
         this.#appendEvent('전투 시작 · 이동 경로를 지정하고 확정한 뒤 행동하세요.');
@@ -997,8 +967,7 @@ export class TutorialScene extends BaseScene {
         while (recordId) {
             if (this.galleryController.selectEntry(recordId, this.meta)) {
                 this.mode = MODES.RECORD;
-                this.hoveredTile = null;
-                this.hoveredTileKey = '';
+                this.battleSelection.clearHover();
                 this.buttonHost.invalidate();
                 return true;
             }
@@ -1077,25 +1046,12 @@ export class TutorialScene extends BaseScene {
         }
         const dx = Number(payload?.x) || 0;
         const dy = Number(payload?.y) || 0;
-        if (this.cleanseSelected) {
-            this.#shiftCleanseTarget(dx || dy);
-            this.presentationTimeline.startSelection('attack');
-            return;
+        const selectionKind = this.battleSelection.planStep(this.model, dx, dy);
+        if (selectionKind) {
+            this.presentationTimeline.startSelection(
+                selectionKind === 'path' ? 'path' : 'attack'
+            );
         }
-        if (this.attackSelected) {
-            this.#shiftAttackTarget(dx || dy);
-            this.presentationTimeline.startSelection('attack');
-            return;
-        }
-        if (this.model.movementUsed || this.model.phase !== 'move') {
-            return;
-        }
-        const path = this.#normalizePath(this.model.extendPath(this.plannedPath, dx, dy));
-        if (path.length === 0) {
-            return;
-        }
-        this.plannedPath = path;
-        this.presentationTimeline.startSelection('path');
     }
 
     /**
@@ -1104,20 +1060,9 @@ export class TutorialScene extends BaseScene {
      */
     #applyPlanBack() {
         if (!this.#canAcceptBattleInput()
-            || this.model.movementUsed
-            || this.model.phase !== 'move'
-            || this.plannedPath.length <= 1) {
+            || !this.battleSelection.backtrackPath(this.model)) {
             return;
         }
-        const last = this.plannedPath[this.plannedPath.length - 1];
-        const previous = this.plannedPath[this.plannedPath.length - 2];
-        this.plannedPath.pop();
-        if (previous
-            && Math.abs(last.x - previous.x) + Math.abs(last.y - previous.y) > 1
-            && this.plannedPath.length > 1) {
-            this.plannedPath.pop();
-        }
-        this.cleanseSelected = false;
         this.presentationTimeline.startSelection('path');
     }
 
@@ -1126,12 +1071,10 @@ export class TutorialScene extends BaseScene {
         if (!this.#canAcceptBattleInput()
             || this.model.movementUsed
             || this.model.phase !== 'move'
-            || this.plannedPath.length <= 1) {
+            || !this.battleSelection.resetPath(this.model)) {
             return;
         }
-        this.#resetPlannedPath();
-        this.cleanseSelected = false;
-        this.cleanseTargets = [];
+        this.battleSelection.clearCleanse();
         this.presentationTimeline.startSelection('path');
     }
 
@@ -1145,7 +1088,7 @@ export class TutorialScene extends BaseScene {
             || this.model.phase !== 'move') {
             return;
         }
-        this.#commitModelPath(this.plannedPath);
+        this.#commitModelPath(this.battleSelection.getPlannedPath());
     }
 
     /**
@@ -1154,12 +1097,12 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #commitModelPath(path) {
-        const normalizedPath = this.#normalizePath(path);
+        const normalizedPath = this.battleSelection.normalizePath(path);
         if (normalizedPath.length === 0) {
             return;
         }
         const result = this.model.commitPath(normalizedPath);
-        const resultPath = this.#normalizePath(result?.path);
+        const resultPath = this.battleSelection.normalizePath(result?.path);
         const teleportSegments = toList(result?.events)
             .filter((event) => event?.type === 'teleported')
             .map((event) => ({
@@ -1167,11 +1110,7 @@ export class TutorialScene extends BaseScene {
                 to: cloneTile(event.to)
             }))
             .filter((segment) => segment.from && segment.to);
-        if (result?.ok) {
-            this.cleanseSelected = false;
-            this.cleanseTargets = [];
-            this.#resetPlannedPath();
-        }
+        this.battleSelection.completeMove(this.model, result?.ok === true);
         this.#afterModelChange(result);
         if (result?.ok) {
             this.presentationTimeline.startPlayerPath({
@@ -1194,18 +1133,14 @@ export class TutorialScene extends BaseScene {
             || this.model.actionUsed) {
             return;
         }
-        const weapon = payload?.weapon === 'bow' ? 'bow' : 'melee';
-        const selectingSameWeapon = this.attackSelected && this.attackWeapon === weapon;
-        if (!selectingSameWeapon
-            && toList(this.model.getValidTargets({ weapon })).length === 0) {
+        const selection = this.battleSelection.toggleAttack(
+            this.model,
+            payload?.weapon
+        );
+        if (!selection.changed) {
             return;
         }
-        this.attackSelected = !selectingSameWeapon;
-        this.attackWeapon = weapon;
-        this.battleFocus.focus(weapon === 'bow' ? 'battle-ranged' : 'battle-melee');
-        this.cleanseSelected = false;
-        this.cleanseTargets = [];
-        this.targetIndex = 0;
+        this.battleFocus.focus(selection.focusKey);
         this.#refreshBattleCache();
         this.presentationTimeline.startSelection('attack');
     }
@@ -1221,14 +1156,12 @@ export class TutorialScene extends BaseScene {
             || this.model.actionUsed) {
             return;
         }
-        const targetId = payload?.targetId
-            || this.actionTargets[this.targetIndex]?.id
-            || LORA_ID;
-        if (!this.actionTargets.some((target) => target.id === targetId)) {
+        const request = this.battleSelection.createAttackRequest(payload);
+        if (!request) {
             return;
         }
-        const result = this.model.attack(targetId, { weapon: this.attackWeapon });
-        this.attackSelected = false;
+        const result = this.model.attack(request.targetId, { weapon: request.weapon });
+        this.battleSelection.clearAttack();
         this.#afterModelChange(result);
         if (result?.ok === true) {
             this.presentationTimeline.startAction();
@@ -1246,7 +1179,7 @@ export class TutorialScene extends BaseScene {
             return;
         }
         const result = this.model.heal();
-        this.attackSelected = false;
+        this.battleSelection.clearAttack();
         this.#afterModelChange(result);
         if (result?.ok === true) {
             this.presentationTimeline.startAction();
@@ -1264,8 +1197,7 @@ export class TutorialScene extends BaseScene {
             return;
         }
         const result = this.model.wait();
-        this.attackSelected = false;
-        this.cleanseSelected = false;
+        this.battleSelection.clearActionSelections();
         this.#afterModelChange(result);
         if (result?.ok === true) {
             this.presentationTimeline.startAction();
@@ -1282,15 +1214,9 @@ export class TutorialScene extends BaseScene {
             || this.model.movementUsed) {
             return;
         }
-        const targets = toList(this.model.getCleanseTargets?.());
-        if (targets.length === 0) {
-            this.cleanseSelected = false;
-            this.cleanseTargets = [];
+        if (!this.battleSelection.toggleCleanse(this.model)) {
             return;
         }
-        this.cleanseSelected = !this.cleanseSelected;
-        this.attackSelected = false;
-        this.cleanseTargetIndex = 0;
         this.#refreshBattleCache();
         this.presentationTimeline.startSelection('attack');
     }
@@ -1301,18 +1227,16 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #applyCleanseEventTile(payload) {
-        if (!this.#canAcceptBattleInput() || !this.cleanseSelected) {
+        if (!this.#canAcceptBattleInput()
+            || !this.battleSelection.isCleanseSelected()) {
             return;
         }
-        const target = payload?.id
-            ? payload
-            : this.cleanseTargets[this.cleanseTargetIndex];
+        const target = this.battleSelection.getCleanseTarget(payload);
         if (!target) {
             return;
         }
         const result = this.model.cleanseEventTile(target);
-        this.cleanseSelected = false;
-        this.cleanseTargets = [];
+        this.battleSelection.clearCleanse();
         this.#afterModelChange(result);
         if (result?.ok === true) {
             this.presentationTimeline.startAction(this.data.ANIMATION.SELECTION_SECONDS);
@@ -1335,7 +1259,7 @@ export class TutorialScene extends BaseScene {
             return;
         }
         const result = this.model.useItem(itemId);
-        this.attackSelected = false;
+        this.battleSelection.clearAttack();
         this.#afterModelChange(result);
         if (result?.ok === true) {
             this.presentationTimeline.startAction();
@@ -1379,9 +1303,8 @@ export class TutorialScene extends BaseScene {
         }
         const result = this.model.completeLoraTurn();
         this.loraTurnState = null;
-        this.attackSelected = false;
-        this.cleanseSelected = false;
-        this.#resetPlannedPath();
+        this.battleSelection.clearActionSelections();
+        this.battleSelection.resetPath(this.model);
         this.#afterModelChange(result);
     }
 
@@ -1607,11 +1530,10 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #refreshBattleCache() {
-        this.reachability = new Map();
-        this.actionTargets = [];
         if (!this.model) {
             this.floorView = null;
             this.floorActorView = null;
+            this.battleSelection.refresh(null);
             return;
         }
         if (this.mode !== MODES.BATTLE) {
@@ -1625,135 +1547,7 @@ export class TutorialScene extends BaseScene {
             this.floorView = this.model.getCurrentFloorState();
             this.floorActorView = this.#captureFloorActorView();
         }
-        if (this.model.phase === 'move') {
-            this.reachability = this.#normalizeReachability(this.model.getReachability());
-        }
-        if (this.model.phase === 'action' && !this.model.actionUsed && this.attackSelected) {
-            this.actionTargets = toList(this.model.getValidTargets({
-                weapon: this.attackWeapon
-            })).map((target) => ({
-                ...target,
-                x: Number(target.x),
-                y: Number(target.y)
-            }));
-            this.targetIndex = clampNumber(
-                this.targetIndex,
-                0,
-                Math.max(0, this.actionTargets.length - 1)
-            );
-        }
-        if (this.model.phase === 'move' && this.cleanseSelected) {
-            this.cleanseTargets = toList(this.model.getCleanseTargets()).map((target) => ({
-                ...target,
-                x: Number(target.x),
-                y: Number(target.y)
-            }));
-            this.cleanseTargetIndex = clampNumber(
-                this.cleanseTargetIndex,
-                0,
-                Math.max(0, this.cleanseTargets.length - 1)
-            );
-            if (this.cleanseTargets.length === 0) {
-                this.cleanseSelected = false;
-            }
-        } else if (!this.cleanseSelected) {
-            this.cleanseTargets = [];
-        }
-        const player = cloneTile(this.model.player);
-        if (!player) {
-            this.plannedPath = [];
-            return;
-        }
-        if (this.plannedPath.length === 0
-            || this.plannedPath[0].x !== player.x
-            || this.plannedPath[0].y !== player.y) {
-            this.plannedPath = [player];
-        }
-    }
-
-    /**
-     * 도달 가능 결과를 좌표 키 Map으로 정규화합니다.
-     * @param {*} source - 모델 반환값입니다.
-     * @returns {Map<string,object>} 정규화된 결과입니다.
-     * @private
-     */
-    #normalizeReachability(source) {
-        const normalized = new Map();
-        if (source instanceof Map) {
-            for (const [key, value] of source.entries()) {
-                if (value && Number.isInteger(Number(value.x)) && Number.isInteger(Number(value.y))) {
-                    normalized.set(toTileKey(Number(value.x), Number(value.y)), value);
-                    continue;
-                }
-                const parts = String(key).split(',').map(Number);
-                if (parts.length === 2 && parts.every(Number.isInteger)) {
-                    normalized.set(toTileKey(parts[0], parts[1]), {
-                        x: parts[0],
-                        y: parts[1],
-                        cost: Number(value) || 0
-                    });
-                }
-            }
-            return normalized;
-        }
-        for (const value of toList(source?.tiles || source)) {
-            const tile = cloneTile(value);
-            if (tile) {
-                normalized.set(toTileKey(tile.x, tile.y), value);
-            }
-        }
-        return normalized;
-    }
-
-    /**
-     * 경로 반환값을 유효 좌표 배열로 정규화합니다.
-     * @param {*} source - 모델 반환값입니다.
-     * @returns {Array<{x:number,y:number}>} 좌표 배열입니다.
-     * @private
-     */
-    #normalizePath(source) {
-        const rawPath = Array.isArray(source) ? source : source?.path;
-        if (!Array.isArray(rawPath)) {
-            return [];
-        }
-        return rawPath.map(cloneTile).filter(Boolean);
-    }
-
-    /**
-     * 현재 플레이어 위치를 경로 시작점으로 설정합니다.
-     * @private
-     */
-    #resetPlannedPath() {
-        const player = cloneTile(this.model?.player);
-        this.plannedPath = player ? [player] : [];
-    }
-
-    /**
-     * 공격 대상 선택 커서를 순환합니다.
-     * @param {number} delta - 이동량입니다.
-     * @private
-     */
-    #shiftAttackTarget(delta) {
-        const count = this.actionTargets.length;
-        if (count <= 0 || delta === 0) {
-            return;
-        }
-        this.targetIndex = (this.targetIndex + Math.sign(delta) + count) % count;
-    }
-
-    /**
-     * 정화 대상 선택 커서를 순환합니다.
-     * @param {number} delta - 이동량입니다.
-     * @private
-     */
-    #shiftCleanseTarget(delta) {
-        const count = this.cleanseTargets.length;
-        if (count <= 0 || delta === 0) {
-            return;
-        }
-        this.cleanseTargetIndex = (
-            this.cleanseTargetIndex + Math.sign(delta) + count
-        ) % count;
+        this.battleSelection.refresh(this.model);
     }
 
     /**
@@ -1815,10 +1609,7 @@ export class TutorialScene extends BaseScene {
             guidanceOpen: this.guidance.isOpen(),
             pauseIndex: this.pauseIndex,
             canAcceptBattleInput: this.#canAcceptBattleInput(),
-            attackSelected: this.attackSelected,
-            cleanseSelected: this.cleanseSelected,
-            selectedCleanseTarget: this.cleanseTargets[this.cleanseTargetIndex],
-            selectedAttackTargetId: this.actionTargets[this.targetIndex]?.id,
+            ...this.battleSelection.createKeyboardState(),
             modelPhase: this.model?.phase,
             focusedBattleCommand: this.#createFocusedBattleCommand()
         }, this.keyboardEdges.getPressedCodes());
@@ -1836,13 +1627,11 @@ export class TutorialScene extends BaseScene {
         if (this.mode !== MODES.BATTLE
             || this.cutscenes.isOpen()
             || this.guidance.isOpen()) {
-            this.hoveredTile = null;
-            this.hoveredTileKey = '';
+            this.battleSelection.clearHover();
             return;
         }
         if (!getMouseFocus().includes('object')) {
-            this.hoveredTile = null;
-            this.hoveredTileKey = '';
+            this.battleSelection.clearHover();
             return;
         }
         const mouse = getMouseInput('pos') || {
@@ -1854,30 +1643,13 @@ export class TutorialScene extends BaseScene {
             mouse.x,
             mouse.y
         );
-        const nextKey = nextTile ? toTileKey(nextTile.x, nextTile.y) : '';
-        if (nextKey && nextKey !== this.hoveredTileKey) {
+        const hoverResult = this.battleSelection.setHoveredTile(nextTile);
+        if (hoverResult.hoverChanged) {
             this.presentationTimeline.startSelection('hover');
         }
-        if (nextTile && this.attackSelected) {
-            const hoveredTargetIndex = this.actionTargets.findIndex((target) => (
-                target.x === nextTile.x && target.y === nextTile.y
-            ));
-            if (hoveredTargetIndex >= 0 && hoveredTargetIndex !== this.targetIndex) {
-                this.targetIndex = hoveredTargetIndex;
-                this.presentationTimeline.startSelection('attack');
-            }
-        } else if (nextTile && this.cleanseSelected) {
-            const hoveredTargetIndex = this.cleanseTargets.findIndex((target) => (
-                target.x === nextTile.x && target.y === nextTile.y
-            ));
-            if (hoveredTargetIndex >= 0
-                && hoveredTargetIndex !== this.cleanseTargetIndex) {
-                this.cleanseTargetIndex = hoveredTargetIndex;
-                this.presentationTimeline.startSelection('attack');
-            }
+        if (hoverResult.targetChanged) {
+            this.presentationTimeline.startSelection('attack');
         }
-        this.hoveredTile = nextTile;
-        this.hoveredTileKey = nextKey;
     }
 
     /**
@@ -1888,7 +1660,7 @@ export class TutorialScene extends BaseScene {
         if (this.uiActionHandled
             || this.mode !== MODES.BATTLE
             || this.cutscenes.isOpen()
-            || !this.hoveredTile
+            || !this.battleSelection.hasHoveredTile()
             || !getMouseFocus().includes('object')) {
             return;
         }
@@ -1898,38 +1670,9 @@ export class TutorialScene extends BaseScene {
         if (!this.#canAcceptBattleInput()) {
             return;
         }
-        if (this.cleanseSelected) {
-            const target = this.cleanseTargets.find((entry) => (
-                entry.x === this.hoveredTile.x && entry.y === this.hoveredTile.y
-            ));
-            if (target) {
-                enqueueSimulationCommand({
-                    type: COMMANDS.CLEANSE_EVENT_TILE,
-                    payload: target
-                });
-            }
-            return;
-        }
-        if (this.attackSelected) {
-            const target = this.actionTargets.find((entry) => (
-                entry.x === this.hoveredTile.x && entry.y === this.hoveredTile.y
-            ));
-            if (target) {
-                enqueueSimulationCommand({
-                    type: COMMANDS.ATTACK,
-                    payload: { targetId: target.id }
-                });
-            }
-            return;
-        }
-        const endpoint = this.plannedPath[this.plannedPath.length - 1];
-        const dx = this.hoveredTile.x - (endpoint?.x ?? this.model.player.x);
-        const dy = this.hoveredTile.y - (endpoint?.y ?? this.model.player.y);
-        if (this.model.phase === 'move' && Math.abs(dx) + Math.abs(dy) === 1) {
-            enqueueSimulationCommand({
-                type: COMMANDS.PLAN_STEP,
-                payload: { x: dx, y: dy }
-            });
+        const command = this.battleSelection.createPointerCommand(this.model);
+        if (command) {
+            enqueueSimulationCommand(command);
         }
     }
 
@@ -2087,18 +1830,7 @@ export class TutorialScene extends BaseScene {
             floorActors: this.floorActorView,
             ready: this.#canAcceptBattleInput(),
             achievement: this.achievementBanner.getSnapshot(),
-            selection: {
-                plannedPath: this.plannedPath,
-                reachability: this.reachability,
-                hoveredTile: this.hoveredTile,
-                attackSelected: this.attackSelected,
-                attackWeapon: this.attackWeapon,
-                actionTargets: this.actionTargets,
-                targetIndex: this.targetIndex,
-                cleanseSelected: this.cleanseSelected,
-                cleanseTargets: this.cleanseTargets,
-                cleanseTargetIndex: this.cleanseTargetIndex
-            }
+            selection: this.battleSelection.getSnapshot()
         });
     }
 
@@ -2160,11 +1892,7 @@ export class TutorialScene extends BaseScene {
             String(this.model?.actionsUsed),
             String(this.model?.actionsPerTurn),
             String(this.model?.loraActionsCompleted),
-            String(this.attackSelected),
-            String(this.attackWeapon),
-            String(this.cleanseSelected),
-            String(this.cleanseTargetIndex),
-            this.plannedPath.map((point) => toTileKey(point.x, point.y)).join('>'),
+            ...this.battleSelection.getSignatureParts(),
             String(this.inventoryPresenter.getPage()),
             String(this.battleFocus.getFocusedKey()),
             String(this.guidance.isOpen()),

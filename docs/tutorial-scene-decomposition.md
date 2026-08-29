@@ -64,7 +64,8 @@ import하지 않고, 모드 정책만 모드 상수를 참조한다.
 | --- | --- | --- | --- |
 | 흐름·생명주기 | `mode`, `timelineRevision`, `cutscenes`, `resultData` | `mode`, `model`, 런 선택·결과·컷씬 상태 | `BaseScene`, 모드 정책, 명령 상수 |
 | 입력 | 모드 정책, 모델 phase, 선택 대상, 마우스 focus | 키 latch/edge, hover, 대상 index, 명령 큐 | `input_system`, 입력 바인딩, command queue |
-| 모델 조율 | `model`, 계획 경로, 선택 상태, 캐시 | 모델 공개 API를 통한 상태 변경, 캐시, 결과 진입 | `TutorialBattleModel` 공개 API |
+| 모델 조율 | `model`, 층 표현 캐시 | 모델 공개 API를 통한 상태 변경, 결과 진입 | `TutorialBattleModel` 공개 API |
+| 전투 선택 | 계획 경로, 도달 범위, 공격·정화 대상, 호버 | 선택 불변식, 대상 순환, 포인터 명령 파생 | `TutorialBattleSelectionController` |
 | 저장·메타 | `meta`, 모델 snapshot, 결과 | `meta`, `committedMeta`, `metaStaging`, `saveSequence` | `_tutorial_meta_progress.js` |
 | 프레젠테이션 | 모델 결과·전후 snapshot, cue, floor view | 장면은 floor snapshot 교체만 조율 | presenter, feedback queue, animation timeline |
 | 배우 스프라이트 | 표시 층 배우·actor-animation cue·clip 데이터 | 장면은 roster 동기화와 snapshot 전달만 조율 | clip resolver, sprite animator, cue router, actor view |
@@ -93,7 +94,8 @@ import하지 않고, 모드 정책만 모드 상수를 참조한다.
 - `#wasKeyPressed`, `#wasAnyKeyPressed`, `#prepareKeyboardEdges`, `#captureKeyboardLatch`
 - 공간 판정: `TutorialBattleLayout.hitTestTile(#createBattleLayoutFrame(), x, y)`
 
-입력은 `mode`, `presentationTimeline.isLocked()`, `cutscenes`, 모델 phase, 계획 경로와 선택 대상을 읽는다.
+입력은 `mode`, `presentationTimeline.isLocked()`, `cutscenes`, 모델 phase와
+`TutorialBattleSelectionController`의 작은 입력 snapshot을 읽는다.
 `keyboardLatch`, `keyboardPressObserved`, `frameKeyEdges`, `lastKeyboardEventTimestamp`,
 `hoveredTile`, `hoveredTileKey`, `targetIndex`, `cleanseTargetIndex`, `uiActionHandled`를 쓰고
 실제 게임 의도는 `enqueueSimulationCommand()`로만 내보낸다.
@@ -194,6 +196,7 @@ import하지 않고, 모드 정책만 모드 상수를 참조한다.
 | Turn 04 | `TutorialButtonHost` | `UIPool` 획득·갱신·그리기·반납 | button spec, UI API |
 | Turn 05 | `TutorialBattleLayout` | viewport별 보드·HUD 좌표와 타일 투영·히트테스트 | 정적 레이아웃 데이터, 순수 viewport 값 |
 | Turn 05 | 장면 `#createBattleViewModel` | 한 프레임의 직렬화 가능한 전투 view model 생성 | model snapshot·장면 선택 상태 읽기 |
+| SRP 후속 | `TutorialBattleSelectionController` | 경로·대상·호버 선택 상태와 입력 명령 파생 | model 공개 읽기 API, 명령 상수, 값 유틸 |
 | Turn 05 | `TutorialBattleWorldView` | 타일·경로·오브젝트·액터 렌더 | battle view model, layout, render/asset port |
 | Turn 05 | `TutorialBattleHudView` | 턴·게이지·행동·인벤토리 렌더 | battle view model, render port |
 | Turn 05 | `TutorialBattleFeedbackView` | cue의 화면 표시 | feedback snapshot, render port |
@@ -265,8 +268,9 @@ TutorialScene
 └──> TutorialButtonHost ───────> UIPool
 ```
 
-- 장면의 `#createBattleViewModel()`이 snapshot, 현재 층, 도달 가능 타일, 계획 경로, 행동·정화
-  대상과 선택, 보간 상태, 아이템 메타데이터, HUD 상태를 한 번에 조립한다.
+- `TutorialBattleSelectionController`가 도달 가능 타일, 계획 경로, 행동·정화 대상과 호버를
+  독립적으로 관리하며 방어 snapshot을 제공한다. 장면은 이 snapshot을 전투 뷰 모델 팩토리에
+  전달할 뿐 선택 상태를 중복 보관하지 않는다.
 - 네 전투 클래스는 파일당 하나이며 모델, 메타 저장, 시뮬레이션 명령 큐와 장면을 import하지
   않는다. 공용 도우미는 상태 없는 순수 함수만 제공한다.
 - `TutorialBattleLayout`이 보드/HUD 크기와 타일 투영을 소유한다. 월드 뷰와 장면의

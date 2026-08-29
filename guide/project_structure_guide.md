@@ -68,7 +68,8 @@
 
 | 경로 | 역할 |
 | --- | --- |
-| `script/scene/tutorial/_tutorial_scene.js` | 입력을 시뮬레이션 명령으로 변환하고 직접 경로/대상 선택, 모델 결과→cue 전달, 기록 즉시 저장·팝업 복귀, 메타 진행도와 view model·버튼 명령을 조율하는 씬 |
+| `script/scene/tutorial/_tutorial_scene.js` | 입력·선택·모델·표현 협력자를 연결하고 모델 결과→cue 전달, 기록 팝업 복귀와 화면 수명주기를 조율하는 씬 |
+| `script/scene/tutorial/_tutorial_battle_selection_controller.js` | 계획 경로·도달 범위·공격/정화 대상·보드 호버 상태와 그 상태에서 파생되는 키보드/포인터 명령을 소유하는 클래스 |
 | `script/scene/tutorial/view/_tutorial_*_view.js` | 로딩·메뉴·스타터·책 기반 갤러리·체인지로그·결과·컷씬을 직렬화 가능한 view model과 render/asset port로 그리는 파일당 한 클래스의 비전투 뷰 |
 | `script/scene/tutorial/view/_tutorial_battle_layout.js` | 전투 보드·HUD 기하와 흔들림이 적용된 타일 투영·히트테스트를 같은 프레임으로 제공하는 순수 레이아웃 클래스 |
 | `script/scene/tutorial/_tutorial_battle_camera.js` | 플레이어 표시 좌표를 0.3초 `easeOutExpo` 감쇠로 추적해 레이아웃에 카메라 snapshot을 제공하는 전투 표현 컨트롤러 |

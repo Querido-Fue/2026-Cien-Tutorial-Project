@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { TutorialBattleViewModelFactory } from '../project/engine/script/scene/tutorial/_tutorial_battle_view_model_factory.js';
+import { TutorialBattleSelectionController } from '../project/engine/script/scene/tutorial/_tutorial_battle_selection_controller.js';
 import { TutorialInventoryPresenter } from '../project/engine/script/scene/tutorial/_tutorial_inventory_presenter.js';
 import { TutorialKeyboardEdgeTracker } from '../project/engine/script/scene/tutorial/_tutorial_keyboard_edge_tracker.js';
 import { TutorialKeyboardCommandMapper } from '../project/engine/script/scene/tutorial/_tutorial_keyboard_command_mapper.js';
@@ -117,6 +118,78 @@ test('키보드 명령 매퍼는 화면별 우선순위와 선택 payload를 보
             payload: { id: 'event-1', x: 2, y: 3 }
         }
     );
+});
+
+test('전투 선택 컨트롤러는 경로 연장·포탈 단위 되돌리기·초기화를 소유한다', () => {
+    const model = {
+        player: { x: 1, y: 1 },
+        phase: 'move',
+        movementUsed: false,
+        actionUsed: false,
+        extendPath(path, dx, dy) {
+            return [...path, {
+                x: path.at(-1).x + dx,
+                y: path.at(-1).y + dy
+            }];
+        },
+        getReachability: () => new Map([['2,1', 1]]),
+        getCleanseTargets: () => []
+    };
+    const selection = new TutorialBattleSelectionController();
+    selection.reset(model);
+    selection.refresh(model);
+
+    assert.equal(selection.planStep(model, 1, 0), 'path');
+    assert.deepEqual(selection.getSnapshot().plannedPath, [
+        { x: 1, y: 1 },
+        { x: 2, y: 1 }
+    ]);
+    assert.equal(selection.backtrackPath(model), true);
+    assert.deepEqual(selection.getSnapshot().plannedPath, [{ x: 1, y: 1 }]);
+
+    selection.planStep(model, 1, 0);
+    assert.equal(selection.resetPath(model), true);
+    assert.deepEqual(selection.getSnapshot().plannedPath, [{ x: 1, y: 1 }]);
+    assert.equal(selection.getSnapshot().reachability.has('2,1'), true);
+});
+
+test('전투 선택 컨트롤러는 공격 대상 호버와 보드 명령을 일관되게 만든다', () => {
+    const targets = [
+        { id: 'lora', x: 3, y: 2 },
+        { id: 'dummy', x: 4, y: 2 }
+    ];
+    const model = {
+        player: { x: 2, y: 2 },
+        phase: 'action',
+        movementUsed: true,
+        actionUsed: false,
+        getValidTargets: () => targets,
+        getCleanseTargets: () => []
+    };
+    const selection = new TutorialBattleSelectionController();
+    selection.reset(model);
+
+    assert.deepEqual(selection.toggleAttack(model, 'bow'), {
+        changed: true,
+        focusKey: 'battle-ranged'
+    });
+    selection.refresh(model);
+    assert.deepEqual(selection.setHoveredTile({ x: 4, y: 2 }), {
+        hoverChanged: true,
+        targetChanged: true
+    });
+    assert.deepEqual(selection.createPointerCommand(model), {
+        type: TUTORIAL_COMMANDS.ATTACK,
+        payload: { targetId: 'dummy' }
+    });
+    assert.deepEqual(selection.createAttackRequest(), {
+        targetId: 'dummy',
+        weapon: 'bow'
+    });
+
+    const snapshot = selection.getSnapshot();
+    snapshot.actionTargets[1].id = 'mutated';
+    assert.equal(selection.createAttackRequest().targetId, 'dummy');
 });
 
 test('비전투 뷰 모델 팩토리는 장면 상태 없이 표시 데이터만 조립한다', () => {
