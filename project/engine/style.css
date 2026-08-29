@@ -65,7 +65,7 @@ noscript {
 }
 
 #overlaylayerhost {
-    z-index: 60;
+    z-index: 110;
     position: fixed;
     top: 0;
     left: 0;
@@ -83,6 +83,149 @@ noscript {
 #top {
     z-index: 80;
     background-color: rgba(0, 0, 0, 0);
+}
+
+#pointer-lock-focus-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+    background-color: rgba(5, 7, 10, 0);
+    -webkit-backdrop-filter: blur(0) brightness(1);
+    backdrop-filter: blur(0) brightness(1);
+}
+
+.pointer-lock-focus-copy {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: clamp(10px, 1.1vh, 18px);
+    color: #f5f1e7;
+    text-align: center;
+    text-shadow: 0 2px 0 #101010, 0 0 18px rgba(0, 0, 0, 0.82);
+}
+
+.pointer-lock-initial-copy {
+    position: absolute;
+    top: 68%;
+    left: 50%;
+    display: none;
+    color: #e5e1d8;
+    font-size: clamp(19px, 2.1vw, 34px);
+    font-weight: 600;
+    line-height: 1.15;
+    text-align: center;
+    text-shadow: 0 2px 0 #101010, 0 0 14px rgba(0, 0, 0, 0.72);
+    transform: translate(-50%, -50%);
+}
+
+.pointer-lock-focus-copy strong {
+    font-size: clamp(28px, 3.2vw, 52px);
+    font-weight: 700;
+    line-height: 1;
+}
+
+.pointer-lock-focus-copy span {
+    color: #c9c4ba;
+    font-size: clamp(16px, 1.55vw, 25px);
+    font-weight: 500;
+    line-height: 1.15;
+}
+
+body.pointer-lock-released #pointer-lock-focus-overlay {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+    background-color: rgba(5, 7, 10, 0.3);
+    -webkit-backdrop-filter: blur(10px) brightness(0.58);
+    backdrop-filter: blur(10px) brightness(0.58);
+}
+
+body.pointer-lock-released .pointer-lock-focus-copy,
+body.pointer-lock-resuming .pointer-lock-focus-copy {
+    display: flex;
+}
+
+body.pointer-lock-initial #pointer-lock-focus-overlay {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+    background-color: rgba(5, 7, 10, 0);
+    -webkit-backdrop-filter: blur(0) brightness(1);
+    backdrop-filter: blur(0) brightness(1);
+}
+
+body.pointer-lock-initial .pointer-lock-initial-copy,
+body.pointer-lock-initial-resuming .pointer-lock-initial-copy {
+    display: block;
+}
+
+body.pointer-lock-resuming #pointer-lock-focus-overlay {
+    visibility: visible;
+    opacity: 0;
+    pointer-events: none;
+    background-color: rgba(5, 7, 10, 0);
+    -webkit-backdrop-filter: blur(0) brightness(1);
+    backdrop-filter: blur(0) brightness(1);
+    transition:
+        opacity 400ms cubic-bezier(0.16, 1, 0.3, 1),
+        background-color 400ms cubic-bezier(0.16, 1, 0.3, 1),
+        -webkit-backdrop-filter 400ms cubic-bezier(0.16, 1, 0.3, 1),
+        backdrop-filter 400ms cubic-bezier(0.16, 1, 0.3, 1),
+        visibility 0s linear 400ms;
+}
+
+body.pointer-lock-initial-resuming #pointer-lock-focus-overlay {
+    visibility: visible;
+    opacity: 0;
+    pointer-events: none;
+    background-color: rgba(5, 7, 10, 0);
+    -webkit-backdrop-filter: blur(0) brightness(1);
+    backdrop-filter: blur(0) brightness(1);
+    transition:
+        opacity 400ms cubic-bezier(0.16, 1, 0.3, 1),
+        visibility 0s linear 400ms;
+}
+
+#pointer-lock-exit-hint {
+    position: fixed;
+    z-index: 90;
+    box-sizing: border-box;
+    max-width: calc(100vw - 16px);
+    max-height: calc(100vh - 32px);
+    padding: clamp(7px, 0.7vw, 10px) clamp(10px, 1vw, 15px);
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+    border: 1px solid rgba(206, 153, 65, 0.78);
+    border-radius: 5px;
+    background: rgba(16, 16, 16, 0.9);
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.48);
+    color: #f1ede4;
+    font-family: 'LanaPixel', monospace;
+    font-size: clamp(12px, 0.9vw, 16px);
+    font-weight: 500;
+    line-height: 1.25;
+    text-align: center;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    transition:
+        opacity 90ms ease-out,
+        visibility 0s linear 90ms;
+}
+
+#pointer-lock-exit-hint.is-visible {
+    visibility: visible;
+    opacity: 1;
+    transition:
+        opacity 200ms cubic-bezier(0.16, 1, 0.3, 1),
+        visibility 0s linear 0s;
 }
 
 .dynamic-canvas {

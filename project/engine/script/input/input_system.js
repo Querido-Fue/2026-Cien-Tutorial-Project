@@ -1,5 +1,6 @@
 import { MouseInputHandler } from './_mouse_input_handler.js';
 import { KeyboardInputHandler } from './_keyboard_input_handler.js';
+import { PointerLockInputHandler } from './_pointer_lock_input_handler.js';
 import { resolveFiniteNumber } from 'util/number_util.js';
 
 let inputSystemInstance = null;
@@ -11,8 +12,17 @@ let inputSystemInstance = null;
 export class InputSystem {
     constructor() {
         inputSystemInstance = this;
-        this.mouseInputHandler = new MouseInputHandler();
+        this.pointerLockInputHandler = new PointerLockInputHandler();
+        this.mouseInputHandler = new MouseInputHandler({
+            pointerLockInputHandler: this.pointerLockInputHandler
+        });
         this.keyboardInputHandler = new KeyboardInputHandler();
+        this.pointerLockInputHandler.setLockAcquiredCallback((position) => {
+            this.mouseInputHandler.setMouseClientPosition(position);
+        });
+        this.pointerLockInputHandler.setInputResetCallback(() => {
+            this.resetAllInputState();
+        });
     }
 
     async init() {
@@ -28,6 +38,7 @@ export class InputSystem {
     update() {
         this.mouseInputHandler.update();
         this.keyboardInputHandler.update();
+        this.pointerLockInputHandler.update();
     }
 
     /**
@@ -38,6 +49,21 @@ export class InputSystem {
     resetAllInputState(options = {}) {
         this.mouseInputHandler.resetMouseInput({ inactive: options.mouseInactive === true });
         this.keyboardInputHandler.resetKeyboardInput();
+    }
+
+    /** @param {boolean} enabled - 기본 포인터 잠금 정책 활성화 여부입니다. */
+    setPointerLockEnabled(enabled) {
+        this.pointerLockInputHandler.setEnabled(enabled);
+    }
+
+    /** @param {Function|null} callback - 엔진 오버레이 입력 우선권 판정기입니다. */
+    setPointerLockActivationBypassCallback(callback) {
+        this.pointerLockInputHandler.setActivationBypassCallback(callback);
+    }
+
+    /** @returns {Readonly<object>} 현재 포인터 잠금 상태입니다. */
+    getPointerLockSnapshot() {
+        return this.pointerLockInputHandler.getSnapshot();
     }
 
     /**
@@ -153,3 +179,27 @@ export const getKeyboardSnapshot = () => inputSystemInstance.keyboardInputHandle
  * 키보드 입력 상태를 초기화합니다.
  */
 export const resetKeyboardInput = () => inputSystemInstance.keyboardInputHandler.resetKeyboardInput();
+
+/** @param {boolean} enabled - 포인터 잠금 기본 정책 활성화 여부입니다. */
+export const setPointerLockEnabled = (enabled) => (
+    inputSystemInstance?.setPointerLockEnabled(enabled)
+);
+
+/** @returns {Readonly<object>} 현재 포인터 잠금 상태입니다. */
+export const getPointerLockSnapshot = () => (
+    inputSystemInstance?.getPointerLockSnapshot() || Object.freeze({
+        enabled: false,
+        supported: false,
+        locked: false,
+        acquiring: false,
+        awaitingActivation: false,
+        hasEverLocked: false,
+        initialActivationPending: false,
+        exitHint: Object.freeze({
+            visible: false,
+            edge: null,
+            xRatio: 0.5,
+            yRatio: 0.5
+        })
+    })
+);

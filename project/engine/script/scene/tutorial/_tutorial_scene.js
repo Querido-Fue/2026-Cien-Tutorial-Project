@@ -14,7 +14,9 @@ import {
     getKeyboardCodeInput,
     getKeyboardSnapshot,
     getMouseFocus,
-    getMouseInput
+    getMouseInput,
+    getPointerLockSnapshot,
+    setPointerLockEnabled
 } from 'input/input_system.js';
 import { getDelta } from 'engine/time_handler.js';
 import { animate, remove } from 'animation/animation_system.js';
@@ -28,6 +30,7 @@ import { TutorialBattleModel } from './_tutorial_battle_model.js';
 import { TutorialAchievementEvaluator } from './_tutorial_achievement_evaluator.js';
 import { TutorialBattleFocusController } from './_tutorial_battle_focus_controller.js';
 import { TutorialBattleCamera } from './_tutorial_battle_camera.js';
+import { TutorialBattleCameraController } from './_tutorial_battle_camera_controller.js';
 import { TutorialCombatReadabilityPresenter } from './_tutorial_combat_readability_presenter.js';
 import { TutorialCutsceneController } from './_tutorial_cutscene_controller.js';
 import { TutorialCutsceneTriggerRouter } from './_tutorial_cutscene_trigger_router.js';
@@ -216,6 +219,12 @@ export class TutorialScene extends BaseScene {
         this.battleCamera = new TutorialBattleCamera({
             durationSeconds: this.data.ANIMATION.CAMERA_FOLLOW_SECONDS
         });
+        this.battleCameraController = new TutorialBattleCameraController({
+            edgeMarginRatio: this.data.LAYOUT.CAMERA.EDGE_MARGIN_RATIO,
+            edgeSpeedViewportRatioPerSecond:
+                this.data.LAYOUT.CAMERA.EDGE_SPEED_VIEWPORT_RATIO_PER_SECOND,
+            maxDeltaSeconds: this.data.LAYOUT.CAMERA.EDGE_MAX_DELTA_SECONDS
+        });
         this.buttonHost = new TutorialButtonHost({
             parent: this,
             onCommand: (type, payload) => this.#queueUiCommand(type, payload),
@@ -302,6 +311,7 @@ export class TutorialScene extends BaseScene {
             this.keyboardPressObserved.set(code, isDown);
         }
 
+        setPointerLockEnabled(true);
         this.#syncViewport();
         loadTutorialMeta()
             .then((meta) => {
@@ -564,6 +574,8 @@ export class TutorialScene extends BaseScene {
         this.timelineRevision += 1;
         this.presentationTimeline.destroy();
         this.battleCamera.destroy();
+        this.battleCameraController.destroy();
+        setPointerLockEnabled(false);
         this.spriteCueRouter.destroy();
         this.assetLoader.destroy();
         this.feedbackQueue.destroy();
@@ -729,6 +741,7 @@ export class TutorialScene extends BaseScene {
         this.timelineRevision += 1;
         this.presentationTimeline.cancel();
         this.battleCamera.clear();
+        this.battleCameraController.clear();
         this.spriteCueRouter.reset();
         this.audioDirector.resetTransient();
         this.cutscenes.close();
@@ -825,6 +838,11 @@ export class TutorialScene extends BaseScene {
             actionPulse: 0
         });
         this.battleCamera.reset({
+            x: Number(this.model.player?.x) || 0,
+            y: Number(this.model.player?.y) || 0,
+            floorIndex: Number(this.model.floorIndex) || 0
+        });
+        this.battleCameraController.reset({
             x: Number(this.model.player?.x) || 0,
             y: Number(this.model.player?.y) || 0,
             floorIndex: Number(this.model.floorIndex) || 0
@@ -2622,6 +2640,7 @@ export class TutorialScene extends BaseScene {
     #getButtonSignature() {
         const cutsceneState = this.cutscenes.getState();
         const galleryState = this.galleryController.getSnapshot(this.meta);
+        const pointerLock = getPointerLockSnapshot();
         const inventory = this.#getInventoryEntries()
             .map((entry) => entry.itemId + ':' + String(entry.count))
             .join('|');
@@ -2649,6 +2668,7 @@ export class TutorialScene extends BaseScene {
             String(this.battleFocus.getFocusedKey()),
             String(this.guidance.isOpen()),
             String(this.presentationTimeline.isLocked()),
+            String(pointerLock.initialActivationPending),
             inventory
         ].join('/');
     }
@@ -2660,6 +2680,10 @@ export class TutorialScene extends BaseScene {
     #getButtonSpecs() {
         const buttonGroup = getTutorialModePolicy(this.mode)?.buttons;
         if (!buttonGroup) {
+            return [];
+        }
+        if (buttonGroup === 'menu'
+            && getPointerLockSnapshot().initialActivationPending === true) {
             return [];
         }
         if (this.cutscenes.isOpen()) {
@@ -3014,7 +3038,7 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * 플레이어의 보간된 표시 좌표를 독립 카메라가 추적하도록 갱신합니다.
+     * 플레이어 추적점에 가장자리 이동 또는 휠 클릭 중앙 복귀를 결합합니다.
      * @param {number} deltaSeconds - 현재 가변 프레임 델타입니다.
      * @private
      */
@@ -3023,11 +3047,26 @@ export class TutorialScene extends BaseScene {
             return;
         }
         const presentation = this.presentationTimeline.getState();
-        this.battleCamera.update({
-            target: {
+        const pointerLock = getPointerLockSnapshot();
+        const cameraInputEnabled = pointerLock.locked === true
+            && !this.cutscenes.isOpen()
+            && !this.guidance.isOpen()
+            && !this.presentationTimeline.isLocked();
+        const target = this.battleCameraController.update({
+            player: {
                 x: presentation.playerX,
                 y: presentation.playerY
             },
+            floorIndex: presentation.floorIndex,
+            layout: this.#createBattleLayoutFrame(),
+            pointer: getMouseInput('pos'),
+            deltaSeconds,
+            edgePanEnabled: cameraInputEnabled,
+            recenter: cameraInputEnabled
+                && consumeMouseState('middle', 'clicked')
+        });
+        this.battleCamera.update({
+            target,
             floorIndex: presentation.floorIndex,
             deltaSeconds
         });

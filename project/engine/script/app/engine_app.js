@@ -1,9 +1,29 @@
 import { getData } from 'data/data_handler.js';
 import { runtimeTool } from 'util/runtime_tool.js';
+import { resolvePointerLockExitHintPosition } from './_pointer_lock_exit_hint_layout.js';
+import {
+    POINTER_LOCK_EXIT_HINT_EVENT,
+    POINTER_LOCK_STATE_EVENT
+} from 'input/_pointer_lock_input_handler.js';
 
 const APP_PAUSE_DATA = getData('APP_PAUSE_DATA');
 const APP_PAUSE_REASONS = APP_PAUSE_DATA.REASONS;
 const APP_INACTIVE_PAUSE_POLICY = APP_PAUSE_DATA.INACTIVE_POLICY;
+const POINTER_LOCK_RELEASED_PAUSE_POLICY = APP_PAUSE_DATA.POINTER_LOCK_RELEASED_POLICY;
+const FOCUS_RECOVERY_MILLISECONDS = 400;
+const POINTER_EXIT_HINT_VIEWPORT_INSET = 16;
+const POINTER_EXIT_HINT_CURSOR_OFFSET = 18;
+const FOCUS_OVERLAY_MODES = Object.freeze({
+    HIDDEN: 'hidden',
+    INITIAL: 'initial',
+    RELEASED: 'released',
+    INITIAL_RESUMING: 'initial-resuming',
+    RELEASED_RESUMING: 'released-resuming'
+});
+
+const clamp = (value, minimum, maximum) => (
+    Math.min(maximum, Math.max(minimum, value))
+);
 
 /**
  * @class EngineApp
@@ -25,8 +45,22 @@ export class EngineApp {
         this.maxFixedStepsPerFrame = 6;
         this.accumulatorSeconds = 0;
         this.lastFrameTimestamp = 0;
+        this.pointerFocusOverlayMode = FOCUS_OVERLAY_MODES.HIDDEN;
+        this.focusRecoveryTimerId = null;
+        this.pointerExitHintSnapshot = Object.freeze({
+            visible: false,
+            edge: null,
+            xRatio: 0.5,
+            yRatio: 0.5
+        });
+        this.pointerExitHintFrameId = null;
         this._boundLoop = this.loop.bind(this);
         this._boundWindowActivityChange = this._handleWindowActivityChange.bind(this);
+        this._boundPointerLockStateChange = this._handlePointerLockStateChange.bind(this);
+        this._boundPointerLockExitHintChange = this._handlePointerLockExitHintChange.bind(this);
+        this.systemHandler?.inputSystem?.setPointerLockActivationBypassCallback?.(
+            () => this.systemHandler?.overlayManager?.hasAnyOverlay?.() === true
+        );
         this._attachWindowActivityListeners();
     }
 
@@ -37,6 +71,7 @@ export class EngineApp {
         if (this.forceCloseRequested) return;
         this._syncCursorPresentation();
         this._syncWindowActivityPauseState();
+        this._syncPointerLockPauseState();
         if (!this.systemHandler.shouldKeepLoopRunning()) {
             return;
         }
@@ -126,6 +161,7 @@ export class EngineApp {
      */
     resize() {
         this.systemHandler.resize();
+        this.#schedulePointerLockExitHint(this.pointerExitHintSnapshot);
     }
 
     /**
@@ -220,6 +256,14 @@ export class EngineApp {
     _attachWindowActivityListeners() {
         window.addEventListener('focus', this._boundWindowActivityChange);
         window.addEventListener('blur', this._boundWindowActivityChange);
+        window.addEventListener(
+            POINTER_LOCK_STATE_EVENT,
+            this._boundPointerLockStateChange
+        );
+        window.addEventListener(
+            POINTER_LOCK_EXIT_HINT_EVENT,
+            this._boundPointerLockExitHintChange
+        );
         document.addEventListener('visibilitychange', this._boundWindowActivityChange);
     }
 
@@ -254,7 +298,43 @@ export class EngineApp {
     _handleWindowActivityChange() {
         this._syncCursorPresentation();
         this._syncWindowActivityPauseState();
+        this._syncPointerLockPauseState();
         this._syncLoopExecutionState();
+    }
+
+    /**
+     * @private
+     * 포인터 잠금 변화에 맞춰 커서, 포커스 일시정지와 루프를 동기화합니다.
+     */
+    _handlePointerLockStateChange() {
+        this._syncCursorPresentation();
+        this._syncPointerLockPauseState();
+        this._syncLoopExecutionState();
+    }
+
+    /**
+     * @private
+     * 화면 이탈 의도 안내를 즉시 숨기거나 다음 렌더 프레임에 재배치합니다.
+     * @param {CustomEvent} event - 포인터 안내 상태 이벤트입니다.
+     */
+    _handlePointerLockExitHintChange(event) {
+        this.#schedulePointerLockExitHint(event?.detail || {});
+    }
+
+    /**
+     * @private
+     * 포인터 잠금이 풀린 동안 장면 진행만 정지하고 마지막 프레임 렌더는 유지합니다.
+     */
+    _syncPointerLockPauseState() {
+        const pointerLock = this.systemHandler?.inputSystem
+            ?.getPointerLockSnapshot?.();
+        const shouldPause = pointerLock?.enabled === true
+            && pointerLock?.locked !== true;
+        this.systemHandler.setPauseReason(
+            APP_PAUSE_REASONS.POINTER_LOCK_RELEASED,
+            shouldPause,
+            POINTER_LOCK_RELEASED_PAUSE_POLICY
+        );
     }
 
     /**
@@ -263,15 +343,171 @@ export class EngineApp {
      */
     _syncCursorPresentation() {
         const isWindowActive = this._isWindowActive();
+        const pointerLock = this.systemHandler?.inputSystem
+            ?.getPointerLockSnapshot?.() || {};
+        const pointerLockEnabled = pointerLock.enabled === true;
+        const pointerLockActive = pointerLock.locked === true;
+        const useGameCursor = isWindowActive
+            && (!pointerLockEnabled || pointerLockActive);
+        const needsFocusOverlay = pointerLockEnabled
+            && (!isWindowActive || !pointerLockActive);
+        const focusOverlayMode = !needsFocusOverlay
+            ? FOCUS_OVERLAY_MODES.HIDDEN
+            : pointerLock.initialActivationPending === true
+                ? FOCUS_OVERLAY_MODES.INITIAL
+                : FOCUS_OVERLAY_MODES.RELEASED;
         const root = document.documentElement;
         if (root?.style) {
-            root.style.cursor = isWindowActive ? 'none' : 'auto';
+            root.style.cursor = useGameCursor ? 'none' : 'auto';
         }
 
         const uiSystem = this.systemHandler?.uiSystem;
         if (uiSystem && typeof uiSystem.setCursorVisible === 'function') {
-            uiSystem.setCursorVisible(isWindowActive);
+            uiSystem.setCursorVisible(useGameCursor);
         }
+        this.#syncFocusRecoveryPresentation(focusOverlayMode);
+        this.#schedulePointerLockExitHint(
+            pointerLockActive ? pointerLock.exitHint : { visible: false }
+        );
+    }
+
+    /**
+     * 최초 클릭 안내와 블러·감광 복귀 안내를 분리해 전환합니다.
+     * @param {string} mode - initial/released/hidden 가운데 목표 표시 상태입니다.
+     * @private
+     */
+    #syncFocusRecoveryPresentation(mode) {
+        const body = document.body;
+        const overlay = document.getElementById('pointer-lock-focus-overlay');
+        if (!body) {
+            return;
+        }
+        const nextMode = mode === FOCUS_OVERLAY_MODES.INITIAL
+            || mode === FOCUS_OVERLAY_MODES.RELEASED
+            ? mode
+            : FOCUS_OVERLAY_MODES.HIDDEN;
+        if (nextMode === this.pointerFocusOverlayMode
+            || (nextMode === FOCUS_OVERLAY_MODES.HIDDEN
+                && (this.pointerFocusOverlayMode === FOCUS_OVERLAY_MODES.INITIAL_RESUMING
+                    || this.pointerFocusOverlayMode === FOCUS_OVERLAY_MODES.RELEASED_RESUMING))) {
+            return;
+        }
+        this.#clearFocusRecoveryTimer();
+
+        if (nextMode === FOCUS_OVERLAY_MODES.INITIAL
+            || nextMode === FOCUS_OVERLAY_MODES.RELEASED) {
+            body.classList.remove(
+                'pointer-lock-initial',
+                'pointer-lock-released',
+                'pointer-lock-initial-resuming',
+                'pointer-lock-resuming'
+            );
+            body.classList.add(nextMode === FOCUS_OVERLAY_MODES.INITIAL
+                ? 'pointer-lock-initial'
+                : 'pointer-lock-released');
+            overlay?.setAttribute?.('aria-hidden', 'false');
+            this.pointerFocusOverlayMode = nextMode;
+            return;
+        }
+
+        const previousMode = this.pointerFocusOverlayMode;
+        body.classList.remove('pointer-lock-initial', 'pointer-lock-released');
+        overlay?.setAttribute?.('aria-hidden', 'true');
+        if (previousMode !== FOCUS_OVERLAY_MODES.INITIAL
+            && previousMode !== FOCUS_OVERLAY_MODES.RELEASED) {
+            body.classList.remove('pointer-lock-initial-resuming', 'pointer-lock-resuming');
+            this.pointerFocusOverlayMode = FOCUS_OVERLAY_MODES.HIDDEN;
+            return;
+        }
+        const resumeClass = previousMode === FOCUS_OVERLAY_MODES.INITIAL
+            ? 'pointer-lock-initial-resuming'
+            : 'pointer-lock-resuming';
+        this.pointerFocusOverlayMode = previousMode === FOCUS_OVERLAY_MODES.INITIAL
+            ? FOCUS_OVERLAY_MODES.INITIAL_RESUMING
+            : FOCUS_OVERLAY_MODES.RELEASED_RESUMING;
+        body.classList.add(resumeClass);
+        this.focusRecoveryTimerId = setTimeout(() => {
+            body.classList.remove(resumeClass);
+            this.focusRecoveryTimerId = null;
+            this.pointerFocusOverlayMode = FOCUS_OVERLAY_MODES.HIDDEN;
+        }, FOCUS_RECOVERY_MILLISECONDS);
+    }
+
+    /** @private */
+    #clearFocusRecoveryTimer() {
+        if (this.focusRecoveryTimerId === null) {
+            return;
+        }
+        clearTimeout(this.focusRecoveryTimerId);
+        this.focusRecoveryTimerId = null;
+    }
+
+    /**
+     * 팝업 숨김은 즉시 적용하고, 표시 위치 갱신은 프레임당 한 번으로 합칩니다.
+     * @param {object} snapshot - 이탈 의도 안내 스냅샷입니다.
+     * @private
+     */
+    #schedulePointerLockExitHint(snapshot = {}) {
+        this.pointerExitHintSnapshot = Object.freeze({
+            visible: snapshot?.visible === true,
+            edge: typeof snapshot?.edge === 'string' ? snapshot.edge : null,
+            xRatio: clamp(Number(snapshot?.xRatio) || 0, 0, 1),
+            yRatio: clamp(Number(snapshot?.yRatio) || 0, 0, 1)
+        });
+        if (!this.pointerExitHintSnapshot.visible) {
+            if (this.pointerExitHintFrameId !== null) {
+                cancelAnimationFrame(this.pointerExitHintFrameId);
+                this.pointerExitHintFrameId = null;
+            }
+            this.#syncPointerLockExitHint(this.pointerExitHintSnapshot);
+            return;
+        }
+        if (this.pointerExitHintFrameId !== null) {
+            return;
+        }
+        this.pointerExitHintFrameId = requestAnimationFrame(() => {
+            this.pointerExitHintFrameId = null;
+            this.#syncPointerLockExitHint(this.pointerExitHintSnapshot);
+        });
+    }
+
+    /**
+     * 팝업 상자 전체가 뷰포트 안에 있도록 실제 크기를 기준으로 좌표를 자릅니다.
+     * @param {object} snapshot - 표시 여부와 정규화 커서 좌표입니다.
+     * @private
+     */
+    #syncPointerLockExitHint(snapshot) {
+        const hint = document.getElementById('pointer-lock-exit-hint');
+        if (!hint) {
+            return;
+        }
+        if (snapshot?.visible !== true) {
+            hint.classList.remove('is-visible');
+            hint.setAttribute('aria-hidden', 'true');
+            return;
+        }
+
+        const viewportWidth = Math.max(1, Number(window.innerWidth) || 1);
+        const viewportHeight = Math.max(1, Number(window.innerHeight) || 1);
+        hint.style.maxWidth = `${Math.max(1, viewportWidth - (POINTER_EXIT_HINT_VIEWPORT_INSET * 2))}px`;
+        hint.classList.add('is-visible');
+        hint.setAttribute('aria-hidden', 'false');
+        const rect = hint.getBoundingClientRect();
+        const pointerX = clamp(Number(snapshot.xRatio) || 0, 0, 1) * viewportWidth;
+        const pointerY = clamp(Number(snapshot.yRatio) || 0, 0, 1) * viewportHeight;
+        const position = resolvePointerLockExitHintPosition({
+            viewportWidth,
+            viewportHeight,
+            popupWidth: rect.width,
+            popupHeight: rect.height,
+            pointerX,
+            pointerY,
+            edge: snapshot.edge,
+            inset: POINTER_EXIT_HINT_VIEWPORT_INSET,
+            cursorOffset: POINTER_EXIT_HINT_CURSOR_OFFSET
+        });
+        hint.style.left = `${Math.round(position.left)}px`;
+        hint.style.top = `${Math.round(position.top)}px`;
     }
 
     /**

@@ -42,6 +42,18 @@
     <div id="overlaylayerhost"></div>
     <canvas class="canvas" id="vignette"></canvas>
     <canvas class="canvas" id="top"></canvas>
+    <div id="pointer-lock-focus-overlay" role="status" aria-live="polite" aria-hidden="true">
+        <div class="pointer-lock-initial-copy">
+            <span>화면을 클릭해주세요</span>
+        </div>
+        <div class="pointer-lock-focus-copy">
+            <strong>일시 정지됨</strong>
+            <span>화면을 클릭해 복귀</span>
+        </div>
+    </div>
+    <div id="pointer-lock-exit-hint" role="status" aria-live="polite" aria-hidden="true">
+        마우스 고정을 해제하려면 ESC키를 누르세요
+    </div>
     <script type="module" src="./script/main.js"></script>
     <script type="module" src="./script/nw-setup.js"></script>
 </body>

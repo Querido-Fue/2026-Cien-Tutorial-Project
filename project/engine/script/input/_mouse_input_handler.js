@@ -1,4 +1,9 @@
-import { getScaleRatio, getCanvasOffset } from 'display/display_system.js';
+import {
+    getCanvasOffset,
+    getScaleRatio,
+    getWH,
+    getWW
+} from 'display/display_system.js';
 import { DebugModeToggleHandler } from './_debug_mode_toggle_handler.js';
 import { MouseButtonStateMachine } from './_mouse_button_state_machine.js';
 import { resolveFiniteNumber } from 'util/number_util.js';
@@ -15,8 +20,13 @@ const DEFAULT_MOUSE_FOCUS_LIST = Object.freeze(['ui', 'object']);
  * 마우스 위치와 버튼별 상태 배열을 추적합니다.
  */
 export class MouseInputHandler {
-    constructor() {
+    /**
+     * @param {{pointerLockInputHandler?:object|null}} [options={}] - 포인터 잠금 상태 포트입니다.
+     */
+    constructor(options = {}) {
         this.mousePos = { x: 0, y: 0 };
+        this.pointerLockInputHandler = options.pointerLockInputHandler || null;
+        this.relativeMouseEvents = new WeakSet();
         this.buttonStateMachine = new MouseButtonStateMachine(new DebugModeToggleHandler());
         this.mouseButtons = this.buttonStateMachine.mouseButtons;
         this.wheelState = {
@@ -78,13 +88,56 @@ export class MouseInputHandler {
      */
     #updateMousePosition(event) {
         const scale = resolveFiniteNumber(Number(getScaleRatio()), 1);
+        if (this.pointerLockInputHandler?.isLocked?.()) {
+            if (event && typeof event === 'object') {
+                if (this.relativeMouseEvents.has(event)) {
+                    return;
+                }
+                this.relativeMouseEvents.add(event);
+            }
+            const movementX = resolveFiniteNumber(Number(event?.movementX), 0) * scale;
+            const movementY = resolveFiniteNumber(Number(event?.movementY), 0) * scale;
+            this.mousePos.x = Math.min(
+                Math.max(1, resolveFiniteNumber(Number(getWW()), 1)),
+                Math.max(0, this.mousePos.x + movementX)
+            );
+            this.mousePos.y = Math.min(
+                Math.max(1, resolveFiniteNumber(Number(getWH()), 1)),
+                Math.max(0, this.mousePos.y + movementY)
+            );
+            this.pointerLockInputHandler?.recordPointerMovement?.({
+                pointerX: this.mousePos.x,
+                pointerY: this.mousePos.y,
+                viewportWidth: getWW(),
+                viewportHeight: getWH(),
+                movementX,
+                movementY
+            });
+            return;
+        }
+        this.setMouseClientPosition(event);
+    }
+
+    /**
+     * 시스템 커서 좌표를 내부 렌더 좌표에 동기화합니다.
+     * 재잠금 직전 시스템 커서와 게임 커서가 같은 위치에서 교대하도록 사용합니다.
+     * @param {{clientX?:number,clientY?:number}|null} position - 브라우저 클라이언트 좌표입니다.
+     */
+    setMouseClientPosition(position) {
+        const scale = resolveFiniteNumber(Number(getScaleRatio()), 1);
         const offset = getCanvasOffset();
         const offsetX = resolveFiniteNumber(Number(offset?.x), 0);
         const offsetY = resolveFiniteNumber(Number(offset?.y), 0);
-        const clientX = resolveFiniteNumber(Number(event?.clientX), offsetX);
-        const clientY = resolveFiniteNumber(Number(event?.clientY), offsetY);
-        this.mousePos.x = (clientX - offsetX) * scale;
-        this.mousePos.y = (clientY - offsetY) * scale;
+        const clientX = resolveFiniteNumber(Number(position?.clientX), offsetX);
+        const clientY = resolveFiniteNumber(Number(position?.clientY), offsetY);
+        this.mousePos.x = Math.min(
+            Math.max(1, resolveFiniteNumber(Number(getWW()), 1)),
+            Math.max(0, (clientX - offsetX) * scale)
+        );
+        this.mousePos.y = Math.min(
+            Math.max(1, resolveFiniteNumber(Number(getWH()), 1)),
+            Math.max(0, (clientY - offsetY) * scale)
+        );
     }
 
     /**

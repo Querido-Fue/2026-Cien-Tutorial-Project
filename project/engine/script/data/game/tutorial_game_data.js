@@ -651,7 +651,10 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         CAMERA: {
             GRID_WIDTH_VIEWPORT_RATIO: 1,
             FOCUS_X_RATIO: 0.5,
-            FOCUS_Y_RATIO: 0.5
+            FOCUS_Y_RATIO: 0.5,
+            EDGE_MARGIN_RATIO: 0.075,
+            EDGE_SPEED_VIEWPORT_RATIO_PER_SECOND: 0.48,
+            EDGE_MAX_DELTA_SECONDS: 0.05
         },
         BOARD: {
             X_UIWW: 2.7,
