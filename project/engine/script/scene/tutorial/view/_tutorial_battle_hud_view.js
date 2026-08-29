@@ -237,6 +237,8 @@ export class TutorialBattleHudView {
                     drawBackground: false,
                     iconId: iconWidth > 0 ? entry.itemId : null,
                     iconWidth,
+                    iconVisualCenter: itemIconLayout.VISUAL_CENTERS?.[entry.itemId]
+                        || null,
                     itemSpacing: 0,
                     enabled: entry.usable,
                     active: entry.movementConsumable && hud.cleanseSelected,

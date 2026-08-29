@@ -101,7 +101,11 @@ export class TutorialButtonHost {
         }
         const enabled = spec.enabled !== false;
         const inspectable = spec.inspectable === true || enabled;
-        const icon = spec.icon || this.#createItemIconChild(spec.iconId, spec.iconWidth);
+        const icon = spec.icon || this.#createItemIconChild(
+            spec.iconId,
+            spec.iconWidth,
+            spec.iconVisualCenter
+        );
         const backgroundImage = spec.backgroundAssetKey
             ? this.#assetPort.getUiAsset?.(spec.backgroundAssetKey)
             : null;
@@ -173,15 +177,28 @@ export class TutorialButtonHost {
      * 논리 아이템 ID를 버튼 레이아웃이 그릴 수 있는 픽셀 이미지 자식으로 바꿉니다.
      * @param {string|null} itemId - 아이템 ID입니다.
      * @param {number} width - 버튼 내부 아이콘 폭입니다.
+     * @param {{x?:number,y?:number}|null} visualCenter - 아이콘의 시각 중심 앵커입니다.
      * @returns {object|null} 버튼용 이미지 자식입니다.
      * @private
      */
-    #createItemIconChild(itemId, width) {
+    #createItemIconChild(itemId, width, visualCenter = null) {
         const image = itemId ? this.#assetPort.getItemIcon?.(itemId) : null;
         if (!image || !Number.isFinite(width) || width <= 0
             || typeof this.#renderPort.render !== 'function') {
             return null;
         }
+        const centerX = Math.max(0, Math.min(
+            1,
+            Number.isFinite(Number(visualCenter?.x))
+                ? Number(visualCenter.x)
+                : 0.5
+        ));
+        const centerY = Math.max(0, Math.min(
+            1,
+            Number.isFinite(Number(visualCenter?.y))
+                ? Number(visualCenter.y)
+                : 0.5
+        ));
         return {
             type: 'tutorial-item-icon',
             width,
@@ -189,8 +206,8 @@ export class TutorialButtonHost {
                 this.#renderPort.render(layer, {
                     shape: 'image',
                     image,
-                    x: Math.round(x),
-                    y: Math.round(y),
+                    x: Math.round(x + (w * (0.5 - centerX))),
+                    y: Math.round(y + (h * (0.5 - centerY))),
                     w: Math.round(w),
                     h: Math.round(h),
                     alpha,

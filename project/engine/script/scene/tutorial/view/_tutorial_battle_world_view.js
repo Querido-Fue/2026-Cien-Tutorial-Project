@@ -6,10 +6,7 @@ import {
 import { TutorialBattleActorView } from './_tutorial_battle_actor_view.js';
 
 const WALL_FOOTPRINT_SCALE = 1;
-const WALL_HEIGHT_TILE_RATIO = 0.68;
-const WALL_BASE_RISE_TILE_RATIO = 0.16;
-const WALL_BASE_TOP_ALPHA = 0.58;
-const WALL_BASE_SIDE_ALPHA = 0.9;
+const WALL_HEIGHT_TILE_RATIO = 0.34;
 
 /**
  * @class TutorialBattleWorldView
@@ -312,7 +309,6 @@ export class TutorialBattleWorldView {
     #drawWall(wall, activeWallKeys) {
         const { colors, layout } = this.#frame;
         const barrier = this.#assetPort.getUiAsset?.('wallBarrier') || null;
-        const baseRise = Math.max(2, layout.tileHeight * WALL_BASE_RISE_TILE_RATIO);
         const quad = TutorialBattleLayout.projectTileQuad(
             layout,
             wall.x,
@@ -334,44 +330,11 @@ export class TutorialBattleWorldView {
             ((left[0].y + left[1].y) * 0.5)
             - ((right[0].y + right[1].y) * 0.5)
         ));
-        const liftedCorners = corners.map((corner) => ({
-            x: corner.x,
-            y: corner.y - baseRise
-        }));
-        const liftedQuad = liftedCorners.flatMap((corner) => [corner.x, corner.y]);
-        const frontEdges = edges.filter(([first, second]) => (
-            first === corners[2] || second === corners[2]
-        ));
-        for (const [first, second] of frontEdges) {
-            this.#renderPort.renderGL('object', {
-                shape: 'rect',
-                vertices: [
-                    first.x, first.y - baseRise,
-                    second.x, second.y - baseRise,
-                    second.x, second.y,
-                    first.x, first.y
-                ],
-                fill: colors.Entity.Wall,
-                alpha: WALL_BASE_SIDE_ALPHA
-            });
-        }
-        this.#renderPort.renderGL('object', {
-            shape: 'rect',
-            vertices: liftedQuad,
-            fill: colors.Tile.Wall,
-            alpha: WALL_BASE_TOP_ALPHA
-        });
         if (barrier) {
             const height = Math.max(4, layout.tileHeight * WALL_HEIGHT_TILE_RATIO);
             for (const [first, second] of edges) {
-                const liftedFirst = { x: first.x, y: first.y - baseRise };
-                const liftedSecond = { x: second.x, y: second.y - baseRise };
-                const from = liftedFirst.x <= liftedSecond.x
-                    ? liftedFirst
-                    : liftedSecond;
-                const to = liftedFirst.x <= liftedSecond.x
-                    ? liftedSecond
-                    : liftedFirst;
+                const from = first.x <= second.x ? first : second;
+                const to = first.x <= second.x ? second : first;
                 const vertices = [
                     from.x, from.y - height,
                     to.x, to.y - height,
@@ -395,15 +358,15 @@ export class TutorialBattleWorldView {
             return;
         }
 
-        const fallbackHeight = Math.max(4, layout.tileHeight * WALL_HEIGHT_TILE_RATIO);
+        const fallbackHeight = Math.max(2, layout.tileHeight * 0.14);
         for (const [first, second] of edges) {
             this.#renderPort.renderGL('object', {
                 shape: 'rect',
                 vertices: [
-                    first.x, first.y - baseRise - fallbackHeight,
-                    second.x, second.y - baseRise - fallbackHeight,
-                    second.x, second.y - baseRise,
-                    first.x, first.y - baseRise
+                    first.x, first.y - fallbackHeight,
+                    second.x, second.y - fallbackHeight,
+                    second.x, second.y,
+                    first.x, first.y
                 ],
                 fill: colors.Entity.Wall
             });
@@ -429,7 +392,7 @@ export class TutorialBattleWorldView {
         });
         if (icon) {
             const iconSize = layout.tileSide * itemIconLayout.WORLD_ICON_SIZE_TILE_RATIO;
-            const configuredCenter = itemIconLayout.WORLD_ICON_VISUAL_CENTERS?.[entry.itemId];
+            const configuredCenter = itemIconLayout.VISUAL_CENTERS?.[entry.itemId];
             const centerX = Math.max(0, Math.min(
                 1,
                 Number.isFinite(Number(configuredCenter?.x))

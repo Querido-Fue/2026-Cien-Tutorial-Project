@@ -303,7 +303,7 @@ test('1층 양 끝 텔레포트는 장식 테두리가 아닌 실제 타일 중�
     });
 });
 
-test('연결된 벽은 공통 변을 빼고 높아진 가시벽과 낮은 석조 단차를 그린다', () => {
+test('연결된 벽은 공통 변을 빼고 실제 타일 외곽에 낮은 석조벽·가시 울타리를 그린다', () => {
     const layoutController = createLayout();
     layoutController.resize(VIEWPORTS[0]);
     const floor = {
@@ -349,10 +349,7 @@ test('연결된 벽은 공통 변을 빼고 높아진 가시벽과 낮은 석조
         fonts: { SMALL: '12px sans-serif', HEADING: '18px sans-serif' },
         colors: {
             BoardFrame: '#frame',
-            Tile: {
-                Reachable: '#reachable', Teleport: '#teleport', Wall: '#wall-top'
-            },
-            Entity: { Wall: '#wall-side' },
+            Tile: { Reachable: '#reachable', Teleport: '#teleport' },
             UI: {}
         },
         world: {
@@ -376,26 +373,10 @@ test('연결된 벽은 공통 변을 빼고 높아진 가시벽과 낮은 석조
     assert.equal(barriers.every((command) => command.smoothing === false), true);
     assert.equal(barriers.every((command) => command.vertices.length === 8), true);
     assert.equal(barriers.every((command) => (
-        Math.abs(
-            command.vertices[5] - command.vertices[3]
-                - (layout.tileHeight * 0.68)
-        ) <= 0.000001
-        && Math.abs(
-            command.vertices[7] - command.vertices[1]
-                - (layout.tileHeight * 0.68)
-        ) <= 0.000001
-    )), true);
-
-    const raisedTops = commands.filter((command) => command.fill === '#wall-top');
-    const raisedSides = commands.filter((command) => command.fill === '#wall-side');
-    const baseRise = layout.tileHeight * 0.16;
-    assert.equal(raisedTops.length, 2);
-    assert.equal(raisedTops.every((command) => command.alpha === 0.58), true);
-    assert.equal(raisedSides.length, 3);
-    assert.equal(raisedSides.every((command) => command.alpha === 0.9), true);
-    assert.equal(raisedSides.every((command) => (
-        Math.abs(command.vertices[5] - command.vertices[3] - baseRise) <= 0.000001
-        && Math.abs(command.vertices[7] - command.vertices[1] - baseRise) <= 0.000001
+        command.vertices[5] - command.vertices[3]
+            <= (layout.tileHeight * 0.34) + 0.000001
+        && command.vertices[7] - command.vertices[1]
+            <= (layout.tileHeight * 0.34) + 0.000001
     )), true);
 
     const edgeKey = (left, right) => [left, right]
@@ -406,7 +387,7 @@ test('연결된 벽은 공통 변을 빼고 높아진 가시벽과 낮은 석조
         const projected = TutorialBattleLayout.projectTileQuad(layout, x, y, 1);
         return Array.from({ length: 4 }, (_, index) => [
             projected[index * 2],
-            projected[(index * 2) + 1] - baseRise
+            projected[(index * 2) + 1]
         ]);
     };
     const firstCorners = projectedCorners(4, 4);
@@ -427,14 +408,14 @@ test('연결된 벽은 공통 변을 빼고 높아진 가시벽과 낮은 석조
     assert.equal(commands.some((command) => command.text === '벽'), false);
 });
 
-test('월드 아이템은 절반 크기와 실제 불투명 픽셀 중심, 은은한 후광을 사용한다', () => {
+test('월드 아이템은 절반 크기와 아이템별 시각 중심, 은은한 후광을 사용한다', () => {
     const layoutController = createLayout();
     layoutController.resize(VIEWPORTS[0]);
     const floor = {
         ...TUTORIAL_GAME_DATA.FLOORS[0],
         walls: [],
         items: [{
-            id: 'item-test', itemId: 'ocarina', x: 4, y: 4,
+            id: 'item-test', itemId: 'diamond-pickaxe', x: 4, y: 4,
             collected: false, identified: true
         }],
         eventTiles: [],
@@ -463,7 +444,7 @@ test('월드 아이템은 절반 크기와 실제 불투명 픽셀 중심, 은�
             return { layers: [] };
         },
         getItemIcon(itemId) {
-            return itemId === 'ocarina' ? itemIcon : null;
+            return itemId === 'diamond-pickaxe' ? itemIcon : null;
         }
     });
     view.draw({
@@ -486,7 +467,7 @@ test('월드 아이템은 절반 크기와 실제 불투명 픽셀 중심, 은�
             hoveredTile: null,
             readability: { loraIntent: { ok: false } },
             floorActors: {},
-            itemMetadata: { ocarina: {} },
+            itemMetadata: { 'diamond-pickaxe': {} },
             elapsedSeconds: 0,
             config: { itemIcon: TUTORIAL_GAME_DATA.SPRITES.ITEM }
         }
@@ -497,7 +478,12 @@ test('월드 아이템은 절반 크기와 실제 불투명 픽셀 중심, 은�
     const halo = commands.find((command) => command.fill === '#item-halo');
     const icon = commands.find((command) => command.image === itemIcon);
     const iconSize = layout.tileSide * itemLayout.WORLD_ICON_SIZE_TILE_RATIO;
-    const visualCenter = itemLayout.WORLD_ICON_VISUAL_CENTERS.ocarina;
+    const visualCenter = itemLayout.VISUAL_CENTERS['diamond-pickaxe'];
+    const bitmapItemIds = Object.keys(TUTORIAL_ASSET_MANIFEST.ITEMS)
+        .filter((itemId) => itemId !== 'tile-cleanser')
+        .sort();
+    assert.deepEqual(Object.keys(itemLayout.VISUAL_CENTERS).sort(), bitmapItemIds);
+    assert.deepEqual(visualCenter, { x: 0.5, y: 0.5 });
     assert.equal(itemLayout.WORLD_ICON_SIZE_TILE_RATIO, 0.64 * 0.5);
     assert.equal(itemLayout.WORLD_HALO_SIZE_TILE_RATIO, 0.36);
     assert.equal(halo.alpha, 0.24);
@@ -644,8 +630,11 @@ test('로라와 플레이어 상태는 원본 패널의 초상·슬롯·게이�
             return [String(text)];
         }
     };
-    const entries = Array.from({ length: 5 }, (_, index) => ({
-        itemId: 'item-' + String(index),
+    const inventoryItemIds = [
+        'bow', 'mascot-costume', 'old-teddy', 'music-box', 'ocarina'
+    ];
+    const entries = inventoryItemIds.map((itemId, index) => ({
+        itemId,
         count: 1,
         known: true,
         hasIcon: true,
@@ -729,6 +718,12 @@ test('로라와 플레이어 상태는 원본 패널의 초상·슬롯·게이�
     );
     assert.equal(itemSpecs.every((spec) => spec.label === ''), true);
     assert.equal(itemSpecs.every((spec) => spec.drawBackground === false), true);
+    assert.equal(itemSpecs.every((spec) => spec.itemSpacing === 0), true);
+    assert.deepEqual(
+        itemSpecs[0].iconVisualCenter,
+        TUTORIAL_GAME_DATA.SPRITES.ITEM.VISUAL_CENTERS.bow
+    );
+    assert.equal(itemSpecs[0].iconVisualCenter.x < 0.5, true);
 
     view.draw(viewModel);
     const loraPanel = commands.find((command) => command.image === assets.loraPanelFull);

@@ -52,7 +52,7 @@ export class ButtonElement extends BaseUIElement {
         this.right = properties.right || [];
 
         this.margin = properties.margin || 0;
-        this.itemSpacing = properties.itemSpacing || 5; // 아이템 간 기본 간격
+        this.itemSpacing = properties.itemSpacing ?? 5; // 아이템 간 기본 간격
 
         this.width = properties.width || 100;
         this.height = properties.height || 30;
