@@ -70,6 +70,7 @@ import { TutorialAchievementBanner } from './_tutorial_achievement_banner.js';
 import { TutorialAssetLoader } from './_tutorial_asset_loader.js';
 import { TutorialAssetPort } from './_tutorial_asset_port.js';
 import { TutorialAudioDirector } from './_tutorial_audio_director.js';
+import { TutorialBattleCommandController } from './_tutorial_battle_command_controller.js';
 import { TutorialBattlePresenter } from './_tutorial_battle_presenter.js';
 import { TutorialBattleSelectionController } from './_tutorial_battle_selection_controller.js';
 import { TutorialBattleViewModelFactory } from './_tutorial_battle_view_model_factory.js';
@@ -307,6 +308,16 @@ export class TutorialScene extends BaseScene {
             config: this.data.ANIMATION,
             onLockChange: () => this.buttonHost.invalidate()
         });
+        this.battleCommands = new TutorialBattleCommandController({
+            selection: this.battleSelection,
+            focus: this.battleFocus,
+            presentation: this.presentationTimeline,
+            getModel: () => this.model,
+            canAcceptInput: () => this.#canAcceptBattleInput(),
+            onModelChange: (result) => this.#afterModelChange(result),
+            getVisibleFloorIndex: () => this.floorView?.index,
+            cleanseActionSeconds: this.data.ANIMATION.SELECTION_SECONDS
+        });
         this.assetPort.loadAll();
 
         this.elapsedSeconds = 0;
@@ -503,31 +514,31 @@ export class TutorialScene extends BaseScene {
                     this.#applyCutsceneClose();
                     break;
                 case COMMANDS.PLAN_STEP:
-                    this.#applyPlanStep(command.payload);
+                    this.battleCommands.applyPlanStep(command.payload);
                     break;
                 case COMMANDS.PLAN_BACK:
-                    this.#applyPlanBack();
+                    this.battleCommands.applyPlanBack();
                     break;
                 case COMMANDS.PLAN_RESET:
-                    this.#applyPlanReset();
+                    this.battleCommands.applyPlanReset();
                     break;
                 case COMMANDS.COMMIT_PATH:
-                    this.#applyCommitPath();
+                    this.battleCommands.applyCommitPath();
                     break;
                 case COMMANDS.SELECT_ATTACK:
-                    this.#applySelectAttack(command.payload);
+                    this.battleCommands.applySelectAttack(command.payload);
                     break;
                 case COMMANDS.ATTACK:
-                    this.#applyAttack(command.payload);
+                    this.battleCommands.applyAttack(command.payload);
                     break;
                 case COMMANDS.HEAL:
-                    this.#applyHeal();
+                    this.battleCommands.applyHeal();
                     break;
                 case COMMANDS.IDLE:
-                    this.#applyIdle();
+                    this.battleCommands.applyIdle();
                     break;
                 case COMMANDS.USE_ITEM:
-                    this.#applyUseItem(command.payload);
+                    this.battleCommands.applyUseItem(command.payload);
                     break;
                 case COMMANDS.INVENTORY_PAGE_SHIFT:
                     this.#applyInventoryPageShift(command.payload);
@@ -536,10 +547,10 @@ export class TutorialScene extends BaseScene {
                     this.#applyFocusShift(command.payload);
                     break;
                 case COMMANDS.SELECT_CLEANSE:
-                    this.#applySelectCleanse();
+                    this.battleCommands.applySelectCleanse();
                     break;
                 case COMMANDS.CLEANSE_EVENT_TILE:
-                    this.#applyCleanseEventTile(command.payload);
+                    this.battleCommands.applyCleanseEventTile(command.payload);
                     break;
                 case COMMANDS.GUIDE_SHOW:
                     this.#applyGuideShow();
@@ -1032,237 +1043,6 @@ export class TutorialScene extends BaseScene {
         if (this.mode === MODES.BATTLE) {
             this.#refreshBattleCache();
             this.#openNextRecordPopup();
-        }
-    }
-
-    /**
-     * 방향 입력으로 이동 경로 또는 공격 대상을 선택합니다.
-     * @param {object} payload - 방향 벡터입니다.
-     * @private
-     */
-    #applyPlanStep(payload) {
-        if (!this.#canAcceptBattleInput()) {
-            return;
-        }
-        const dx = Number(payload?.x) || 0;
-        const dy = Number(payload?.y) || 0;
-        const selectionKind = this.battleSelection.planStep(this.model, dx, dy);
-        if (selectionKind) {
-            this.presentationTimeline.startSelection(
-                selectionKind === 'path' ? 'path' : 'attack'
-            );
-        }
-    }
-
-    /**
-     * 직접 지정 경로의 마지막 이동 스텝을 취소합니다. 포탈 이동은 입구와 출구를 함께 제거합니다.
-     * @private
-     */
-    #applyPlanBack() {
-        if (!this.#canAcceptBattleInput()
-            || !this.battleSelection.backtrackPath(this.model)) {
-            return;
-        }
-        this.presentationTimeline.startSelection('path');
-    }
-
-    /** 선택한 이동 경로 전체를 현재 플레이어 위치로 초기화합니다. @private */
-    #applyPlanReset() {
-        if (!this.#canAcceptBattleInput()
-            || this.model.movementUsed
-            || this.model.phase !== 'move'
-            || !this.battleSelection.resetPath(this.model)) {
-            return;
-        }
-        this.battleSelection.clearCleanse();
-        this.presentationTimeline.startSelection('path');
-    }
-
-    /**
-     * 키보드로 계획한 경로를 확정합니다.
-     * @private
-     */
-    #applyCommitPath() {
-        if (!this.#canAcceptBattleInput()
-            || this.model.movementUsed
-            || this.model.phase !== 'move') {
-            return;
-        }
-        this.#commitModelPath(this.battleSelection.getPlannedPath());
-    }
-
-    /**
-     * 검증한 경로를 모델에 전달합니다.
-     * @param {Array<{x:number,y:number}>} path - 이동 경로입니다.
-     * @private
-     */
-    #commitModelPath(path) {
-        const normalizedPath = this.battleSelection.normalizePath(path);
-        if (normalizedPath.length === 0) {
-            return;
-        }
-        const result = this.model.commitPath(normalizedPath);
-        const resultPath = this.battleSelection.normalizePath(result?.path);
-        const teleportSegments = toList(result?.events)
-            .filter((event) => event?.type === 'teleported')
-            .map((event) => ({
-                from: cloneTile(event.from),
-                to: cloneTile(event.to)
-            }))
-            .filter((segment) => segment.from && segment.to);
-        this.battleSelection.completeMove(this.model, result?.ok === true);
-        this.#afterModelChange(result);
-        if (result?.ok) {
-            this.presentationTimeline.startPlayerPath({
-                path: resultPath,
-                teleportSegments,
-                finalPlayer: this.model.player,
-                logicalFloorIndex: this.model.floorIndex,
-                visibleFloorIndex: this.floorView?.index
-            });
-        }
-    }
-
-    /**
-     * 공격 선택 상태를 전환합니다.
-     * @private
-     */
-    #applySelectAttack(payload = {}) {
-        if (!this.#canAcceptBattleInput()
-            || this.model.phase !== 'action'
-            || this.model.actionUsed) {
-            return;
-        }
-        const selection = this.battleSelection.toggleAttack(
-            this.model,
-            payload?.weapon
-        );
-        if (!selection.changed) {
-            return;
-        }
-        this.battleFocus.focus(selection.focusKey);
-        this.#refreshBattleCache();
-        this.presentationTimeline.startSelection('attack');
-    }
-
-    /**
-     * 선택 대상을 공격합니다.
-     * @param {object} payload - 대상 ID입니다.
-     * @private
-     */
-    #applyAttack(payload) {
-        if (!this.#canAcceptBattleInput()
-            || this.model.phase !== 'action'
-            || this.model.actionUsed) {
-            return;
-        }
-        const request = this.battleSelection.createAttackRequest(payload);
-        if (!request) {
-            return;
-        }
-        const result = this.model.attack(request.targetId, { weapon: request.weapon });
-        this.battleSelection.clearAttack();
-        this.#afterModelChange(result);
-        if (result?.ok === true) {
-            this.presentationTimeline.startAction();
-        }
-    }
-
-    /**
-     * 플레이어 회복 행동을 적용합니다.
-     * @private
-     */
-    #applyHeal() {
-        if (!this.#canAcceptBattleInput()
-            || this.model.phase !== 'action'
-            || this.model.actionUsed) {
-            return;
-        }
-        const result = this.model.heal();
-        this.battleSelection.clearAttack();
-        this.#afterModelChange(result);
-        if (result?.ok === true) {
-            this.presentationTimeline.startAction();
-        }
-    }
-
-    /**
-     * 플레이어가 행동을 아끼는 선택을 적용합니다.
-     * @private
-     */
-    #applyIdle() {
-        if (!this.#canAcceptBattleInput()
-            || this.model.phase !== 'action'
-            || this.model.actionUsed) {
-            return;
-        }
-        const result = this.model.wait();
-        this.battleSelection.clearActionSelections();
-        this.#afterModelChange(result);
-        if (result?.ok === true) {
-            this.presentationTimeline.startAction();
-        }
-    }
-
-    /**
-     * 이동 단계의 타일 정화 대상 선택을 전환합니다.
-     * @private
-     */
-    #applySelectCleanse() {
-        if (!this.#canAcceptBattleInput()
-            || this.model.phase !== 'move'
-            || this.model.movementUsed) {
-            return;
-        }
-        if (!this.battleSelection.toggleCleanse(this.model)) {
-            return;
-        }
-        this.#refreshBattleCache();
-        this.presentationTimeline.startSelection('attack');
-    }
-
-    /**
-     * 선택한 negative 이벤트 타일에 정화제를 사용합니다.
-     * @param {object} payload - 이벤트 타일 ID 또는 좌표입니다.
-     * @private
-     */
-    #applyCleanseEventTile(payload) {
-        if (!this.#canAcceptBattleInput()
-            || !this.battleSelection.isCleanseSelected()) {
-            return;
-        }
-        const target = this.battleSelection.getCleanseTarget(payload);
-        if (!target) {
-            return;
-        }
-        const result = this.model.cleanseEventTile(target);
-        this.battleSelection.clearCleanse();
-        this.#afterModelChange(result);
-        if (result?.ok === true) {
-            this.presentationTimeline.startAction(this.data.ANIMATION.SELECTION_SECONDS);
-        }
-    }
-
-    /**
-     * 인벤토리 아이템을 사용합니다.
-     * @param {object} payload - 아이템 ID입니다.
-     * @private
-     */
-    #applyUseItem(payload) {
-        if (!this.#canAcceptBattleInput()
-            || this.model.phase !== 'action'
-            || this.model.actionUsed) {
-            return;
-        }
-        const itemId = payload?.itemId;
-        if (typeof itemId !== 'string') {
-            return;
-        }
-        const result = this.model.useItem(itemId);
-        this.battleSelection.clearAttack();
-        this.#afterModelChange(result);
-        if (result?.ok === true) {
-            this.presentationTimeline.startAction();
         }
     }
 

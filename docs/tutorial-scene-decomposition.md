@@ -66,6 +66,7 @@ import하지 않고, 모드 정책만 모드 상수를 참조한다.
 | 입력 | 모드 정책, 모델 phase, 선택 대상, 마우스 focus | 키 latch/edge, hover, 대상 index, 명령 큐 | `input_system`, 입력 바인딩, command queue |
 | 모델 조율 | `model`, 층 표현 캐시 | 모델 공개 API를 통한 상태 변경, 결과 진입 | `TutorialBattleModel` 공개 API |
 | 전투 선택 | 계획 경로, 도달 범위, 공격·정화 대상, 호버 | 선택 불변식, 대상 순환, 포인터 명령 파생 | `TutorialBattleSelectionController` |
+| 플레이어 명령 | 작은 모델/입력/표현 포트 | 이동·공격·회복·대기·정화·아이템 명령 적용 | `TutorialBattleCommandController` |
 | 저장·메타 | `meta`, 모델 snapshot, 결과 | `meta`, `committedMeta`, `metaStaging`, `saveSequence` | `_tutorial_meta_progress.js` |
 | 프레젠테이션 | 모델 결과·전후 snapshot, cue, floor view | 장면은 floor snapshot 교체만 조율 | presenter, feedback queue, animation timeline |
 | 배우 스프라이트 | 표시 층 배우·actor-animation cue·clip 데이터 | 장면은 roster 동기화와 snapshot 전달만 조율 | clip resolver, sprite animator, cue router, actor view |
@@ -197,6 +198,7 @@ import하지 않고, 모드 정책만 모드 상수를 참조한다.
 | Turn 05 | `TutorialBattleLayout` | viewport별 보드·HUD 좌표와 타일 투영·히트테스트 | 정적 레이아웃 데이터, 순수 viewport 값 |
 | Turn 05 | 장면 `#createBattleViewModel` | 한 프레임의 직렬화 가능한 전투 view model 생성 | model snapshot·장면 선택 상태 읽기 |
 | SRP 후속 | `TutorialBattleSelectionController` | 경로·대상·호버 선택 상태와 입력 명령 파생 | model 공개 읽기 API, 명령 상수, 값 유틸 |
+| SRP 후속 | `TutorialBattleCommandController` | 플레이어 전투 명령 검증·모델 호출·연출 시작 | 작은 model/selection/presentation callback 포트 |
 | Turn 05 | `TutorialBattleWorldView` | 타일·경로·오브젝트·액터 렌더 | battle view model, layout, render/asset port |
 | Turn 05 | `TutorialBattleHudView` | 턴·게이지·행동·인벤토리 렌더 | battle view model, render port |
 | Turn 05 | `TutorialBattleFeedbackView` | cue의 화면 표시 | feedback snapshot, render port |

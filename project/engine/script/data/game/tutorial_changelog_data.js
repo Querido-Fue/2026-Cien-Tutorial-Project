@@ -5,6 +5,10 @@
  */
 export const TUTORIAL_CHANGELOG_CATALOG = Object.freeze([
     Object.freeze({
+        subject: 'refactor: extract tutorial battle commands',
+        summary: '이동·공격·회복·정화·아이템 전투 명령 적용 책임을 장면에서 분리했습니다.'
+    }),
+    Object.freeze({
         subject: 'refactor: extract tutorial battle selection state',
         summary: '전투 경로·공격·정화·호버 선택 상태를 장면에서 분리했습니다.'
     }),

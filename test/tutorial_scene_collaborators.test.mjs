@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { TutorialBattleCommandController } from '../project/engine/script/scene/tutorial/_tutorial_battle_command_controller.js';
 import { TutorialBattleViewModelFactory } from '../project/engine/script/scene/tutorial/_tutorial_battle_view_model_factory.js';
 import { TutorialBattleSelectionController } from '../project/engine/script/scene/tutorial/_tutorial_battle_selection_controller.js';
 import { TutorialInventoryPresenter } from '../project/engine/script/scene/tutorial/_tutorial_inventory_presenter.js';
@@ -190,6 +191,107 @@ test('전투 선택 컨트롤러는 공격 대상 호버와 보드 명령을 일
     const snapshot = selection.getSnapshot();
     snapshot.actionTargets[1].id = 'mutated';
     assert.equal(selection.createAttackRequest().targetId, 'dummy');
+});
+
+test('전투 명령 컨트롤러는 경로 확정 결과와 텔레포트 연출을 같은 모델 호출에서 만든다', () => {
+    const selection = new TutorialBattleSelectionController();
+    const modelChanges = [];
+    const playerPaths = [];
+    const model = {
+        player: { x: 0, y: 0 },
+        floorIndex: 1,
+        phase: 'move',
+        movementUsed: false,
+        actionUsed: false,
+        extendPath(path, dx, dy) {
+            return [...path, { x: dx, y: dy }];
+        },
+        commitPath(path) {
+            this.player = { ...path.at(-1) };
+            this.movementUsed = true;
+            return {
+                ok: true,
+                path,
+                events: [{
+                    type: 'teleported',
+                    from: { x: 1, y: 0 },
+                    to: { x: 4, y: 4 }
+                }]
+            };
+        }
+    };
+    selection.reset(model);
+    selection.planStep(model, 1, 0);
+    const commands = new TutorialBattleCommandController({
+        selection,
+        focus: { focus() {} },
+        presentation: {
+            startSelection() {},
+            startAction() {},
+            startPlayerPath(value) {
+                playerPaths.push(value);
+            }
+        },
+        getModel: () => model,
+        canAcceptInput: () => true,
+        onModelChange: (result) => modelChanges.push(result),
+        getVisibleFloorIndex: () => 0
+    });
+
+    commands.applyCommitPath();
+
+    assert.equal(modelChanges.length, 1);
+    assert.deepEqual(playerPaths[0].teleportSegments, [{
+        from: { x: 1, y: 0 },
+        to: { x: 4, y: 4 }
+    }]);
+    assert.equal(playerPaths[0].logicalFloorIndex, 1);
+    assert.equal(playerPaths[0].visibleFloorIndex, 0);
+    assert.deepEqual(selection.getPlannedPath(), [{ x: 1, y: 0 }]);
+});
+
+test('전투 명령 컨트롤러는 공격 선택과 실행 검증을 모델 밖에 중복하지 않는다', () => {
+    const selection = new TutorialBattleSelectionController();
+    const focused = [];
+    const attacked = [];
+    const actions = [];
+    const model = {
+        player: { x: 0, y: 0 },
+        phase: 'action',
+        movementUsed: true,
+        actionUsed: false,
+        getValidTargets: () => [{ id: 'lora', x: 1, y: 0 }],
+        getCleanseTargets: () => [],
+        attack(targetId, options) {
+            attacked.push({ targetId, options });
+            return { ok: true, events: [] };
+        }
+    };
+    selection.reset(model);
+    const commands = new TutorialBattleCommandController({
+        selection,
+        focus: { focus: (key) => focused.push(key) },
+        presentation: {
+            startSelection() {},
+            startAction: () => actions.push('action'),
+            startPlayerPath() {}
+        },
+        getModel: () => model,
+        canAcceptInput: () => true,
+        onModelChange() {},
+        getVisibleFloorIndex: () => 0
+    });
+
+    commands.applySelectAttack({ weapon: 'bow' });
+    commands.applyAttack({ targetId: 'lora' });
+
+    assert.deepEqual(focused, ['battle-ranged']);
+    assert.deepEqual(attacked, [{
+        targetId: 'lora',
+        options: { weapon: 'bow' }
+    }]);
+    assert.deepEqual(actions, ['action']);
+    assert.equal(selection.isAttackSelected(), false);
 });
 
 test('비전투 뷰 모델 팩토리는 장면 상태 없이 표시 데이터만 조립한다', () => {
