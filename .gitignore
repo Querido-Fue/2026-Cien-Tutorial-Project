@@ -1,6 +1,9 @@
 *
 
 !.gitignore
+!AGENT_GUIDE.md
+!guide/
+!guide/**
 !engine_plan.md
 !progress.md
 !project/

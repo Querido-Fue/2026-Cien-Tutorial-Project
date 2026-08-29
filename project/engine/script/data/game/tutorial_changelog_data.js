@@ -5,6 +5,10 @@
  */
 export const TUTORIAL_CHANGELOG_CATALOG = Object.freeze([
     Object.freeze({
+        subject: 'chore: enforce source responsibility budgets',
+        summary: '단일 책임 파일 기준과 장문·다중 클래스 자동 검사를 추가했습니다.'
+    }),
+    Object.freeze({
         subject: 'fix: preserve composed asset paths in web builds',
         summary: '동적 아이템·오디오 자산 경로를 보존하고 최신 파일 재검증을 보강했습니다.'
     }),
