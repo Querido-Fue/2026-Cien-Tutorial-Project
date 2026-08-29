@@ -11,7 +11,8 @@ export const TUTORIAL_UI_LAYOUT_TOKENS = Object.freeze({
     MAIN: Object.freeze({
         LOGO: rect(0.365, 0.215, 0.27, 0.22),
         BUTTON_GROUP: rect(0.425, 0.55, 0.15, 0.18),
-        BUTTON_GAP: 0.012
+        BUTTON_GAP: 0.012,
+        BUTTON_SCALE: 1.2
     }),
     STARTER: Object.freeze({
         MAP: rect(0.027, 0.025, 0.946, 0.95),

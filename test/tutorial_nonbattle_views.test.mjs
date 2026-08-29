@@ -215,9 +215,16 @@ test('메인 메뉴는 타이틀과 버튼 외 안내 문구·카메라 오버�
 
     const layout = view.getLayout(createViewModel(VIEWPORTS[0]));
     const logoCenterX = layout.logo.x + (layout.logo.w * 0.5);
+    const baseButtonWidth = Math.round(
+        TUTORIAL_UI_LAYOUT_TOKENS.MAIN.BUTTON_GROUP.w * VIEWPORTS[0].UIWW
+    );
     for (const button of layout.buttons) {
         const buttonCenterX = button.x + (button.w * 0.5);
         assert.ok(Math.abs(buttonCenterX - logoCenterX) <= 1);
+        assert.ok(Math.abs(
+            (button.w / baseButtonWidth)
+            - TUTORIAL_UI_LAYOUT_TOKENS.MAIN.BUTTON_SCALE
+        ) <= 0.01);
     }
 });
 

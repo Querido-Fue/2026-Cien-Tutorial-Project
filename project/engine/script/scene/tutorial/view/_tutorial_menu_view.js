@@ -33,8 +33,17 @@ export class TutorialMenuView {
         const space = createTutorialDesignSpace(viewport);
         const tokens = TUTORIAL_UI_LAYOUT_TOKENS.MAIN;
         const logo = projectTutorialDesignRect(space, tokens.LOGO);
-        const group = projectTutorialDesignRect(space, tokens.BUTTON_GROUP);
-        const gap = Math.max(4, Math.round(space.h * tokens.BUTTON_GAP));
+        const baseGroup = projectTutorialDesignRect(space, tokens.BUTTON_GROUP);
+        const group = {
+            x: Math.round(baseGroup.x - (baseGroup.w * (tokens.BUTTON_SCALE - 1) * 0.5)),
+            y: Math.round(baseGroup.y - (baseGroup.h * (tokens.BUTTON_SCALE - 1) * 0.5)),
+            w: Math.round(baseGroup.w * tokens.BUTTON_SCALE),
+            h: Math.round(baseGroup.h * tokens.BUTTON_SCALE)
+        };
+        const gap = Math.max(
+            4,
+            Math.round(space.h * tokens.BUTTON_GAP * tokens.BUTTON_SCALE)
+        );
         const buttonHeight = Math.max(1, Math.floor((group.h - (gap * 2)) / 3));
         const buttons = Array.from({ length: 3 }, (_, index) => Object.freeze({
             x: group.x,
