@@ -13,12 +13,40 @@ import {
 
 const LORA_STATUS_PANEL_LAYOUT = Object.freeze({
     SOURCE: Object.freeze({ WIDTH: 247, HEIGHT: 90 }),
-    PORTRAIT: Object.freeze({ X: 12, Y: 14, WIDTH: 26, HEIGHT: 26 }),
+    PORTRAIT_VIEWPORT: Object.freeze({ X: 0, Y: 0, WIDTH: 55, HEIGHT: 56 }),
+    PORTRAIT_SCALE: 1.3,
+    PORTRAIT_VISUAL_CENTER: Object.freeze({ X: 0.56, Y: 0.64 }),
     PORTRAIT_CLIP: Object.freeze([
-        Object.freeze({ X: 25, Y: 14 }),
-        Object.freeze({ X: 37, Y: 27 }),
-        Object.freeze({ X: 25, Y: 40 }),
-        Object.freeze({ X: 13, Y: 27 })
+        Object.freeze({ X: 25, Y: 0 }),
+        Object.freeze({ X: 55, Y: 27 }),
+        Object.freeze({ X: 25, Y: 56 }),
+        Object.freeze({ X: 0, Y: 27 })
+    ]),
+    PORTRAIT_FRAME_CLIPS: Object.freeze([
+        Object.freeze([
+            Object.freeze({ X: 0, Y: 27 }),
+            Object.freeze({ X: 25, Y: 0 }),
+            Object.freeze({ X: 25, Y: 6 }),
+            Object.freeze({ X: 6, Y: 27 })
+        ]),
+        Object.freeze([
+            Object.freeze({ X: 25, Y: 0 }),
+            Object.freeze({ X: 55, Y: 27 }),
+            Object.freeze({ X: 49, Y: 27 }),
+            Object.freeze({ X: 25, Y: 6 })
+        ]),
+        Object.freeze([
+            Object.freeze({ X: 55, Y: 27 }),
+            Object.freeze({ X: 25, Y: 56 }),
+            Object.freeze({ X: 25, Y: 50 }),
+            Object.freeze({ X: 49, Y: 27 })
+        ]),
+        Object.freeze([
+            Object.freeze({ X: 25, Y: 56 }),
+            Object.freeze({ X: 0, Y: 27 }),
+            Object.freeze({ X: 6, Y: 27 }),
+            Object.freeze({ X: 25, Y: 50 })
+        ])
     ]),
     HP_BAR: Object.freeze({ X: 62, Y: 56, WIDTH: 149, HEIGHT: 4 }),
     INSTABILITY_BAR: Object.freeze({ X: 51, Y: 70, WIDTH: 149, HEIGHT: 4 })
@@ -289,18 +317,34 @@ export class TutorialBattleHudView {
             alpha: 1
         });
 
-        const portraitRect = this.#resolveSourcePanelPart(
+        const portraitViewport = this.#resolveSourcePanelPart(
             panelRect,
-            LORA_STATUS_PANEL_LAYOUT.PORTRAIT,
+            LORA_STATUS_PANEL_LAYOUT.PORTRAIT_VIEWPORT,
             LORA_STATUS_PANEL_LAYOUT.SOURCE
         );
         const portrait = this.#assetPort.getUiAsset?.('loraPortraitIcon')
             || this.#assetPort.getLoraPortrait?.()
             || null;
-        if (portrait && portraitRect) {
+        if (portrait && portraitViewport) {
+            const portraitWidth = Math.max(1, Math.round(
+                portraitViewport.w * LORA_STATUS_PANEL_LAYOUT.PORTRAIT_SCALE
+            ));
+            const portraitHeight = Math.max(1, Math.round(
+                portraitViewport.h * LORA_STATUS_PANEL_LAYOUT.PORTRAIT_SCALE
+            ));
+            const visualCenter = LORA_STATUS_PANEL_LAYOUT.PORTRAIT_VISUAL_CENTER;
             this.#renderPort.render('ui', {
                 shape: 'image', image: portrait,
-                ...portraitRect,
+                x: Math.round(
+                    portraitViewport.x + (portraitViewport.w * 0.5)
+                    - (portraitWidth * visualCenter.X)
+                ),
+                y: Math.round(
+                    portraitViewport.y + (portraitViewport.h * 0.5)
+                    - (portraitHeight * visualCenter.Y)
+                ),
+                w: portraitWidth,
+                h: portraitHeight,
                 clipVertices: this.#resolveSourcePanelVertices(
                     panelRect,
                     LORA_STATUS_PANEL_LAYOUT.PORTRAIT_CLIP,
@@ -308,15 +352,16 @@ export class TutorialBattleHudView {
                 ),
                 smoothing: true
             });
-        } else if (portraitRect) {
+        } else if (portraitViewport) {
             this.#renderPort.render('ui', {
                 shape: 'rect',
-                ...portraitRect,
+                ...portraitViewport,
                 fill: colors.UI.CardHeader,
                 stroke: colors.UI.Border,
                 lineWidth: 1
             });
         }
+        this.#drawLoraPortraitFrame(panelImage, panelRect);
 
         const loraHp = Math.max(0, Number(world.presentation.loraHp) || 0);
         const loraMaxHp = Math.max(1, Number(snapshot.lora?.maxHp) || 100);
@@ -348,6 +393,26 @@ export class TutorialBattleHudView {
             instability / 100, colors.UI.GaugeInstability,
             expectedInstability / 100, 'loraGaugeBar'
         );
+    }
+
+    /** 확대 초상 위에 원본 마름모 장식만 다시 덮어 자연스러운 프레임 마스킹을 만듭니다. @private */
+    #drawLoraPortraitFrame(panelImage, panelRect) {
+        if (!panelImage || !panelRect) {
+            return;
+        }
+        for (const frameClip of LORA_STATUS_PANEL_LAYOUT.PORTRAIT_FRAME_CLIPS) {
+            this.#renderPort.render('ui', {
+                shape: 'image',
+                image: panelImage,
+                ...panelRect,
+                clipVertices: this.#resolveSourcePanelVertices(
+                    panelRect,
+                    frameClip,
+                    LORA_STATUS_PANEL_LAYOUT.SOURCE
+                ),
+                smoothing: false
+            });
+        }
     }
 
     /** 플레이어 슬롯과 HP 게이지를 패널 원본 좌표에 맞춰 그립니다. @private */

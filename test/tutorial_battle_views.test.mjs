@@ -826,7 +826,10 @@ test('로라와 플레이어 상태는 원본 패널의 초상·슬롯·게이�
     assert.equal(itemSpecs[0].iconVisualCenter.x < 0.5, true);
 
     view.draw(viewModel);
-    const loraPanel = commands.find((command) => command.image === assets.loraPanelFull);
+    const loraPanelLayers = commands.filter(
+        (command) => command.image === assets.loraPanelFull
+    );
+    const loraPanel = loraPanelLayers[0];
     const loraPortrait = commands.find(
         (command) => command.image === assets.loraPortraitIcon
     );
@@ -855,13 +858,23 @@ test('로라와 플레이어 상태는 원본 패널의 초상·슬롯·게이�
             smoothing: loraPortrait.smoothing
         },
         {
-            x: 929,
-            y: 58,
-            w: 31,
-            h: 31,
-            clipVertices: [944, 58, 959, 74, 944, 89, 930, 74],
+            x: 900,
+            y: 20,
+            w: 85,
+            h: 86,
+            clipVertices: [944, 42, 980, 74, 944, 108, 915, 74],
             smoothing: true
         }
+    );
+    assert.equal(loraPanelLayers.length, 5);
+    assert.equal(commands.indexOf(loraPanel) < commands.indexOf(loraPortrait), true);
+    assert.equal(
+        loraPanelLayers.slice(1).every((layer) => (
+            commands.indexOf(layer) > commands.indexOf(loraPortrait)
+            && Array.isArray(layer.clipVertices)
+            && layer.smoothing === false
+        )),
+        true
     );
     assert.deepEqual(
         { x: loraHpGauge.x, y: loraHpGauge.y, w: loraHpGauge.w, h: loraHpGauge.h },
