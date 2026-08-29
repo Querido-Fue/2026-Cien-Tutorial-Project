@@ -159,12 +159,15 @@ test('이동 미리보기는 맵 타일의 두 투영 축으로 계산한 네 �
     assert.notEqual(preview.vertices[0], preview.vertices[4]);
 });
 
-test('벽은 글자 대신 뒤쪽 칸을 가리지 않는 낮은 가시 울타리 이미지를 그린다', () => {
+test('연결된 벽은 공통 변을 빼고 실제 타일 외곽에 낮은 석조벽·가시 울타리를 그린다', () => {
     const layoutController = createLayout();
     layoutController.resize(VIEWPORTS[0]);
     const floor = {
         ...TUTORIAL_GAME_DATA.FLOORS[0],
-        walls: [{ id: 'wall-test', x: 4, y: 4, destroyed: false }],
+        walls: [
+            { id: 'wall-test-a', x: 4, y: 4, destroyed: false },
+            { id: 'wall-test-b', x: 5, y: 4, destroyed: false }
+        ],
         items: [],
         eventTiles: [],
         teleports: [],
@@ -175,7 +178,7 @@ test('벽은 글자 대신 뒤쪽 칸을 가리지 않는 낮은 가시 울타�
         elapsedSeconds: 0,
         screenShakeSeconds: 0
     });
-    const wallBarrier = { width: 1510, height: 918 };
+    const wallBarrier = { width: 1450, height: 450 };
     const commands = [];
     const view = new TutorialBattleWorldView({
         render(layer, command) {
@@ -220,13 +223,133 @@ test('벽은 글자 대신 뒤쪽 칸을 가리지 않는 낮은 가시 울타�
         }
     });
 
-    const barrier = commands.find((command) => command.image === wallBarrier);
-    assert.ok(barrier);
-    assert.equal(barrier.layer, 'object');
-    assert.equal(barrier.smoothing, false);
-    assert.ok(barrier.w <= layout.tileWidth * 0.72);
-    assert.ok(barrier.h <= layout.tileHeight * 0.86);
+    const barriers = commands.filter((command) => command.image === wallBarrier);
+    assert.equal(barriers.length, 6);
+    assert.equal(barriers.every((command) => command.layer === 'object'), true);
+    assert.equal(barriers.every((command) => command.smoothing === false), true);
+    assert.equal(barriers.every((command) => command.vertices.length === 8), true);
+    assert.equal(barriers.every((command) => (
+        command.vertices[5] - command.vertices[3]
+            <= (layout.tileHeight * 0.34) + 0.000001
+        && command.vertices[7] - command.vertices[1]
+            <= (layout.tileHeight * 0.34) + 0.000001
+    )), true);
+
+    const edgeKey = (left, right) => [left, right]
+        .map((point) => point.map((value) => value.toFixed(6)).join(','))
+        .sort()
+        .join('|');
+    const projectedCorners = (x, y) => {
+        const projected = TutorialBattleLayout.projectTileQuad(layout, x, y, 1);
+        return Array.from({ length: 4 }, (_, index) => [
+            projected[index * 2],
+            projected[(index * 2) + 1]
+        ]);
+    };
+    const firstCorners = projectedCorners(4, 4);
+    const secondCorners = projectedCorners(5, 4);
+    const expectedEdges = new Set([
+        edgeKey(firstCorners[0], firstCorners[1]),
+        edgeKey(firstCorners[0], firstCorners[3]),
+        edgeKey(firstCorners[3], firstCorners[2]),
+        edgeKey(secondCorners[0], secondCorners[1]),
+        edgeKey(secondCorners[1], secondCorners[2]),
+        edgeKey(secondCorners[3], secondCorners[2])
+    ]);
+    const actualEdges = new Set(barriers.map((command) => edgeKey(
+        [command.vertices[4], command.vertices[5]],
+        [command.vertices[6], command.vertices[7]]
+    )));
+    assert.deepEqual(actualEdges, expectedEdges);
     assert.equal(commands.some((command) => command.text === '벽'), false);
+});
+
+test('월드 아이템은 절반 크기와 실제 불투명 픽셀 중심, 은은한 후광을 사용한다', () => {
+    const layoutController = createLayout();
+    layoutController.resize(VIEWPORTS[0]);
+    const floor = {
+        ...TUTORIAL_GAME_DATA.FLOORS[0],
+        walls: [],
+        items: [{
+            id: 'item-test', itemId: 'ocarina', x: 4, y: 4,
+            collected: false, identified: true
+        }],
+        eventTiles: [],
+        teleports: [],
+        mobs: []
+    };
+    const layout = layoutController.createFrame({
+        floor,
+        elapsedSeconds: 0,
+        screenShakeSeconds: 0
+    });
+    const itemIcon = { width: 16, height: 16 };
+    const commands = [];
+    const view = new TutorialBattleWorldView({
+        render(layer, command) {
+            commands.push({ layer, ...command });
+        },
+        renderGL(layer, command) {
+            commands.push({ layer, ...command });
+        },
+        measureText(text) {
+            return String(text).length * 8;
+        }
+    }, {
+        getMapArtwork() {
+            return { layers: [] };
+        },
+        getItemIcon(itemId) {
+            return itemId === 'ocarina' ? itemIcon : null;
+        }
+    });
+    view.draw({
+        snapshot: { phase: 'move', floorIndex: 0, player: null, lora: null },
+        floor,
+        layout,
+        fonts: { SMALL: '12px sans-serif', HEADING: '18px sans-serif' },
+        colors: {
+            BoardFrame: '#frame',
+            Entity: { Item: '#item-halo' },
+            Tile: { Item: '#item' },
+            UI: { Text: '#text' }
+        },
+        world: {
+            presentation: { floorIndex: 0, pathProgress: 1 },
+            attackSelected: false,
+            cleanseSelected: false,
+            pathExtensions: [],
+            plannedPath: [],
+            hoveredTile: null,
+            readability: { loraIntent: { ok: false } },
+            floorActors: {},
+            itemMetadata: { ocarina: {} },
+            elapsedSeconds: 0,
+            config: { itemIcon: TUTORIAL_GAME_DATA.SPRITES.ITEM }
+        }
+    });
+
+    const point = TutorialBattleLayout.projectTile(layout, 4, 4);
+    const itemLayout = TUTORIAL_GAME_DATA.SPRITES.ITEM;
+    const halo = commands.find((command) => command.fill === '#item-halo');
+    const icon = commands.find((command) => command.image === itemIcon);
+    const iconSize = layout.tileSide * itemLayout.WORLD_ICON_SIZE_TILE_RATIO;
+    const visualCenter = itemLayout.WORLD_ICON_VISUAL_CENTERS.ocarina;
+    assert.equal(itemLayout.WORLD_ICON_SIZE_TILE_RATIO, 0.64 * 0.5);
+    assert.equal(itemLayout.WORLD_HALO_SIZE_TILE_RATIO, 0.36);
+    assert.equal(halo.alpha, 0.24);
+    assert.equal(halo.w, layout.tileSide * itemLayout.WORLD_HALO_SIZE_TILE_RATIO);
+    assert.equal(halo.h, layout.tileSide * itemLayout.WORLD_HALO_SIZE_TILE_RATIO);
+    assert.deepEqual(
+        { x: icon.x, y: icon.y, w: icon.w, h: icon.h, smoothing: icon.smoothing },
+        {
+            x: Math.round(point.x - (iconSize * visualCenter.x)),
+            y: Math.round(point.y - (iconSize * visualCenter.y)),
+            w: Math.round(iconSize),
+            h: Math.round(iconSize),
+            smoothing: false
+        }
+    );
 });
 
 test('세 화면비에서 HUD 영역은 UI 안에 있고 서로 겹치지 않는다', () => {

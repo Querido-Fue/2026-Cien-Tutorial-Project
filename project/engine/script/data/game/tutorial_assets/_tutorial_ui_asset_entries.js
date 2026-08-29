@@ -284,13 +284,13 @@ export const TUTORIAL_UI_ASSET_ENTRIES = Object.freeze([
     }),
     createUiEntry({
         id: TUTORIAL_UI_ASSET_IDS.wallBarrier,
-        runtimePath: '../asset/tutorial/world/low-spike-barricade.png',
-        sourceName: 'generated/tutorial/world/low-spike-barricade.png',
-        expectedDimensions: { width: 1536, height: 1024 },
-        actualDimensions: { width: 1536, height: 1024 },
-        sourceRect: { x: 14, y: 35, w: 1510, h: 918 },
+        runtimePath: '../asset/tutorial/world/low-spike-wall-segment.png',
+        sourceName: 'generated/tutorial/world/low-spike-wall-segment.png',
+        expectedDimensions: { width: 1991, height: 790 },
+        actualDimensions: { width: 1991, height: 790 },
+        sourceRect: { x: 270, y: 170, w: 1450, h: 450 },
         layer: 'object',
-        usage: '뒤쪽 타일을 가리지 않는 낮은 파괴 가능 가시 울타리'
+        usage: '타일의 네 투영 변을 따라 조립하는 낮은 석조벽·가시 울타리 조각'
     }),
     createUiEntry({
         id: TUTORIAL_UI_ASSET_IDS.dialogueBubble,

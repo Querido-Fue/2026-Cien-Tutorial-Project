@@ -5,6 +5,7 @@ import { TUTORIAL_SPRITE_CLIPS } from '../project/engine/script/data/game/tutori
 import { TutorialSpriteAnimator } from '../project/engine/script/scene/tutorial/_tutorial_sprite_animator.js';
 import { TutorialSpriteClipResolver } from '../project/engine/script/scene/tutorial/_tutorial_sprite_clip_resolver.js';
 import { TutorialSpriteCueRouter } from '../project/engine/script/scene/tutorial/_tutorial_sprite_cue_router.js';
+import { TutorialSpriteRoster } from '../project/engine/script/scene/tutorial/_tutorial_sprite_roster.js';
 import {
     TUTORIAL_AUDIO_CUE_IDS,
     TUTORIAL_PRESENTATION_CUE_TYPES
@@ -15,6 +16,32 @@ function createAnimator() {
         resolver: new TutorialSpriteClipResolver(TUTORIAL_SPRITE_CLIPS)
     });
 }
+
+test('로라는 시작 위치에서 플레이어 시작 지점 쪽 전면을 바라본다', () => {
+    const snapshots = [];
+    const roster = new TutorialSpriteRoster({
+        syncActors(actors) {
+            snapshots.push(actors);
+        }
+    });
+    roster.sync({
+        floor: { mobs: [] },
+        snapshot: {
+            floorIndex: 0,
+            player: { x: 4, y: 4, hp: 100, alive: true },
+            lora: { x: 4, y: 0, hp: 100, alive: true, instability: 70 }
+        },
+        presentation: {
+            floorIndex: 0,
+            playerX: 4,
+            playerY: 4
+        }
+    });
+
+    const lora = snapshots.at(-1).find((actor) => actor.id === 'lora');
+    assert.equal(lora.facing, 'left');
+    assert.notEqual(lora.facing, 'down');
+});
 
 test('걷기 루프는 델타로 진행하고 지정 프레임에서 발걸음을 발생시킨다', () => {
     const animator = createAnimator();

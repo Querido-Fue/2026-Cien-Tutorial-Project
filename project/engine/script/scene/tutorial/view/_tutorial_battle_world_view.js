@@ -5,6 +5,9 @@ import {
 } from './_tutorial_battle_view_helpers.js';
 import { TutorialBattleActorView } from './_tutorial_battle_actor_view.js';
 
+const WALL_FOOTPRINT_SCALE = 1;
+const WALL_HEIGHT_TILE_RATIO = 0.34;
+
 /**
  * @class TutorialBattleWorldView
  * @description 읽기 전용 전투 프레임으로 보드, 범위, 오브젝트와 액터를 그립니다.
@@ -256,8 +259,12 @@ export class TutorialBattleWorldView {
         const player = actorView?.player
             || (presentationMatchesModel ? snapshot.player : null);
         const entries = [];
+        const activeWallKeys = new Set();
         for (const wall of toBattleViewList(floor.walls)) {
-            if (!wall.destroyed) entries.push({ type: 'wall', value: wall });
+            if (!wall.destroyed) {
+                entries.push({ type: 'wall', value: wall });
+                activeWallKeys.add(`${Number(wall.x)}:${Number(wall.y)}`);
+            }
         }
         for (const item of toBattleViewList(floor.items)) {
             if (!item.collected && (!item.hidden || item.identified || item.nearbyHint)) {
@@ -285,7 +292,7 @@ export class TutorialBattleWorldView {
             || Number(left.value.x) - Number(right.value.x)
         ));
         for (const entry of entries) {
-            if (entry.type === 'wall') this.#drawWall(entry.value);
+            if (entry.type === 'wall') this.#drawWall(entry.value, activeWallKeys);
             else if (entry.type === 'item') this.#drawWorldItem(entry.value);
             else if (entry.type === 'event-tile') this.#drawEventTile(entry.value);
             else if (entry.type === 'teleport') this.#drawTeleport(entry.value);
@@ -293,51 +300,75 @@ export class TutorialBattleWorldView {
         }
     }
 
-    /** 파괴 가능한 벽을 그립니다. @param {object} wall - 벽 상태입니다. @private */
-    #drawWall(wall) {
+    /**
+     * 파괴 가능한 벽의 노출된 바깥 변만 그립니다.
+     * @param {object} wall - 벽 상태입니다.
+     * @param {Set<string>} activeWallKeys - 현재 층의 파괴되지 않은 벽 좌표입니다.
+     * @private
+     */
+    #drawWall(wall, activeWallKeys) {
         const { colors, layout } = this.#frame;
-        const point = this.#projectTile(wall.x, wall.y);
         const barrier = this.#assetPort.getUiAsset?.('wallBarrier') || null;
+        const quad = TutorialBattleLayout.projectTileQuad(
+            layout,
+            wall.x,
+            wall.y,
+            WALL_FOOTPRINT_SCALE
+        );
+        const corners = Array.from({ length: 4 }, (_, index) => ({
+            x: quad[index * 2],
+            y: quad[(index * 2) + 1]
+        }));
+        const edges = [
+            { points: [corners[0], corners[1]], neighbor: { x: 0, y: -1 } },
+            { points: [corners[0], corners[3]], neighbor: { x: -1, y: 0 } },
+            { points: [corners[1], corners[2]], neighbor: { x: 1, y: 0 } },
+            { points: [corners[3], corners[2]], neighbor: { x: 0, y: 1 } }
+        ].filter(({ neighbor }) => !activeWallKeys.has(
+            `${Number(wall.x) + neighbor.x}:${Number(wall.y) + neighbor.y}`
+        )).map(({ points }) => points).sort((left, right) => (
+            ((left[0].y + left[1].y) * 0.5)
+            - ((right[0].y + right[1].y) * 0.5)
+        ));
         if (barrier) {
-            const sourceWidth = Number(barrier.naturalWidth || barrier.width) || 1510;
-            const sourceHeight = Number(barrier.naturalHeight || barrier.height) || 918;
-            const aspectRatio = sourceHeight / sourceWidth;
-            let width = layout.tileWidth * 0.72;
-            let height = width * aspectRatio;
-            const maxHeight = layout.tileHeight * 0.86;
-            if (height > maxHeight) {
-                height = maxHeight;
-                width = height / aspectRatio;
+            const height = Math.max(4, layout.tileHeight * WALL_HEIGHT_TILE_RATIO);
+            for (const [first, second] of edges) {
+                const from = first.x <= second.x ? first : second;
+                const to = first.x <= second.x ? second : first;
+                const vertices = [
+                    from.x, from.y - height,
+                    to.x, to.y - height,
+                    to.x, to.y,
+                    from.x, from.y
+                ];
+                const minX = Math.min(from.x, to.x);
+                const minY = Math.min(from.y, to.y) - height;
+                const maxX = Math.max(from.x, to.x);
+                const maxY = Math.max(from.y, to.y);
+                this.#renderPort.renderGL('object', {
+                    image: barrier,
+                    x: Math.round(minX),
+                    y: Math.round(minY),
+                    w: Math.max(1, Math.round(maxX - minX)),
+                    h: Math.max(1, Math.round(maxY - minY)),
+                    vertices,
+                    smoothing: false
+                });
             }
-            this.#renderPort.renderGL('object', {
-                image: barrier,
-                x: Math.round(point.x - (width * 0.5)),
-                y: Math.round(point.y - (height * 0.64)),
-                w: Math.max(1, Math.round(width)),
-                h: Math.max(1, Math.round(height)),
-                smoothing: false
-            });
             return;
         }
 
-        const railWidth = layout.tileWidth * 0.58;
-        const railHeight = Math.max(2, layout.tileHeight * 0.08);
-        this.#renderPort.renderGL('object', {
-            shape: 'rect',
-            x: point.x,
-            y: point.y + (layout.tileHeight * 0.08),
-            w: railWidth,
-            h: railHeight,
-            fill: colors.Entity.Wall
-        });
-        for (const offset of [-0.24, 0, 0.24]) {
+        const fallbackHeight = Math.max(2, layout.tileHeight * 0.14);
+        for (const [first, second] of edges) {
             this.#renderPort.renderGL('object', {
-                shape: 'triangle',
-                x: point.x + (layout.tileWidth * offset),
-                y: point.y - (layout.tileHeight * 0.06),
-                w: layout.tileHeight * 0.22,
-                h: layout.tileHeight * 0.32,
-                fill: colors.Tile.Wall
+                shape: 'rect',
+                vertices: [
+                    first.x, first.y - fallbackHeight,
+                    second.x, second.y - fallbackHeight,
+                    second.x, second.y,
+                    first.x, first.y
+                ],
+                fill: colors.Entity.Wall
             });
         }
     }
@@ -356,15 +387,29 @@ export class TutorialBattleWorldView {
             y: point.y,
             w: layout.tileSide * itemIconLayout.WORLD_HALO_SIZE_TILE_RATIO,
             h: layout.tileSide * itemIconLayout.WORLD_HALO_SIZE_TILE_RATIO,
-            fill: colors.Entity.Item
+            fill: colors.Entity.Item,
+            alpha: Number(itemIconLayout.WORLD_HALO_ALPHA) || 0.24
         });
         if (icon) {
             const iconSize = layout.tileSide * itemIconLayout.WORLD_ICON_SIZE_TILE_RATIO;
+            const configuredCenter = itemIconLayout.WORLD_ICON_VISUAL_CENTERS?.[entry.itemId];
+            const centerX = Math.max(0, Math.min(
+                1,
+                Number.isFinite(Number(configuredCenter?.x))
+                    ? Number(configuredCenter.x)
+                    : 0.5
+            ));
+            const centerY = Math.max(0, Math.min(
+                1,
+                Number.isFinite(Number(configuredCenter?.y))
+                    ? Number(configuredCenter.y)
+                    : 0.5
+            ));
             this.#renderPort.render('texteffect', {
                 shape: 'image',
                 image: icon,
-                x: Math.round(point.x - (iconSize * 0.5)),
-                y: Math.round(point.y - (iconSize * 0.5)),
+                x: Math.round(point.x - (iconSize * centerX)),
+                y: Math.round(point.y - (iconSize * centerY)),
                 w: Math.round(iconSize),
                 h: Math.round(iconSize),
                 smoothing: false
@@ -375,11 +420,19 @@ export class TutorialBattleWorldView {
             shape: 'rect',
             x: point.x,
             y: point.y,
-            w: layout.tileSide * 0.28,
-            h: layout.tileSide * 0.28,
+            w: layout.tileSide * 0.14,
+            h: layout.tileSide * 0.14,
             fill: colors.Tile.Item
         });
-        this.#drawWorldGlyph(glyph, point.x, point.y, colors.UI.Text);
+        this.#drawText(
+            'texteffect',
+            glyph,
+            point.x,
+            point.y,
+            this.#frame.fonts.SMALL,
+            colors.UI.Text,
+            'center'
+        );
     }
 
     /** 이벤트 타일을 그립니다. @param {object} eventTile - 타일 상태입니다. @private */

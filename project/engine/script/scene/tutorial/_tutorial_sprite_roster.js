@@ -1,15 +1,22 @@
-/** @param {object} from @param {object} to @param {string} fallback @returns {string} 목표 방향입니다. */
-function faceToward(from, to, fallback = 'down') {
+/**
+ * 쿼터뷰 격자의 진행축을 실제 전·후면 스프라이트 방향으로 변환합니다.
+ * 양의 X/Y는 화면 아래쪽의 전면, 음의 X/Y는 화면 위쪽의 후면입니다.
+ * @param {object} from - 바라보는 배우 좌표입니다.
+ * @param {object} to - 목표 배우 좌표입니다.
+ * @param {string} fallback - 같은 칸이거나 좌표가 없을 때 방향입니다.
+ * @returns {string} 목표 방향입니다.
+ */
+function faceToward(from, to, fallback = 'left') {
     const dx = Number(to?.x) - Number(from?.x);
     const dy = Number(to?.y) - Number(from?.y);
     if (!Number.isFinite(dx) || !Number.isFinite(dy)) {
         return fallback;
     }
     if (Math.abs(dx) >= Math.abs(dy) && Math.abs(dx) > 0.001) {
-        return dx < 0 ? 'left' : 'right';
+        return dx < 0 ? 'up' : 'right';
     }
     if (Math.abs(dy) > 0.001) {
-        return dy < 0 ? 'up' : 'down';
+        return dy < 0 ? 'down' : 'left';
     }
     return fallback;
 }

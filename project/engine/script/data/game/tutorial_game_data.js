@@ -64,8 +64,22 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
     FEATURES: { CUTSCENES: true },
     SPRITES: {
         ITEM: {
-            WORLD_HALO_SIZE_TILE_RATIO: 0.45,
-            WORLD_ICON_SIZE_TILE_RATIO: 0.64,
+            WORLD_HALO_SIZE_TILE_RATIO: 0.36,
+            WORLD_HALO_ALPHA: 0.24,
+            WORLD_ICON_SIZE_TILE_RATIO: 0.32,
+            WORLD_ICON_VISUAL_CENTERS: {
+                bow: { x: 0.4844, y: 0.5312 },
+                'mascot-costume': { x: 0.5, y: 0.463 },
+                'old-teddy': { x: 0.4375, y: 0.4988 },
+                'music-box': { x: 0.5601, y: 0.5448 },
+                eyeliner: { x: 0.5699, y: 0.568 },
+                'diamond-pickaxe': { x: 0.5312, y: 0.4688 },
+                mirror: { x: 0.5436, y: 0.4564 },
+                mushroom: { x: 0.5, y: 0.5018 },
+                ocarina: { x: 0.4314, y: 0.4748 },
+                haste: { x: 0.5031, y: 0.4908 },
+                'memory-photo': { x: 0.5, y: 0.5625 }
+            },
             BUTTON_ICON_SIZE_RATIO: 0.66,
             BUTTON_ICON_GAP_UIWW: 0.25
         },
