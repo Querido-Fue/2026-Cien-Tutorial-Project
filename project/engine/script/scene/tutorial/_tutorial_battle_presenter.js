@@ -2,6 +2,7 @@ import {
     TUTORIAL_AUDIO_CUE_IDS as AUDIO_IDS,
     TUTORIAL_PRESENTATION_CUE_TYPES as CUE_TYPES
 } from './_tutorial_presentation_contract.js';
+import { resolveLoraFrontFacing } from './_tutorial_lora_facing_policy.js';
 
 /** @param {*} value @returns {object[]} 안전한 이벤트 배열입니다. */
 function toEventList(value) {
@@ -292,7 +293,7 @@ export class TutorialBattlePresenter {
                     ? 'area'
                     : event.action === 'idle' ? 'idle' : 'melee',
                 actorId: 'lora',
-                facing: getCueFacing(previous.lora, previous.player),
+                facing: resolveLoraFrontFacing(previous.lora, previous.player),
                 sourceEventType: event.type
             }));
             if (event.action !== 'idle') {
@@ -430,7 +431,9 @@ export class TutorialBattlePresenter {
                 actorId: 'player',
                 animationId: weapon === 'bow' ? 'ranged' : 'melee',
                 facing: getCueFacing(previous.player, target, 'right'),
-                targetFacing: getCueFacing(target, previous.player, 'left'),
+                targetFacing: targetActorId === 'lora'
+                    ? resolveLoraFrontFacing(target, previous.player)
+                    : getCueFacing(target, previous.player, 'left'),
                 startSource: true
             };
         }
@@ -442,7 +445,7 @@ export class TutorialBattlePresenter {
             return {
                 actorId: 'lora',
                 animationId,
-                facing: getCueFacing(previous.lora, previous.player),
+                facing: resolveLoraFrontFacing(previous.lora, previous.player),
                 targetFacing: getCueFacing(previous.player, previous.lora),
                 startSource: false
             };

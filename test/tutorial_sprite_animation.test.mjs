@@ -17,30 +17,38 @@ function createAnimator() {
     });
 }
 
-test('로라는 시작 위치에서 플레이어 시작 지점 쪽 전면을 바라본다', () => {
+test('로라는 플레이어 위치를 따라 전면 좌우 방향만 선택한다', () => {
     const snapshots = [];
     const roster = new TutorialSpriteRoster({
         syncActors(actors) {
             snapshots.push(actors);
         }
     });
-    roster.sync({
-        floor: { mobs: [] },
-        snapshot: {
-            floorIndex: 0,
-            player: { x: 4, y: 4, hp: 100, alive: true },
-            lora: { x: 4, y: 0, hp: 100, alive: true, instability: 70 }
-        },
-        presentation: {
-            floorIndex: 0,
-            playerX: 4,
-            playerY: 4
-        }
-    });
+    const cases = [
+        { player: { x: 4, y: 4 }, lora: { x: 4, y: 0 }, expected: 'left' },
+        { player: { x: 4, y: 0 }, lora: { x: 4, y: 4 }, expected: 'right' },
+        { player: { x: 2, y: 4 }, lora: { x: 4, y: 4 }, expected: 'left' },
+        { player: { x: 6, y: 4 }, lora: { x: 4, y: 4 }, expected: 'right' }
+    ];
+    for (const entry of cases) {
+        roster.sync({
+            floor: { mobs: [] },
+            snapshot: {
+                floorIndex: 0,
+                player: { ...entry.player, hp: 100, alive: true },
+                lora: { ...entry.lora, hp: 100, alive: true, instability: 70 }
+            },
+            presentation: {
+                floorIndex: 0,
+                playerX: entry.player.x,
+                playerY: entry.player.y
+            }
+        });
 
-    const lora = snapshots.at(-1).find((actor) => actor.id === 'lora');
-    assert.equal(lora.facing, 'left');
-    assert.notEqual(lora.facing, 'down');
+        const lora = snapshots.at(-1).find((actor) => actor.id === 'lora');
+        assert.equal(lora.facing, entry.expected);
+        assert.equal(['left', 'right'].includes(lora.facing), true);
+    }
 });
 
 test('걷기 루프는 델타로 진행하고 지정 프레임에서 발걸음을 발생시킨다', () => {

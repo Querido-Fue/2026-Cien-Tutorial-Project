@@ -18,10 +18,15 @@ import {
 function createSnapshot(values = {}) {
     return {
         floorIndex: values.floorIndex ?? 0,
-        player: { x: 4, y: 4, hp: values.playerHp ?? 100, maxHp: 100 },
+        player: {
+            x: values.playerX ?? 4,
+            y: values.playerY ?? 4,
+            hp: values.playerHp ?? 100,
+            maxHp: 100
+        },
         lora: {
-            x: 4,
-            y: 0,
+            x: values.loraX ?? 4,
+            y: values.loraY ?? 0,
             hp: values.loraHp ?? 100,
             maxHp: 100,
             instability: values.instability ?? 70
@@ -234,6 +239,58 @@ test('플레이어·로라 공격 cue는 피해 대상 연출에 impact 동기�
         && cue.impactActorId === 'lora'
         && cue.impactAnimationId === 'area'
     )));
+});
+
+test('로라의 대기·공격·피격 cue는 플레이어가 뒤쪽에 있어도 전면 방향을 유지한다', () => {
+    const presenter = new TutorialBattlePresenter({
+        items: TUTORIAL_GAME_DATA.ITEMS,
+        animation: TUTORIAL_GAME_DATA.ANIMATION
+    });
+    const previous = createSnapshot({
+        playerX: 4,
+        playerY: 0,
+        loraX: 4,
+        loraY: 4
+    });
+    const loraAttackCues = presenter.createCues({
+        previousSnapshot: previous,
+        nextSnapshot: previous,
+        events: [{ type: 'lora-attack', action: 'melee', damage: 20 }]
+    });
+    const loraAttack = loraAttackCues.find((cue) => (
+        cue.actorId === 'lora' && cue.animationId === 'melee'
+    ));
+    assert.equal(loraAttack.facing, 'right');
+
+    const loraIdleCues = presenter.createCues({
+        previousSnapshot: previous,
+        nextSnapshot: previous,
+        events: [{ type: 'lora-attack', action: 'idle', damage: 0 }]
+    });
+    const loraIdle = loraIdleCues.find((cue) => (
+        cue.actorId === 'lora' && cue.animationId === 'idle'
+    ));
+    assert.equal(loraIdle.facing, 'right');
+
+    const loraHitCues = presenter.createCues({
+        previousSnapshot: previous,
+        nextSnapshot: createSnapshot({
+            playerX: 4,
+            playerY: 0,
+            loraX: 4,
+            loraY: 4,
+            loraHp: 80
+        }),
+        events: [{
+            type: 'lora-damaged', damage: 20, hp: 80,
+            weapon: 'melee', source: 'player-attack'
+        }]
+    });
+    const loraHit = loraHitCues.find((cue) => (
+        cue.actorId === 'lora' && cue.animationId === 'hit'
+    ));
+    assert.equal(loraHit.facing, 'right');
+    assert.equal(['left', 'right'].includes(loraHit.facing), true);
 });
 
 test('피드백 큐는 지연 cue를 impact 시점 전에는 노출하지 않는다', () => {
