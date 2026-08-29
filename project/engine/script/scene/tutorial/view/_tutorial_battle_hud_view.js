@@ -52,6 +52,18 @@ const LORA_STATUS_PANEL_LAYOUT = Object.freeze({
     INSTABILITY_BAR: Object.freeze({ X: 51, Y: 70, WIDTH: 149, HEIGHT: 4 })
 });
 
+const ITEM_DESCRIPTION_PANEL_LAYOUT = Object.freeze({
+    SOURCE: Object.freeze({ WIDTH: 86, HEIGHT: 128 }),
+    TITLE: Object.freeze({ X: 10, Y: 2, WIDTH: 66, HEIGHT: 10 }),
+    STATUS: Object.freeze({ X: 10, Y: 16, WIDTH: 66, HEIGHT: 10 }),
+    DESCRIPTION: Object.freeze({ X: 10, Y: 29, WIDTH: 66, HEIGHT: 64 }),
+    PAGE: Object.freeze({ X: 22, Y: 94, WIDTH: 42, HEIGHT: 8 }),
+    MAX_DESCRIPTION_LINES: 5,
+    LINE_HEIGHT_WH: 2.1,
+    MIN_LINE_HEIGHT_PX: 14,
+    MAX_LINE_HEIGHT_PX: 17
+});
+
 /**
  * @class TutorialBattleHudView
  * @description 전투 HUD 렌더와 동일 좌표의 직렬화 가능한 버튼 사양을 제공합니다.
@@ -416,7 +428,7 @@ export class TutorialBattleHudView {
         );
     }
 
-    /** 인벤토리 공통 카드와 페이지 정보를 그립니다. @private */
+    /** 픽셀 설명 패널의 실제 내부 안전 영역에 아이템 정보를 그립니다. @private */
     #drawInventoryCard() {
         const { colors, fonts, hud, layout } = this.#frame;
         const rect = layout.hudRects.INVENTORY_CARD;
@@ -424,10 +436,42 @@ export class TutorialBattleHudView {
         if (!inspectedItem) {
             return;
         }
-        const pad = Math.max(8, rect.w * 0.075);
-        const lineH = clampBattleViewNumber(this.#uwh(2.4), 19, 23);
-        const maxW = rect.w - (pad * 2);
-        this.#drawHudCard(rect, 'itemPanel', 0.88);
+        const panelImage = this.#assetPort.getUiAsset?.('itemPanel');
+        const panelRect = this.#resolveSourcePanelRect(
+            rect,
+            ITEM_DESCRIPTION_PANEL_LAYOUT.SOURCE,
+            panelImage
+        );
+        drawTutorialPixelAsset(this.#renderPort, {
+            layer: 'ui',
+            image: panelImage,
+            rect: panelRect,
+            mode: 'exact',
+            alpha: 1
+        });
+        const titleRect = this.#resolveSourcePanelPart(
+            panelRect,
+            ITEM_DESCRIPTION_PANEL_LAYOUT.TITLE,
+            ITEM_DESCRIPTION_PANEL_LAYOUT.SOURCE
+        );
+        const statusRect = this.#resolveSourcePanelPart(
+            panelRect,
+            ITEM_DESCRIPTION_PANEL_LAYOUT.STATUS,
+            ITEM_DESCRIPTION_PANEL_LAYOUT.SOURCE
+        );
+        const descriptionRect = this.#resolveSourcePanelPart(
+            panelRect,
+            ITEM_DESCRIPTION_PANEL_LAYOUT.DESCRIPTION,
+            ITEM_DESCRIPTION_PANEL_LAYOUT.SOURCE
+        );
+        const pageRect = this.#resolveSourcePanelPart(
+            panelRect,
+            ITEM_DESCRIPTION_PANEL_LAYOUT.PAGE,
+            ITEM_DESCRIPTION_PANEL_LAYOUT.SOURCE
+        );
+        if (!titleRect || !statusRect || !descriptionRect || !pageRect) {
+            return;
+        }
         this.#drawText(
             'ui',
             truncateBattleViewText(
@@ -435,36 +479,54 @@ export class TutorialBattleHudView {
                 String(inspectedItem.label || 'ITEM') + ' ×'
                     + String(inspectedItem.count || 0),
                 fonts.SMALL,
-                maxW
+                titleRect.w
             ),
-            rect.x + pad,
-            rect.y + pad,
+            titleRect.x,
+            titleRect.y + (titleRect.h * 0.5),
             fonts.SMALL,
             colors.UI.Text
         );
         this.#drawText(
-            'ui', String(inspectedItem.statusLabel || ''), rect.x + pad,
-            rect.y + pad + (lineH * 1.25), fonts.SMALL, colors.UI.Accent
+            'ui',
+            truncateBattleViewText(
+                this.#renderPort,
+                String(inspectedItem.statusLabel || ''),
+                fonts.SMALL,
+                statusRect.w
+            ),
+            statusRect.x,
+            statusRect.y + (statusRect.h * 0.5),
+            fonts.SMALL,
+            colors.UI.Accent
         );
         const lines = wrapBattleViewText(
             this.#renderPort,
             String(inspectedItem.description || ''),
             fonts.SMALL,
-            maxW,
-            4
+            descriptionRect.w,
+            ITEM_DESCRIPTION_PANEL_LAYOUT.MAX_DESCRIPTION_LINES
+        );
+        const lineHeight = Math.min(
+            clampBattleViewNumber(
+                this.#uwh(ITEM_DESCRIPTION_PANEL_LAYOUT.LINE_HEIGHT_WH),
+                ITEM_DESCRIPTION_PANEL_LAYOUT.MIN_LINE_HEIGHT_PX,
+                ITEM_DESCRIPTION_PANEL_LAYOUT.MAX_LINE_HEIGHT_PX
+            ),
+            descriptionRect.h / ITEM_DESCRIPTION_PANEL_LAYOUT.MAX_DESCRIPTION_LINES
         );
         lines.forEach((line, index) => {
             this.#drawText(
-                'ui', line, rect.x + pad,
-                rect.y + pad + (lineH * (2.45 + index)),
+                'ui', line, descriptionRect.x,
+                descriptionRect.y + (lineHeight * (index + 0.5)),
                 fonts.SMALL, colors.UI.Text
             );
         });
         this.#drawText(
             'ui', String(hud.inventory.page + 1) + '/'
                 + String(hud.inventory.pageCount),
-            rect.x + rect.w - pad, rect.y + rect.h - pad,
-            fonts.SMALL, colors.UI.Muted, 'right'
+            pageRect.x + (pageRect.w * 0.5),
+            pageRect.y + (pageRect.h * 0.5),
+            fonts.SMALL, colors.UI.Muted, 'center'
         );
     }
 
@@ -923,31 +985,6 @@ export class TutorialBattleHudView {
             WIDTH: slot.WIDTH,
             HEIGHT: slot.HEIGHT
         }, inventoryLayout);
-    }
-
-    /** 그림자와 테두리가 있는 HUD 카드를 그립니다. @private */
-    #drawHudCard(rect, assetKey = null, assetAlpha = 1) {
-        const colors = this.#frame.colors;
-        const radius = this.#uwh(1.1);
-        this.#renderPort.render('ui', {
-            shape: 'roundRect',
-            x: rect.x + 2, y: rect.y + 3, w: rect.w, h: rect.h,
-            radius, fill: colors.UI.CardShadow
-        });
-        this.#renderPort.render('ui', {
-            shape: 'roundRect',
-            x: rect.x, y: rect.y, w: rect.w, h: rect.h,
-            radius, fill: colors.UI.Card,
-            stroke: colors.UI.Border, lineWidth: 1
-        });
-        if (assetKey) {
-            drawTutorialPixelAsset(this.#renderPort, {
-                layer: 'ui',
-                image: this.#assetPort.getUiAsset?.(assetKey),
-                rect,
-                alpha: assetAlpha
-            });
-        }
     }
 
     /**

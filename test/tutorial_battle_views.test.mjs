@@ -709,8 +709,10 @@ test('우하단 행동 메뉴는 원본 다이아 프레임 하나와 상단 회
     )), false);
 });
 
-test('로라와 플레이어 상태는 원본 패널의 초상·슬롯·게이지에 맞춰진다', () => {
+test('로라·플레이어 상태와 아이템 설명은 원본 패널 내부에 맞춰진다', () => {
     const commands = [];
+    const wrapRequests = [];
+    const descriptionLines = ['받는 피해를', '줄여줍니다.'];
     const assets = {
         turnFrame: { naturalWidth: 177, naturalHeight: 29 },
         turnBefore: { naturalWidth: 15, naturalHeight: 15 },
@@ -721,7 +723,8 @@ test('로라와 플레이어 상태는 원본 패널의 초상·슬롯·게이�
         loraHpBar: { naturalWidth: 80, naturalHeight: 4 },
         loraGaugeBar: { naturalWidth: 80, naturalHeight: 4 },
         playerPanel: { naturalWidth: 232, naturalHeight: 78 },
-        playerItemSelected: { naturalWidth: 32, naturalHeight: 32 }
+        playerItemSelected: { naturalWidth: 32, naturalHeight: 32 },
+        itemPanel: { naturalWidth: 86, naturalHeight: 128 }
     };
     const renderPort = {
         render(layer, command) {
@@ -730,8 +733,9 @@ test('로라와 플레이어 상태는 원본 패널의 초상·슬롯·게이�
         measureText(text) {
             return String(text).length * 8;
         },
-        wrapText(text) {
-            return [String(text)];
+        wrapText(text, font, maxWidth, maxLines) {
+            wrapRequests.push({ text, font, maxWidth, maxLines });
+            return descriptionLines;
         }
     };
     const inventoryItemIds = [
@@ -785,7 +789,15 @@ test('로라와 플레이어 상태는 원본 패널의 초상·슬롯·게이�
             focusedControlKey: 'item-item-0',
             movePreview: { ok: true, stepsUsed: 0 },
             instabilityState: { label: '불안정' },
-            readability: { playerPreview: null, inspectedItem: null },
+            readability: {
+                playerPreview: null,
+                inspectedItem: {
+                    label: '인형탈',
+                    count: 1,
+                    statusLabel: '사용 가능',
+                    description: '받는 피해를 줄여줍니다.'
+                }
+            },
             controls: {
                 ready: true,
                 actionReady: false,
@@ -845,6 +857,7 @@ test('로라와 플레이어 상태는 원본 패널의 초상·슬롯·게이�
     const occupiedSlots = commands.filter(
         (command) => command.image === assets.playerItemSelected
     );
+    const itemPanel = commands.find((command) => command.image === assets.itemPanel);
     const playerGauge = commands.find(
         (command) => command.fill === '#hp' && command.x === 123 && command.y === 650
     );
@@ -906,6 +919,50 @@ test('로라와 플레이어 상태는 원본 패널의 초상·슬롯·게이�
             assets.turnPassed
         ].includes(command.image)),
         false
+    );
+    assert.deepEqual(
+        {
+            x: itemPanel.x,
+            y: itemPanel.y,
+            w: itemPanel.w,
+            h: itemPanel.h,
+            alpha: itemPanel.alpha,
+            smoothing: itemPanel.smoothing
+        },
+        { x: 62, y: 428, w: 103, h: 153, alpha: 1, smoothing: false }
+    );
+    const inventoryRect = layout.hudRects.INVENTORY_CARD;
+    assert.equal(
+        commands.some((command) => command.shape === 'roundRect'
+            && command.w === inventoryRect.w && command.h === inventoryRect.h),
+        false
+    );
+    assert.deepEqual(wrapRequests, [{
+        text: '받는 피해를 줄여줍니다.',
+        font: '12px sans-serif',
+        maxWidth: 79,
+        maxLines: 5
+    }]);
+    const safeTextRight = 74 + 79;
+    const itemText = commands.filter((command) => [
+        '인형탈 ×1',
+        '사용 가능',
+        ...descriptionLines,
+        '1/1'
+    ].includes(command.text));
+    assert.equal(itemText.length, 5);
+    itemText.filter((command) => command.align === 'left').forEach((command) => {
+        assert.equal(command.x, 74);
+        assert.equal(
+            command.x + renderPort.measureText(command.text, command.font)
+                <= safeTextRight,
+            true
+        );
+    });
+    const pageText = itemText.find((command) => command.text === '1/1');
+    assert.deepEqual(
+        { x: pageText.x, y: pageText.y, align: pageText.align },
+        { x: 113, y: 545, align: 'center' }
     );
     assert.deepEqual(
         { x: playerPanel.x, y: playerPanel.y, w: playerPanel.w, h: playerPanel.h },
