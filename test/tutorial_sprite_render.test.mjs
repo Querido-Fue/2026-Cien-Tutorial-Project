@@ -4,6 +4,21 @@ import test from 'node:test';
 import { resolveImageTextureCoordinates } from '../project/engine/script/display/webgl/_image_texture_coordinates.js';
 import { TutorialBattleActorView } from '../project/engine/script/scene/tutorial/view/_tutorial_battle_actor_view.js';
 
+const SHADOW_PROJECTION = Object.freeze({
+    GRID_AXIS_X_WEIGHT: 1,
+    GRID_AXIS_Y_WEIGHT: 0,
+    LENGTH_SPRITE_HEIGHT_RATIO: 1.18,
+    NEAR_WIDTH_SPRITE_RATIO: 0.72,
+    FAR_WIDTH_SPRITE_RATIO: 0.98,
+    BAND_COUNT: 4,
+    NEAR_ALPHA: 1,
+    FAR_ALPHA: 0.52,
+    CONTACT_WIDTH_SIZE_RATIO: 0.42,
+    CONTACT_HEIGHT_SIZE_RATIO: 0.12,
+    CONTACT_OFFSET_SIZE_RATIO: 0.03,
+    CONTACT_ALPHA: 0.92
+});
+
 test('sourceRect와 축 반전은 이미지 크기에 맞는 WebGL UV로 변환된다', () => {
     const image = { width: 256, height: 256 };
     assert.deepEqual(resolveImageTextureCoordinates(
@@ -55,6 +70,8 @@ test('배우 뷰는 정수 좌표·nearest·발 앵커를 유지하며 다중 �
         layout: {
             isoOriginX: 100,
             isoOriginY: 100,
+            gridAxisX: { x: 32, y: 16 },
+            gridAxisY: { x: -32, y: 16 },
             tileWidth: 64,
             tileHeight: 32,
             tileElevation: 0,
@@ -68,12 +85,20 @@ test('배우 뷰는 정수 좌표·nearest·발 앵커를 유지하며 다중 �
                 playerScale: 1, playerHp: 100, actionPulse: 0
             },
             spriteAnimations: { player: animation },
-            config: { actionPlayerScale: 0.04, shadowOffsetRatio: 0.08 },
+            config: {
+                actionPlayerScale: 0.04,
+                shadowProjection: SHADOW_PROJECTION
+            },
             readability: {}
         }
     };
     view.draw('player', { hp: 100, maxHp: 100 }, frame);
-    const images = commands.filter((command) => command.image === image);
+    const images = commands.filter(
+        (command) => command.image === image && !command.vertices
+    );
+    const projectedShadows = commands.filter(
+        (command) => command.image === image && Array.isArray(command.vertices)
+    );
     assert.equal(images.length, 2);
     assert.deepEqual(images.map(({ sourceRect }) => sourceRect), animation.layers);
     assert.equal(images.every(({ smoothing }) => smoothing === false), true);
@@ -83,6 +108,51 @@ test('배우 뷰는 정수 좌표·nearest·발 앵커를 유지하며 다중 �
         [{ x: 80, y: 65, w: 40, h: 40 }, { x: 80, y: 65, w: 40, h: 40 }]
     );
     assert.ok(Math.abs((images[0].y + (images[0].h * animation.anchor.y)) - 100) <= 1);
+    assert.equal(projectedShadows.length, animation.layers.length * 4);
+    assert.equal(
+        projectedShadows.every((command) => (
+            command.fill === '#000'
+            && command.smoothing === false
+            && command.vertices.length === 8
+            && command.vertices.every(Number.isInteger)
+        )),
+        true
+    );
+    const firstLayerShadows = projectedShadows.filter(
+        (command) => command.sourceRect.y < animation.layers[1].y
+    );
+    assert.deepEqual(
+        firstLayerShadows.map((command) => command.sourceRect.h),
+        [16, 16, 16, 16]
+    );
+    assert.equal(
+        firstLayerShadows.every((command, index, list) => (
+            index === 0 || command.alpha > list[index - 1].alpha
+        )),
+        true,
+        '그림자는 발밑에 가까울수록 진해져야 합니다.'
+    );
+    const farEdge = firstLayerShadows[0].vertices;
+    const nearEdge = firstLayerShadows.at(-1).vertices;
+    const farCenter = {
+        x: (farEdge[0] + farEdge[2]) * 0.5,
+        y: (farEdge[1] + farEdge[3]) * 0.5
+    };
+    const nearCenter = {
+        x: (nearEdge[4] + nearEdge[6]) * 0.5,
+        y: (nearEdge[5] + nearEdge[7]) * 0.5
+    };
+    assert.ok(farCenter.x > nearCenter.x && farCenter.y > nearCenter.y);
+    assert.ok(commands.some((command) => (
+        command.shape === 'circle'
+        && command.fill === '#000'
+        && Array.isArray(command.vertices)
+    )), '발 위치에는 작은 접지 그림자가 있어야 합니다.');
+    assert.equal(commands.some((command) => (
+        command.shape === 'circle'
+        && command.fill === '#000'
+        && !command.vertices
+    )), false, '기존의 큰 축 정렬 타원 그림자는 남지 않아야 합니다.');
     const hpBar = commands.find(
         (command) => command.shape === 'rect' && command.fill === '#000'
     );
@@ -164,6 +234,8 @@ test('월드 HP 바는 캐릭터별 스프라이트 크기와 발 앵커에 맞�
             layout: {
                 isoOriginX: 100,
                 isoOriginY: 100,
+                gridAxisX: { x: 32, y: 16 },
+                gridAxisY: { x: -32, y: 16 },
                 tileWidth: 64,
                 tileHeight: 32,
                 tileElevation: 0,
@@ -182,7 +254,7 @@ test('월드 HP 바는 캐릭터별 스프라이트 크기와 발 앵커에 맞�
                 config: {
                     actionPlayerScale: 0.04,
                     actionLoraScale: 0.04,
-                    shadowOffsetRatio: 0.08,
+                    shadowProjection: SHADOW_PROJECTION,
                     loraSprite: {
                         BASE_SIZE_TILE_RATIO: 0.8,
                         FLASH_GLOW_SIZE_RATIO: 1.12,
@@ -194,7 +266,9 @@ test('월드 HP 바는 캐릭터별 스프라이트 크기와 발 앵커에 맞�
         };
 
         view.draw(actorCase.type, actorCase.actor, frame);
-        const sprite = commands.find((command) => command.image === image);
+        const sprite = commands.find(
+            (command) => command.image === image && !command.vertices
+        );
         const hpBar = commands.find(
             (command) => command.shape === 'rect' && command.fill === '#hp-empty'
         );

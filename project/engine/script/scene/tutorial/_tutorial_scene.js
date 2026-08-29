@@ -2524,7 +2524,7 @@ export class TutorialScene extends BaseScene {
                 config: Object.freeze({
                     attackRange: this.data.ACTORS.PLAYER.ATTACK_RANGE,
                     pathMarkerRatio: this.data.LAYOUT.BOARD.PATH_MARKER_RATIO,
-                    shadowOffsetRatio: this.data.LAYOUT.BOARD.SHADOW_OFFSET_RATIO,
+                    shadowProjection: this.data.LAYOUT.BOARD.SHADOW_PROJECTION,
                     selectionMinScale: this.data.ANIMATION.SELECTION_MIN_SCALE,
                     actionPlayerScale: this.data.ANIMATION.ACTION_PLAYER_SCALE,
                     actionLoraScale: this.data.ANIMATION.ACTION_LORA_SCALE,

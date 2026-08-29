@@ -58,7 +58,7 @@ export class TutorialBattleActorView {
             size,
             frame
         );
-        this.#drawShadow(point, size, alpha, frame);
+        this.#drawShadow(point, animation, actionScale, size, alpha, frame);
         const spriteDrawn = this.#drawSprite(point, animation, actionScale, alpha, frame);
         if (!spriteDrawn) {
             this.#renderPort.renderGL('object', {
@@ -109,7 +109,7 @@ export class TutorialBattleActorView {
         if (animation?.visible === false) {
             return;
         }
-        this.#drawShadow(point, size, alive ? 1 : 0.5, frame);
+        this.#drawShadow(point, animation, actionScale, size, alive ? 1 : 0.5, frame);
         if (world.feedback.flashSeconds > 0) {
             this.#renderPort.renderGL('object', {
                 shape: 'circle',
@@ -183,7 +183,7 @@ export class TutorialBattleActorView {
             size,
             frame
         );
-        this.#drawShadow(point, size, 1, frame);
+        this.#drawShadow(point, animation, 1, size, 1, frame);
         const spriteDrawn = this.#drawSprite(point, animation, 1, 1, frame);
         if (!spriteDrawn) {
             this.#renderPort.renderGL('object', {
@@ -323,18 +323,327 @@ export class TutorialBattleActorView {
         return 1;
     }
 
-    /** @param {{x:number,y:number}} point @param {number} size @param {number} alpha @param {object} frame @private */
-    #drawShadow(point, size, alpha, frame) {
-        const offset = Number(frame.world.config.shadowOffsetRatio) || 0.08;
+    /**
+     * 현재 스프라이트 알파를 실제 바닥 축에 눕혀 광원 투영형 그림자로 그립니다.
+     * @param {{x:number,y:number}} point - 배우의 발 위치입니다.
+     * @param {object|null} animation - 현재 스프라이트 애니메이션입니다.
+     * @param {number} baseScale - 배우 행동 스케일입니다.
+     * @param {number} size - 도형 폴백 기준 크기입니다.
+     * @param {number} alpha - 배우 표시 알파입니다.
+     * @param {object} frame - 같은 프레임의 BattleViewModel입니다.
+     * @private
+     */
+    #drawShadow(point, animation, baseScale, size, alpha, frame) {
+        const config = frame.world.config.shadowProjection || {};
+        const axes = this.#resolveShadowProjectionAxes(frame.layout, config);
+        const actorAlpha = clampBattleViewNumber(alpha, 0, 1);
+        const geometry = this.#resolveSpriteGeometry(point, animation, baseScale, frame);
+        const image = animation?.assetId
+            ? this.#assetPort.getImage?.(animation.assetId) || null
+            : null;
+        const layers = Array.isArray(animation?.layers) ? animation.layers : [];
+
+        if (geometry && image && layers.length > 0) {
+            this.#drawSpriteProjectionShadow({
+                point,
+                animation,
+                geometry,
+                image,
+                layers,
+                axes,
+                config,
+                alpha: actorAlpha,
+                frame
+            });
+        } else {
+            this.#drawFallbackProjectionShadow(
+                point,
+                size,
+                axes,
+                config,
+                actorAlpha,
+                frame
+            );
+        }
+        this.#drawContactShadow(point, size, axes, config, actorAlpha, frame);
+    }
+
+    /**
+     * 스프라이트를 세로 밴드로 나눠 발밑에서 먼 끝으로 갈수록 옅어지는 그림자를 그립니다.
+     * @param {object} options - 투영 입력입니다.
+     * @private
+     */
+    #drawSpriteProjectionShadow({
+        point,
+        animation,
+        geometry,
+        image,
+        layers,
+        axes,
+        config,
+        alpha,
+        frame
+    }) {
+        const bandCount = Math.round(clampBattleViewNumber(
+            Number(config.BAND_COUNT) || 4,
+            1,
+            8
+        ));
+        const farAlpha = clampBattleViewNumber(
+            Number(config.FAR_ALPHA) || 0.32,
+            0,
+            1
+        );
+        const nearAlpha = clampBattleViewNumber(
+            Number(config.NEAR_ALPHA) || 0.9,
+            0,
+            1
+        );
+        const effectAlpha = this.#getFallbackEffectAlpha(animation);
+
+        for (let bandIndex = 0; bandIndex < bandCount; bandIndex++) {
+            const startRatio = bandIndex / bandCount;
+            const endRatio = (bandIndex + 1) / bandCount;
+            const midpoint = (startRatio + endRatio) * 0.5;
+            const bandAlpha = farAlpha + ((nearAlpha - farAlpha) * midpoint);
+            const vertices = this.#createShadowBandVertices(
+                point,
+                geometry,
+                animation,
+                axes,
+                config,
+                startRatio,
+                endRatio
+            );
+            for (const layer of layers) {
+                const sourceRect = this.#sliceShadowSourceRect(
+                    layer,
+                    startRatio,
+                    endRatio
+                );
+                if (!sourceRect) {
+                    continue;
+                }
+                this.#renderPort.renderGL('object', {
+                    image,
+                    sourceRect,
+                    flipX: animation.flipX === true,
+                    vertices,
+                    fill: frame.colors.Entity.Shadow,
+                    alpha: alpha * effectAlpha * bandAlpha,
+                    smoothing: false
+                });
+            }
+        }
+    }
+
+    /**
+     * 스프라이트가 준비되지 않았을 때도 같은 광원 방향의 완만한 투영을 유지합니다.
+     * @private
+     */
+    #drawFallbackProjectionShadow(point, size, axes, config, alpha, frame) {
+        const geometry = {
+            width: size * 0.72,
+            height: size,
+            anchorX: 0.5,
+            anchorY: 0.78
+        };
+        const vertices = this.#createShadowBandVertices(
+            point,
+            geometry,
+            geometry,
+            axes,
+            config,
+            0,
+            1
+        );
+        const farAlpha = clampBattleViewNumber(
+            Number(config.FAR_ALPHA) || 0.32,
+            0,
+            1
+        );
+        const nearAlpha = clampBattleViewNumber(
+            Number(config.NEAR_ALPHA) || 0.9,
+            0,
+            1
+        );
         this.#renderPort.renderGL('object', {
             shape: 'circle',
-            x: point.x,
-            y: point.y + (size * offset),
-            w: size,
-            h: size * 0.36,
+            vertices,
             fill: frame.colors.Entity.Shadow,
-            alpha
+            alpha: alpha * ((farAlpha + nearAlpha) * 0.5)
         });
+    }
+
+    /** 실제 발 위치에는 작고 진한 접지 그림자만 남깁니다. @private */
+    #drawContactShadow(point, size, axes, config, alpha, frame) {
+        const width = size * (
+            Number(config.CONTACT_WIDTH_SIZE_RATIO) || 0.42
+        );
+        const height = size * (
+            Number(config.CONTACT_HEIGHT_SIZE_RATIO) || 0.12
+        );
+        const offset = size * (
+            Number(config.CONTACT_OFFSET_SIZE_RATIO) || 0.03
+        );
+        const center = {
+            x: point.x + (axes.direction.x * offset),
+            y: point.y + (axes.direction.y * offset)
+        };
+        const halfWidth = width * 0.5;
+        const halfHeight = height * 0.5;
+        const vertices = [
+            center.x - (axes.cross.x * halfWidth) - (axes.direction.x * halfHeight),
+            center.y - (axes.cross.y * halfWidth) - (axes.direction.y * halfHeight),
+            center.x + (axes.cross.x * halfWidth) - (axes.direction.x * halfHeight),
+            center.y + (axes.cross.y * halfWidth) - (axes.direction.y * halfHeight),
+            center.x + (axes.cross.x * halfWidth) + (axes.direction.x * halfHeight),
+            center.y + (axes.cross.y * halfWidth) + (axes.direction.y * halfHeight),
+            center.x - (axes.cross.x * halfWidth) + (axes.direction.x * halfHeight),
+            center.y - (axes.cross.y * halfWidth) + (axes.direction.y * halfHeight)
+        ].map(Math.round);
+        this.#renderPort.renderGL('object', {
+            shape: 'circle',
+            vertices,
+            fill: frame.colors.Entity.Shadow,
+            alpha: alpha * clampBattleViewNumber(
+                Number(config.CONTACT_ALPHA) || 0.78,
+                0,
+                1
+            )
+        });
+    }
+
+    /**
+     * 이미지 세로 구간 하나를 바닥 평면의 사다리꼴 네 꼭짓점으로 변환합니다.
+     * @private
+     */
+    #createShadowBandVertices(
+        point,
+        geometry,
+        animation,
+        axes,
+        config,
+        startRatio,
+        endRatio
+    ) {
+        const anchorX = clampBattleViewNumber(
+            animation.anchor?.x ?? animation.anchorX,
+            0,
+            1
+        );
+        const anchorY = clampBattleViewNumber(
+            animation.anchor?.y ?? animation.anchorY,
+            0,
+            1
+        );
+        const lengthRatio = Math.max(
+            0,
+            Number(config.LENGTH_SPRITE_HEIGHT_RATIO) || 0.92
+        );
+        const nearWidthRatio = Math.max(
+            0,
+            Number(config.NEAR_WIDTH_SPRITE_RATIO) || 0.68
+        );
+        const farWidthRatio = Math.max(
+            0,
+            Number(config.FAR_WIDTH_SPRITE_RATIO) || 0.88
+        );
+        const resolveEdge = (ratio) => {
+            const distance = geometry.height * (anchorY - ratio) * lengthRatio;
+            const widthRatio = farWidthRatio
+                + ((nearWidthRatio - farWidthRatio) * ratio);
+            const center = {
+                x: point.x + (axes.direction.x * distance),
+                y: point.y + (axes.direction.y * distance)
+            };
+            return {
+                left: {
+                    x: center.x - (axes.cross.x * geometry.width * anchorX * widthRatio),
+                    y: center.y - (axes.cross.y * geometry.width * anchorX * widthRatio)
+                },
+                right: {
+                    x: center.x
+                        + (axes.cross.x * geometry.width * (1 - anchorX) * widthRatio),
+                    y: center.y
+                        + (axes.cross.y * geometry.width * (1 - anchorX) * widthRatio)
+                }
+            };
+        };
+        const start = resolveEdge(startRatio);
+        const end = resolveEdge(endRatio);
+        return [
+            start.left.x,
+            start.left.y,
+            start.right.x,
+            start.right.y,
+            end.right.x,
+            end.right.y,
+            end.left.x,
+            end.left.y
+        ].map(Math.round);
+    }
+
+    /** 스프라이트 프레임을 그림자 감쇠 밴드에 맞는 세로 source rect로 자릅니다. @private */
+    #sliceShadowSourceRect(sourceRect, startRatio, endRatio) {
+        const x = Number(sourceRect?.x);
+        const y = Number(sourceRect?.y);
+        const width = Number(sourceRect?.w);
+        const height = Number(sourceRect?.h);
+        if (![x, y, width, height].every(Number.isFinite)
+            || width <= 0
+            || height <= 0) {
+            return null;
+        }
+        return {
+            x,
+            y: y + (height * startRatio),
+            w: width,
+            h: height * (endRatio - startRatio)
+        };
+    }
+
+    /** 맵의 두 실제 격자 축으로 광원 반대 방향과 바닥 폭 방향을 계산합니다. @private */
+    #resolveShadowProjectionAxes(layout, config) {
+        const axisX = layout.gridAxisX || {
+            x: Number(layout.tileWidth) * 0.5,
+            y: Number(layout.tileHeight) * 0.5
+        };
+        const axisY = layout.gridAxisY || {
+            x: Number(layout.tileWidth) * -0.5,
+            y: Number(layout.tileHeight) * 0.5
+        };
+        const weightX = Number.isFinite(Number(config.GRID_AXIS_X_WEIGHT))
+            ? Number(config.GRID_AXIS_X_WEIGHT)
+            : 1;
+        const weightY = Number.isFinite(Number(config.GRID_AXIS_Y_WEIGHT))
+            ? Number(config.GRID_AXIS_Y_WEIGHT)
+            : 0;
+        const direction = this.#normalizeShadowVector({
+            x: (Number(axisX.x) * weightX) + (Number(axisY.x) * weightY),
+            y: (Number(axisX.y) * weightX) + (Number(axisY.y) * weightY)
+        }, { x: 1, y: 0.5 });
+        const cross = this.#normalizeShadowVector({
+            x: (Number(axisX.x) * weightY) - (Number(axisY.x) * weightX),
+            y: (Number(axisX.y) * weightY) - (Number(axisY.y) * weightX)
+        }, { x: 1, y: -0.5 });
+        return { direction, cross };
+    }
+
+    /** @param {{x:number,y:number}} vector @param {{x:number,y:number}} fallback @returns {{x:number,y:number}} @private */
+    #normalizeShadowVector(vector, fallback) {
+        const length = Math.hypot(Number(vector.x), Number(vector.y));
+        if (!Number.isFinite(length) || length <= 0.0001) {
+            const fallbackLength = Math.max(0.0001, Math.hypot(fallback.x, fallback.y));
+            return {
+                x: fallback.x / fallbackLength,
+                y: fallback.y / fallbackLength
+            };
+        }
+        return {
+            x: Number(vector.x) / length,
+            y: Number(vector.y) / length
+        };
     }
 
     /** @private */
