@@ -303,7 +303,7 @@ test('1층 양 끝 텔레포트는 장식 테두리가 아닌 실제 타일 중�
     });
 });
 
-test('연결된 벽은 공통 변을 빼고 실제 타일 외곽에 낮은 석조벽·가시 울타리를 그린다', () => {
+test('연결된 벽은 공통 변을 빼고 높아진 가시벽과 낮은 석조 단차를 그린다', () => {
     const layoutController = createLayout();
     layoutController.resize(VIEWPORTS[0]);
     const floor = {
@@ -349,7 +349,10 @@ test('연결된 벽은 공통 변을 빼고 실제 타일 외곽에 낮은 석�
         fonts: { SMALL: '12px sans-serif', HEADING: '18px sans-serif' },
         colors: {
             BoardFrame: '#frame',
-            Tile: { Reachable: '#reachable', Teleport: '#teleport' },
+            Tile: {
+                Reachable: '#reachable', Teleport: '#teleport', Wall: '#wall-top'
+            },
+            Entity: { Wall: '#wall-side' },
             UI: {}
         },
         world: {
@@ -373,10 +376,26 @@ test('연결된 벽은 공통 변을 빼고 실제 타일 외곽에 낮은 석�
     assert.equal(barriers.every((command) => command.smoothing === false), true);
     assert.equal(barriers.every((command) => command.vertices.length === 8), true);
     assert.equal(barriers.every((command) => (
-        command.vertices[5] - command.vertices[3]
-            <= (layout.tileHeight * 0.34) + 0.000001
-        && command.vertices[7] - command.vertices[1]
-            <= (layout.tileHeight * 0.34) + 0.000001
+        Math.abs(
+            command.vertices[5] - command.vertices[3]
+                - (layout.tileHeight * 0.68)
+        ) <= 0.000001
+        && Math.abs(
+            command.vertices[7] - command.vertices[1]
+                - (layout.tileHeight * 0.68)
+        ) <= 0.000001
+    )), true);
+
+    const raisedTops = commands.filter((command) => command.fill === '#wall-top');
+    const raisedSides = commands.filter((command) => command.fill === '#wall-side');
+    const baseRise = layout.tileHeight * 0.16;
+    assert.equal(raisedTops.length, 2);
+    assert.equal(raisedTops.every((command) => command.alpha === 0.58), true);
+    assert.equal(raisedSides.length, 3);
+    assert.equal(raisedSides.every((command) => command.alpha === 0.9), true);
+    assert.equal(raisedSides.every((command) => (
+        Math.abs(command.vertices[5] - command.vertices[3] - baseRise) <= 0.000001
+        && Math.abs(command.vertices[7] - command.vertices[1] - baseRise) <= 0.000001
     )), true);
 
     const edgeKey = (left, right) => [left, right]
@@ -387,7 +406,7 @@ test('연결된 벽은 공통 변을 빼고 실제 타일 외곽에 낮은 석�
         const projected = TutorialBattleLayout.projectTileQuad(layout, x, y, 1);
         return Array.from({ length: 4 }, (_, index) => [
             projected[index * 2],
-            projected[(index * 2) + 1]
+            projected[(index * 2) + 1] - baseRise
         ]);
     };
     const firstCorners = projectedCorners(4, 4);
