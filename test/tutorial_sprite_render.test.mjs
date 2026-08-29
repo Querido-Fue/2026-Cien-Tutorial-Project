@@ -6,7 +6,7 @@ import { TutorialBattleActorView } from '../project/engine/script/scene/tutorial
 
 const SHADOW_PROJECTION = Object.freeze({
     GRID_AXIS_X_WEIGHT: 1,
-    GRID_AXIS_Y_WEIGHT: 0,
+    GRID_AXIS_Y_WEIGHT: 1,
     LENGTH_SPRITE_HEIGHT_RATIO: 1.18,
     NEAR_WIDTH_SPRITE_RATIO: 0.72,
     FAR_WIDTH_SPRITE_RATIO: 0.98,
@@ -16,7 +16,14 @@ const SHADOW_PROJECTION = Object.freeze({
     CONTACT_WIDTH_SIZE_RATIO: 0.42,
     CONTACT_HEIGHT_SIZE_RATIO: 0.12,
     CONTACT_OFFSET_SIZE_RATIO: 0.03,
-    CONTACT_ALPHA: 0.92
+    CONTACT_ALPHA: 0.92,
+    FOOT_CONTACT_WIDTH_SPRITE_RATIO: 0.12,
+    FOOT_CONTACT_HEIGHT_SPRITE_RATIO: 0.045,
+    FLOAT_SHADOW_SHIFT_RATIO: 0.72,
+    FLOAT_SHADOW_ALPHA_FADE_RATIO: 0.34,
+    FLOAT_PENUMBRA_EXPANSION_RATIO: 0.12,
+    FLOAT_PENUMBRA_LENGTH_RATIO: 0.08,
+    FLOAT_PENUMBRA_ALPHA: 0.2
 });
 
 test('sourceRect와 축 반전은 이미지 크기에 맞는 WebGL UV로 변환된다', () => {
@@ -142,7 +149,8 @@ test('배우 뷰는 정수 좌표·nearest·발 앵커를 유지하며 다중 �
         x: (nearEdge[4] + nearEdge[6]) * 0.5,
         y: (nearEdge[5] + nearEdge[7]) * 0.5
     };
-    assert.ok(farCenter.x > nearCenter.x && farCenter.y > nearCenter.y);
+    assert.ok(Math.abs(farCenter.x - nearCenter.x) <= 1);
+    assert.ok(farCenter.y > nearCenter.y);
     assert.ok(commands.some((command) => (
         command.shape === 'circle'
         && command.fill === '#000'
@@ -160,6 +168,111 @@ test('배우 뷰는 정수 좌표·nearest·발 앵커를 유지하며 다중 �
         hpBar.y + (hpBar.h * 0.5) < images[0].y,
         '플레이어 HP 바는 실제 스프라이트 머리 위에 있어야 합니다.'
     );
+});
+
+test('플레이어 그림자는 프레임별 양발 접점에서 시작하고 효과 레이어를 투영하지 않는다', () => {
+    const commands = [];
+    const image = { width: 256, height: 256 };
+    const feet = [
+        { x: 28.5 / 64, y: 56 / 64 },
+        { x: 33 / 64, y: 57 / 64 }
+    ];
+    const view = new TutorialBattleActorView({
+        renderGL(layer, options) {
+            commands.push({ layer, ...options });
+        },
+        render() {}
+    }, {
+        getImage: () => image
+    });
+    view.draw('player', { hp: 100, maxHp: 100 }, {
+        fonts: { HEADING: '16px sans-serif' },
+        colors: {
+            Entity: {
+                Shadow: '#shadow', PlayerDark: '#player-dark',
+                Player: '#player', PlayerAccent: '#player-accent'
+            },
+            UI: {
+                HpEmpty: '#hp-empty', HpFull: '#hp-full',
+                Success: '#success', Danger: '#danger'
+            }
+        },
+        layout: {
+            isoOriginX: 100,
+            isoOriginY: 100,
+            gridAxisX: { x: 32, y: 16 },
+            gridAxisY: { x: -32, y: 16 },
+            tileWidth: 64,
+            tileHeight: 32,
+            tileElevation: 0,
+            tileSide: 40,
+            heights: [[0]],
+            shake: { x: 0, y: 0 }
+        },
+        world: {
+            presentation: {
+                playerX: 0, playerY: 0, playerAlpha: 1,
+                playerScale: 1, playerHp: 100, actionPulse: 0
+            },
+            spriteAnimations: {
+                player: {
+                    assetId: 'sprite.player.melee',
+                    layers: [
+                        { x: 0, y: 0, w: 64, h: 64 },
+                        { x: 0, y: 64, w: 64, h: 64 }
+                    ],
+                    logicalSize: { width: 32, height: 32 },
+                    anchor: { x: 0.5, y: 0.88 },
+                    scaleTileRatio: 1,
+                    shadowFootAnchors: feet,
+                    progress: 0,
+                    visible: true
+                }
+            },
+            config: {
+                actionPlayerScale: 0.04,
+                shadowProjection: SHADOW_PROJECTION
+            },
+            readability: {}
+        }
+    });
+
+    const sprite = commands.find(
+        (command) => command.image === image && !command.vertices
+    );
+    const projected = commands.filter(
+        (command) => command.image === image && Array.isArray(command.vertices)
+    );
+    const contacts = commands.filter(
+        (command) => command.shape === 'circle'
+            && command.fill === '#shadow'
+            && Array.isArray(command.vertices)
+    );
+    assert.equal(projected.length, 8);
+    assert.equal(
+        projected.every((command) => command.sourceRect.y < 64),
+        true,
+        '검격 이펙트 레이어는 물리 그림자를 만들지 않아야 합니다.'
+    );
+    assert.equal(contacts.length, 2);
+
+    const expectedContacts = feet.map((foot) => ({
+        x: sprite.x + (sprite.w * foot.x),
+        y: sprite.y + (sprite.h * foot.y)
+    }));
+    const actualContacts = contacts.map((command) => ({
+        x: (command.vertices[0] + command.vertices[2]) * 0.5,
+        y: (command.vertices[1] + command.vertices[3]) * 0.5
+    })).sort((left, right) => left.x - right.x);
+    for (let index = 0; index < expectedContacts.length; index++) {
+        assert.ok(Math.abs(actualContacts[index].x - expectedContacts[index].x) <= 1);
+        assert.ok(Math.abs(actualContacts[index].y - expectedContacts[index].y) <= 1);
+    }
+    const farthestBand = projected[0].vertices;
+    const nearestBand = projected[3].vertices;
+    const farY = (farthestBand[1] + farthestBand[3]) * 0.5;
+    const nearY = (nearestBand[5] + nearestBand[7]) * 0.5;
+    assert.ok(farY > nearY, '그림자는 격자 동남쪽으로 뻗어야 합니다.');
 });
 
 test('월드 HP 바는 캐릭터별 스프라이트 크기와 발 앵커에 맞춰 머리 위에 놓인다', () => {
@@ -337,6 +450,10 @@ test('로라 불안정 대기는 크기 변화 없이 지면 그림자 위를 �
                         logicalSize: { width: 32, height: 32 },
                         anchor: { x: 0.5, y: 0.84 },
                         scaleTileRatio: 0.94,
+                        shadowFootAnchors: [
+                            { x: 35.5 / 74, y: 61 / 74 },
+                            { x: 40.5 / 74, y: 62 / 74 }
+                        ],
                         fallbackEffect: 'breathing',
                         progress,
                         visible: true
@@ -371,11 +488,36 @@ test('로라 불안정 대기는 크기 변화 없이 지면 그림자 위를 �
     assert.equal(highSprite.h, lowSprite.h);
     assert.ok(highSprite.y < lowSprite.y);
 
-    const highShadow = highCommands.find(
+    const highShadows = highCommands.filter(
         (command) => command.image === image && Array.isArray(command.vertices)
     );
-    const lowShadow = lowCommands.find(
+    const lowShadows = lowCommands.filter(
         (command) => command.image === image && Array.isArray(command.vertices)
     );
-    assert.deepEqual(highShadow.vertices, lowShadow.vertices);
+    assert.equal(highShadows.length, lowShadows.length * 2);
+    const highCoreShadows = highShadows.slice(lowShadows.length);
+    const averageY = (commands) => commands.reduce(
+        (sum, command) => sum + command.vertices.reduce(
+            (vertexSum, value, index) => vertexSum + (index % 2 === 1 ? value : 0),
+            0
+        ),
+        0
+    ) / (commands.length * 4);
+    assert.ok(averageY(highCoreShadows) > averageY(lowShadows));
+    assert.ok(
+        Math.max(...highCoreShadows.map(({ alpha }) => alpha))
+            < Math.max(...lowShadows.map(({ alpha }) => alpha))
+    );
+    const highContacts = highCommands.filter(
+        (command) => command.shape === 'circle'
+            && command.fill === '#shadow'
+            && Array.isArray(command.vertices)
+    );
+    const lowContacts = lowCommands.filter(
+        (command) => command.shape === 'circle'
+            && command.fill === '#shadow'
+            && Array.isArray(command.vertices)
+    );
+    assert.equal(highContacts.length, 0);
+    assert.equal(lowContacts.length, 2);
 });

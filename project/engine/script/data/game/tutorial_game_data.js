@@ -667,7 +667,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
             ENTITY_SCALE_RATIO: 0.64,
             SHADOW_PROJECTION: {
                 GRID_AXIS_X_WEIGHT: 1,
-                GRID_AXIS_Y_WEIGHT: 0,
+                GRID_AXIS_Y_WEIGHT: 1,
                 LENGTH_SPRITE_HEIGHT_RATIO: 1.18,
                 NEAR_WIDTH_SPRITE_RATIO: 0.72,
                 FAR_WIDTH_SPRITE_RATIO: 0.98,
@@ -677,7 +677,14 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
                 CONTACT_WIDTH_SIZE_RATIO: 0.42,
                 CONTACT_HEIGHT_SIZE_RATIO: 0.12,
                 CONTACT_OFFSET_SIZE_RATIO: 0.03,
-                CONTACT_ALPHA: 0.92
+                CONTACT_ALPHA: 0.92,
+                FOOT_CONTACT_WIDTH_SPRITE_RATIO: 0.12,
+                FOOT_CONTACT_HEIGHT_SPRITE_RATIO: 0.045,
+                FLOAT_SHADOW_SHIFT_RATIO: 0.72,
+                FLOAT_SHADOW_ALPHA_FADE_RATIO: 0.34,
+                FLOAT_PENUMBRA_EXPANSION_RATIO: 0.12,
+                FLOAT_PENUMBRA_LENGTH_RATIO: 0.08,
+                FLOAT_PENUMBRA_ALPHA: 0.2
             },
             PATH_MARKER_RATIO: 0.16
         },

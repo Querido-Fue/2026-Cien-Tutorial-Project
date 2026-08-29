@@ -13,6 +13,7 @@ const ACTION_PRIORITIES = Object.freeze({
     unstable: 0,
     collapse: 0
 });
+const EMPTY_SHADOW_FOOT_ANCHORS = Object.freeze([]);
 
 /** @param {*} value @returns {number} 0 이상의 유한 초입니다. */
 function toDelta(value) {
@@ -347,6 +348,8 @@ export class TutorialSpriteAnimator {
             assetId: clip?.assetId || null,
             frameIndex: track.frameIndex,
             layers: frame.layers || Object.freeze([]),
+            shadowFootAnchors: clip?.shadowFootFrames?.[track.frameIndex]
+                || EMPTY_SHADOW_FOOT_ANCHORS,
             logicalSize: clip?.logicalSize,
             anchor: clip?.anchor,
             scaleTileRatio: clip?.scaleTileRatio || 0.92,

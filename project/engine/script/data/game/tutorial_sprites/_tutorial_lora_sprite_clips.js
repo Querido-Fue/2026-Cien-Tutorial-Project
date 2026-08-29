@@ -5,7 +5,21 @@ import {
 } from './_tutorial_sprite_clip_entry.js';
 
 const DIRECTIONS = Object.freeze({ right: 0, left: 1, up: 2, down: 3 });
+const SHADOW_FOOT_PIXELS = Object.freeze({
+    right: [[35, 60], [40, 61]],
+    left: [[34, 61], [39, 60]],
+    up: [[35, 61], [40, 60]],
+    down: [[33, 60], [38, 61]]
+});
 const clips = [];
+
+/** @param {string} facing @returns {readonly object[]} 실측한 로라 양발 접점 한 프레임입니다. */
+function createLoraShadowFootFrame(facing) {
+    return [SHADOW_FOOT_PIXELS[facing].map(([x, y]) => ({
+        x: (x + 0.5) / 74,
+        y: (y + 1) / 74
+    }))];
+}
 
 for (const [facing, row] of Object.entries(DIRECTIONS)) {
     const idleFrames = createTutorialSpriteFrames({
@@ -22,6 +36,7 @@ for (const [facing, row] of Object.entries(DIRECTIONS)) {
         frames: idleFrames,
         fps: 1,
         loop: true,
+        shadowFootFrames: createLoraShadowFootFrame(facing),
         scaleTileRatio: 0.94
     }));
 

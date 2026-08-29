@@ -91,12 +91,13 @@ export class TutorialBattleActorView {
         const point = this.#projectTile(layout, lora.x, lora.y);
         const spriteLayout = world.config.loraSprite;
         const animation = world.spriteAnimations?.lora || null;
-        const spritePoint = this.#resolveLoraSpritePoint(
+        const floatState = this.#resolveLoraSpriteState(
             point,
             animation,
             layout,
             spriteLayout
         );
+        const spritePoint = floatState.point;
         const actionScale = 1 + (
             world.presentation.actionPulse * world.config.actionLoraScale
         );
@@ -115,7 +116,19 @@ export class TutorialBattleActorView {
         if (animation?.visible === false) {
             return;
         }
-        this.#drawShadow(point, animation, actionScale, size, alive ? 1 : 0.5, frame);
+        this.#drawShadow(
+            point,
+            animation,
+            actionScale,
+            size,
+            alive ? 1 : 0.5,
+            frame,
+            {
+                spritePoint,
+                liftPixels: floatState.liftPixels,
+                liftRatio: floatState.liftRatio
+            }
+        );
         if (world.feedback.flashSeconds > 0) {
             this.#renderPort.renderGL('object', {
                 shape: 'circle',
@@ -194,12 +207,12 @@ export class TutorialBattleActorView {
      * @param {object|null} animation - 현재 로라 스프라이트 애니메이션입니다.
      * @param {object} layout - 전투 보드 레이아웃입니다.
      * @param {object} spriteLayout - 로라 스프라이트 표시 규격입니다.
-     * @returns {{x:number,y:number}} 스프라이트 표시 기준점입니다.
+     * @returns {{point:{x:number,y:number},liftPixels:number,liftRatio:number}} 부유 표시 상태입니다.
      * @private
      */
-    #resolveLoraSpritePoint(point, animation, layout, spriteLayout) {
+    #resolveLoraSpriteState(point, animation, layout, spriteLayout) {
         if (animation?.fallbackEffect !== 'breathing') {
-            return point;
+            return { point, liftPixels: 0, liftRatio: 0 };
         }
         const amplitude = Math.max(
             0,
@@ -207,9 +220,14 @@ export class TutorialBattleActorView {
         ) * Math.max(0, Number(layout.tileSide) || 0);
         const progress = clampBattleViewNumber(animation.progress, 0, 1);
         const liftRatio = 0.5 + (Math.sin(progress * Math.PI * 2) * 0.5);
+        const liftPixels = Math.round(amplitude * liftRatio);
         return {
-            x: point.x,
-            y: point.y - Math.round(amplitude * liftRatio)
+            point: {
+                x: point.x,
+                y: point.y - liftPixels
+            },
+            liftPixels,
+            liftRatio
         };
     }
 
@@ -378,30 +396,56 @@ export class TutorialBattleActorView {
      * @param {number} size - 도형 폴백 기준 크기입니다.
      * @param {number} alpha - 배우 표시 알파입니다.
      * @param {object} frame - 같은 프레임의 BattleViewModel입니다.
+     * @param {object} [physics={}] - 스프라이트 기준점과 부유 높이입니다.
      * @private
      */
-    #drawShadow(point, animation, baseScale, size, alpha, frame) {
+    #drawShadow(point, animation, baseScale, size, alpha, frame, physics = {}) {
         const config = frame.world.config.shadowProjection || {};
         const axes = this.#resolveShadowProjectionAxes(frame.layout, config);
         const actorAlpha = clampBattleViewNumber(alpha, 0, 1);
-        const geometry = this.#resolveSpriteGeometry(point, animation, baseScale, frame);
+        const spritePoint = physics.spritePoint || point;
+        const liftPixels = Math.max(0, Number(physics.liftPixels) || 0);
+        const liftRatio = clampBattleViewNumber(physics.liftRatio, 0, 1);
+        const geometry = this.#resolveSpriteGeometry(
+            spritePoint,
+            animation,
+            baseScale,
+            frame
+        );
         const image = animation?.assetId
             ? this.#assetPort.getImage?.(animation.assetId) || null
             : null;
         const layers = Array.isArray(animation?.layers) ? animation.layers : [];
+        const shadowFootAnchors = this.#resolveShadowFootAnchors(animation);
 
         if (geometry && image && layers.length > 0) {
-            this.#drawSpriteProjectionShadow({
-                point,
-                animation,
-                geometry,
-                image,
-                layers,
-                axes,
-                config,
-                alpha: actorAlpha,
-                frame
-            });
+            if (shadowFootAnchors.length === 2) {
+                this.#drawFootAnchoredSpriteProjectionShadow({
+                    animation,
+                    geometry,
+                    image,
+                    sourceRect: layers[0],
+                    shadowFootAnchors,
+                    axes,
+                    config,
+                    alpha: actorAlpha,
+                    liftPixels,
+                    liftRatio,
+                    frame
+                });
+            } else {
+                this.#drawSpriteProjectionShadow({
+                    point,
+                    animation,
+                    geometry,
+                    image,
+                    layers,
+                    axes,
+                    config,
+                    alpha: actorAlpha,
+                    frame
+                });
+            }
         } else {
             this.#drawFallbackProjectionShadow(
                 point,
@@ -412,7 +456,138 @@ export class TutorialBattleActorView {
                 frame
             );
         }
-        this.#drawContactShadow(point, size, axes, config, actorAlpha, frame);
+        if (geometry && shadowFootAnchors.length === 2) {
+            this.#drawFootContactShadows({
+                geometry,
+                shadowFootAnchors,
+                axes,
+                config,
+                alpha: actorAlpha,
+                liftPixels,
+                liftRatio,
+                frame
+            });
+        } else {
+            this.#drawContactShadow(point, size, axes, config, actorAlpha, frame);
+        }
+    }
+
+    /**
+     * 실측한 좌·우 발 접점을 기준으로 스프라이트 실루엣을 두 메시로 나눠 투영합니다.
+     * 부유 중에는 높이에 비례한 이동·감쇠와 픽셀 반그림자 한 겹을 추가합니다.
+     * @param {object} options - 투영 입력입니다.
+     * @private
+     */
+    #drawFootAnchoredSpriteProjectionShadow({
+        animation,
+        geometry,
+        image,
+        sourceRect,
+        shadowFootAnchors,
+        axes,
+        config,
+        alpha,
+        liftPixels,
+        liftRatio,
+        frame
+    }) {
+        const bandCount = Math.round(clampBattleViewNumber(
+            Number(config.BAND_COUNT) || 4,
+            1,
+            8
+        ));
+        const farAlpha = clampBattleViewNumber(
+            Number(config.FAR_ALPHA) || 0.32,
+            0,
+            1
+        );
+        const nearAlpha = clampBattleViewNumber(
+            Number(config.NEAR_ALPHA) || 0.9,
+            0,
+            1
+        );
+        const fadeRatio = clampBattleViewNumber(
+            Number(config.FLOAT_SHADOW_ALPHA_FADE_RATIO) || 0,
+            0,
+            1
+        );
+        const coreAlpha = alpha
+            * this.#getFallbackEffectAlpha(animation)
+            * (1 - (liftRatio * fadeRatio));
+        const divider = (shadowFootAnchors[0].x + shadowFootAnchors[1].x) * 0.5;
+        const horizontalRanges = [
+            { start: 0, end: divider, foot: shadowFootAnchors[0] },
+            { start: divider, end: 1, foot: shadowFootAnchors[1] }
+        ];
+        const passes = [];
+        const penumbraAlpha = clampBattleViewNumber(
+            Number(config.FLOAT_PENUMBRA_ALPHA) || 0,
+            0,
+            1
+        ) * liftRatio;
+        if (penumbraAlpha > 0.001) {
+            passes.push({
+                alphaScale: penumbraAlpha,
+                lateralScale: 1 + (
+                    liftRatio * Math.max(
+                        0,
+                        Number(config.FLOAT_PENUMBRA_EXPANSION_RATIO) || 0
+                    )
+                ),
+                lengthScale: 1 + (
+                    liftRatio * Math.max(
+                        0,
+                        Number(config.FLOAT_PENUMBRA_LENGTH_RATIO) || 0
+                    )
+                )
+            });
+        }
+        passes.push({ alphaScale: 1, lateralScale: 1, lengthScale: 1 });
+
+        for (const pass of passes) {
+            for (const range of horizontalRanges) {
+                for (let bandIndex = 0; bandIndex < bandCount; bandIndex++) {
+                    const startUnit = bandIndex / bandCount;
+                    const endUnit = (bandIndex + 1) / bandCount;
+                    const startY = range.foot.y * startUnit;
+                    const endY = range.foot.y * endUnit;
+                    const midpoint = (startUnit + endUnit) * 0.5;
+                    const bandAlpha = farAlpha
+                        + ((nearAlpha - farAlpha) * midpoint);
+                    const slicedSourceRect = this.#sliceShadowSourceRegion(
+                        sourceRect,
+                        range.start,
+                        range.end,
+                        startY,
+                        endY
+                    );
+                    if (!slicedSourceRect) {
+                        continue;
+                    }
+                    this.#renderPort.renderGL('object', {
+                        image,
+                        sourceRect: slicedSourceRect,
+                        flipX: animation.flipX === true,
+                        vertices: this.#createFootShadowBandVertices({
+                            geometry,
+                            foot: range.foot,
+                            axes,
+                            config,
+                            liftPixels,
+                            horizontalStart: range.start,
+                            horizontalEnd: range.end,
+                            verticalStart: startY,
+                            verticalEnd: endY,
+                            lateralScale: pass.lateralScale,
+                            lengthScale: pass.lengthScale
+                        }),
+                        fill: frame.colors.Entity.Shadow,
+                        alpha: coreAlpha * bandAlpha * pass.alphaScale,
+                        smoothing: false
+                    });
+                }
+            }
+        }
     }
 
     /**
@@ -562,6 +737,199 @@ export class TutorialBattleActorView {
     }
 
     /**
+     * 프레임 스냅샷의 발 접점을 좌→우 순서로 검증합니다.
+     * @param {object|null} animation - 현재 스프라이트 애니메이션입니다.
+     * @returns {readonly {x:number,y:number}[]} 유효한 양발 접점입니다.
+     * @private
+     */
+    #resolveShadowFootAnchors(animation) {
+        if (!Array.isArray(animation?.shadowFootAnchors)
+            || animation.shadowFootAnchors.length !== 2) {
+            return [];
+        }
+        const feet = animation.shadowFootAnchors.map((foot) => ({
+            x: clampBattleViewNumber(foot?.x, 0, 1),
+            y: clampBattleViewNumber(foot?.y, 0, 1)
+        }));
+        return feet.sort((left, right) => left.x - right.x);
+    }
+
+    /**
+     * 접지 상태에서는 두 발 바로 아래에 작은 접촉 그림자를 두고,
+     * 부유 높이가 생기면 빠르게 옅어지면서 투영 실루엣 쪽으로 이동시킵니다.
+     * @param {object} options - 접촉 그림자 입력입니다.
+     * @private
+     */
+    #drawFootContactShadows({
+        geometry,
+        shadowFootAnchors,
+        axes,
+        config,
+        alpha,
+        liftPixels,
+        liftRatio,
+        frame
+    }) {
+        const contactFade = (1 - liftRatio) ** 2;
+        if (contactFade <= 0.001) {
+            return;
+        }
+        const width = Math.max(
+            2,
+            geometry.width * Math.max(
+                0,
+                Number(config.FOOT_CONTACT_WIDTH_SPRITE_RATIO) || 0.1
+            )
+        );
+        const height = Math.max(
+            1,
+            geometry.height * Math.max(
+                0,
+                Number(config.FOOT_CONTACT_HEIGHT_SPRITE_RATIO) || 0.04
+            )
+        );
+        const contactAlpha = alpha * contactFade * clampBattleViewNumber(
+            Number(config.CONTACT_ALPHA) || 0.78,
+            0,
+            1
+        );
+        for (const foot of shadowFootAnchors) {
+            const contact = this.#resolveGroundFootPoint(
+                geometry,
+                foot,
+                axes,
+                config,
+                liftPixels
+            );
+            const center = {
+                x: contact.x + (axes.direction.x * height * 0.5),
+                y: contact.y + (axes.direction.y * height * 0.5)
+            };
+            this.#renderPort.renderGL('object', {
+                shape: 'circle',
+                vertices: this.#createGroundEllipseVertices(
+                    center,
+                    width,
+                    height,
+                    axes
+                ),
+                fill: frame.colors.Entity.Shadow,
+                alpha: contactAlpha
+            });
+        }
+    }
+
+    /**
+     * 스프라이트 발 접점을 지면으로 내리고 부유 높이만큼 동남쪽으로 이동시킵니다.
+     * @param {object} geometry - 현재 스프라이트 사각형입니다.
+     * @param {{x:number,y:number}} foot - 정규화된 발 접점입니다.
+     * @param {object} axes - 지면 투영 축입니다.
+     * @param {object} config - 그림자 물리 설정입니다.
+     * @param {number} liftPixels - 스프라이트 부유 높이입니다.
+     * @returns {{x:number,y:number}} 지면의 발 그림자 기준점입니다.
+     * @private
+     */
+    #resolveGroundFootPoint(geometry, foot, axes, config, liftPixels) {
+        const shift = liftPixels * Math.max(
+            0,
+            Number(config.FLOAT_SHADOW_SHIFT_RATIO) || 0
+        );
+        return {
+            x: geometry.x
+                + (geometry.width * foot.x)
+                + (axes.direction.x * shift),
+            y: geometry.y
+                + (geometry.height * foot.y)
+                + liftPixels
+                + (axes.direction.y * shift)
+        };
+    }
+
+    /**
+     * 한쪽 발이 담당하는 이미지 조각을 발 접점부터 광원 반대 방향으로 평면 투영합니다.
+     * @param {object} options - 밴드 투영 입력입니다.
+     * @returns {number[]} WebGL 사각형 꼭짓점입니다.
+     * @private
+     */
+    #createFootShadowBandVertices({
+        geometry,
+        foot,
+        axes,
+        config,
+        liftPixels,
+        horizontalStart,
+        horizontalEnd,
+        verticalStart,
+        verticalEnd,
+        lateralScale,
+        lengthScale
+    }) {
+        const footPoint = this.#resolveGroundFootPoint(
+            geometry,
+            foot,
+            axes,
+            config,
+            liftPixels
+        );
+        const projectionLength = Math.max(
+            0,
+            Number(config.LENGTH_SPRITE_HEIGHT_RATIO) || 0.92
+        ) * lengthScale;
+        const project = (horizontal, vertical) => {
+            const height = Math.max(0, foot.y - vertical) * geometry.height;
+            const lateral = (horizontal - foot.x)
+                * geometry.width
+                * lateralScale;
+            return {
+                x: footPoint.x
+                    + (axes.direction.x * height * projectionLength)
+                    + (axes.cross.x * lateral),
+                y: footPoint.y
+                    + (axes.direction.y * height * projectionLength)
+                    + (axes.cross.y * lateral)
+            };
+        };
+        const topLeft = project(horizontalStart, verticalStart);
+        const topRight = project(horizontalEnd, verticalStart);
+        const bottomRight = project(horizontalEnd, verticalEnd);
+        const bottomLeft = project(horizontalStart, verticalEnd);
+        return [
+            topLeft.x,
+            topLeft.y,
+            topRight.x,
+            topRight.y,
+            bottomRight.x,
+            bottomRight.y,
+            bottomLeft.x,
+            bottomLeft.y
+        ].map(Math.round);
+    }
+
+    /**
+     * 지면의 두 직교축을 따르는 픽셀 타원을 만듭니다.
+     * @param {{x:number,y:number}} center - 타원 중심입니다.
+     * @param {number} width - 지면 폭입니다.
+     * @param {number} height - 투영 방향 높이입니다.
+     * @param {object} axes - 지면 투영 축입니다.
+     * @returns {number[]} WebGL 사각형 꼭짓점입니다.
+     * @private
+     */
+    #createGroundEllipseVertices(center, width, height, axes) {
+        const halfWidth = width * 0.5;
+        const halfHeight = height * 0.5;
+        return [
+            center.x - (axes.cross.x * halfWidth) - (axes.direction.x * halfHeight),
+            center.y - (axes.cross.y * halfWidth) - (axes.direction.y * halfHeight),
+            center.x + (axes.cross.x * halfWidth) - (axes.direction.x * halfHeight),
+            center.y + (axes.cross.y * halfWidth) - (axes.direction.y * halfHeight),
+            center.x + (axes.cross.x * halfWidth) + (axes.direction.x * halfHeight),
+            center.y + (axes.cross.y * halfWidth) + (axes.direction.y * halfHeight),
+            center.x - (axes.cross.x * halfWidth) + (axes.direction.x * halfHeight),
+            center.y - (axes.cross.y * halfWidth) + (axes.direction.y * halfHeight)
+        ].map(Math.round);
+    }
+
+    /**
      * 이미지 세로 구간 하나를 바닥 평면의 사다리꼴 네 꼭짓점으로 변환합니다.
      * @private
      */
@@ -647,6 +1015,42 @@ export class TutorialBattleActorView {
             y: y + (height * startRatio),
             w: width,
             h: height * (endRatio - startRatio)
+        };
+    }
+
+    /**
+     * 스프라이트 원본을 발별 가로 구간과 높이 밴드로 함께 자릅니다.
+     * @param {object} sourceRect - 원본 프레임 사각형입니다.
+     * @param {number} horizontalStart - 정규화된 왼쪽입니다.
+     * @param {number} horizontalEnd - 정규화된 오른쪽입니다.
+     * @param {number} verticalStart - 정규화된 위쪽입니다.
+     * @param {number} verticalEnd - 정규화된 아래쪽입니다.
+     * @returns {object|null} 잘린 원본 사각형입니다.
+     * @private
+     */
+    #sliceShadowSourceRegion(
+        sourceRect,
+        horizontalStart,
+        horizontalEnd,
+        verticalStart,
+        verticalEnd
+    ) {
+        const x = Number(sourceRect?.x);
+        const y = Number(sourceRect?.y);
+        const width = Number(sourceRect?.w);
+        const height = Number(sourceRect?.h);
+        if (![x, y, width, height].every(Number.isFinite)
+            || width <= 0
+            || height <= 0
+            || horizontalEnd <= horizontalStart
+            || verticalEnd <= verticalStart) {
+            return null;
+        }
+        return {
+            x: x + (width * horizontalStart),
+            y: y + (height * verticalStart),
+            w: width * (horizontalEnd - horizontalStart),
+            h: height * (verticalEnd - verticalStart)
         };
     }
 

@@ -62,6 +62,22 @@ test('32×32 논리 클립 계약은 필수 배우 동작과 실제 시트 경�
             `${actorType} 실제 픽셀 상단 보정`
         );
     }
+
+    for (const clip of clips.filter((entry) => (
+        entry.available && ['player', 'lora'].includes(entry.actorType)
+    ))) {
+        assert.equal(
+            clip.shadowFootFrames.length,
+            clip.frames.length,
+            `${clip.id}: 프레임별 양발 접점 수`
+        );
+        assert.equal(clip.shadowFootFrames.every((feet) => (
+            feet.length === 2
+            && feet.every(({ x, y }) => (
+                x >= 0 && x <= 1 && y >= 0 && y <= 1
+            ))
+        )), true, `${clip.id}: 양발 접점 범위`);
+    }
 });
 
 test('원본이 없는 Range·Breathing·로라 액션은 순환 없는 명시적 폴백으로 해석된다', () => {
@@ -97,6 +113,8 @@ test('원본이 없는 Range·Breathing·로라 액션은 순환 없는 명시�
     assert.equal(unstable.loop, true);
     assert.equal(unstable.fallbackEffect, 'breathing');
     assert.equal(unstable.visualTopInsetRatio, 0.257);
+    assert.equal(unstable.shadowFootFrames.length, unstable.frames.length);
+    assert.equal(unstable.shadowFootFrames.every((feet) => feet.length === 2), true);
 
     const slime = resolver.resolve({
         actorType: 'slime', animationId: 'idle', variant: 'blue'

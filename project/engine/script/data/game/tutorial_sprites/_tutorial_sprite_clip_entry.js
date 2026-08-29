@@ -28,6 +28,25 @@ function resolveVisualTopInsetRatio(entry) {
 }
 
 /**
+ * 프레임별 좌·우 발 접점을 0~1 스프라이트 좌표로 정규화합니다.
+ * @param {*} value - 프레임별 발 접점 목록입니다.
+ * @returns {readonly (readonly {x:number,y:number}[])[]} 정규화된 발 접점입니다.
+ */
+function normalizeShadowFootFrames(value) {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    return value.map((rawFrame) => (
+        Array.isArray(rawFrame)
+            ? rawFrame.slice(0, 2).map((rawPoint) => ({
+                x: Math.max(0, Math.min(1, Number(rawPoint?.x) || 0)),
+                y: Math.max(0, Math.min(1, Number(rawPoint?.y) || 0))
+            }))
+            : []
+    ));
+}
+
+/**
  * 격자 셀 목록을 sourceRect 레이어로 변환합니다.
  * @param {object} options - 셀 크기와 프레임별 셀 좌표입니다.
  * @returns {readonly object[]} 동결된 프레임 목록입니다.
@@ -84,6 +103,7 @@ export function createTutorialSpriteClip(entry) {
         anchor: entry.anchor || DEFAULT_ANCHOR,
         scaleTileRatio: Math.max(0.1, Number(entry.scaleTileRatio) || 0.92),
         visualTopInsetRatio: resolveVisualTopInsetRatio(entry),
+        shadowFootFrames: normalizeShadowFootFrames(entry.shadowFootFrames),
         terminal: entry.terminal === true,
         hideOnComplete: entry.hideOnComplete === true
     });

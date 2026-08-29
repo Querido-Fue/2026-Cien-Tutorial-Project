@@ -64,9 +64,13 @@ test('걷기 루프는 델타로 진행하고 지정 프레임에서 발걸음�
     assert.equal(animator.getSnapshot().player.animationId, 'walk');
     assert.equal(animator.getSnapshot().player.facing, 'right');
     assert.equal(animator.getSnapshot().player.visualTopInsetRatio, 0.125);
+    const initialFeet = animator.getSnapshot().player.shadowFootAnchors;
+    assert.equal(initialFeet.length, 2);
 
     animator.update(0.13);
     assert.equal(animator.getSnapshot().player.frameIndex, 1);
+    assert.equal(animator.getSnapshot().player.shadowFootAnchors.length, 2);
+    assert.notDeepEqual(animator.getSnapshot().player.shadowFootAnchors, initialFeet);
     assert.equal(animator.drainEvents().filter(({ id }) => id === 'footstep').length, 1);
     animator.update(0.5);
     assert.ok(animator.getSnapshot().player.frameIndex >= 0);

@@ -33,6 +33,11 @@ export class TutorialSpriteClipResolver {
             resolved.frames[Math.min(index, resolved.frames.length - 1)]
                 || resolved.frames[index % resolved.frames.length]
         ));
+        const shadowFootFrames = Array.from({ length: requestedCount }, (_, index) => (
+            resolved.shadowFootFrames?.[
+                Math.min(index, Math.max(0, resolved.shadowFootFrames.length - 1))
+            ] || Object.freeze([])
+        ));
         const assetId = resolved.assetIds?.[variant]
             || resolved.assetIds?.blue
             || resolved.assetId;
@@ -48,6 +53,7 @@ export class TutorialSpriteClipResolver {
             facing: requested.facing || normalizeFacing(facing),
             assetId,
             frames: Object.freeze(frames),
+            shadowFootFrames: Object.freeze(shadowFootFrames),
             fps: requested.fps,
             loop: requested.loop,
             impactFrame: requested.impactFrame,
