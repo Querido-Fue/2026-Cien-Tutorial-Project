@@ -229,6 +229,7 @@ test('촛대 화염은 원본 심지 10곳을 카메라와 함께 투영해 하�
             config: {}
         }
     });
+    assert.equal(commands.some((command) => command.fill === '#frame'), false);
     const flame = commands.find((command) => (
         command.effectType === EFFECT_RENDER_CONSTANTS.TYPES.FLAME_PARTICLES
     ));
@@ -279,9 +280,12 @@ test('촛대 화염은 원본 심지 10곳을 카메라와 함께 투영해 하�
     assert.equal(fallbackCommands.some((command) => (
         command.effectType === EFFECT_RENDER_CONSTANTS.TYPES.FLAME_PARTICLES
     )), false);
+    assert.equal(fallbackCommands.some((command) => (
+        command.fill === '#frame'
+    )), true);
 });
 
-test('두 테마의 월드와 디스플레이 바깥 배경은 단일 #101010 색상을 사용한다', () => {
+test('두 테마와 브라우저 바깥 배경은 단일 #101010 색상을 사용한다', async () => {
     for (const theme of [LightTheme, DarkTheme]) {
         assert.equal(theme.Background, '#101010');
         assert.equal(theme.Tactics.WorldBackdrop, '#101010');
@@ -289,6 +293,10 @@ test('두 테마의 월드와 디스플레이 바깥 배경은 단일 #101010 �
         assert.match(theme.Tactics.Effects.FlameCore, /^#/);
         assert.match(theme.Tactics.Effects.FlameEmber, /^#/);
     }
+    const css = await readFile(new URL('../project/engine/style.css', import.meta.url), 'utf8');
+    assert.match(css, /body\s*\{[\s\S]*?background-color:\s*#101010;/);
+    assert.match(css, /html\s*\{[\s\S]*?background-color:\s*#101010;/);
+    assert.doesNotMatch(css, /#202020/i);
 });
 
 test('이동 미리보기는 맵 타일의 두 투영 축으로 계산한 네 꼭짓점을 그린다', () => {

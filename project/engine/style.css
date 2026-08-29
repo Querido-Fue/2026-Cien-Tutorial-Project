@@ -14,7 +14,7 @@ body {
     min-height: 100vh;
     min-height: 100dvh;
     overflow: hidden;
-    background-color: #202020;
+    background-color: #101010;
     font-family: 'LanaPixel', monospace;
     touch-action: none;
     user-select: none;
@@ -23,7 +23,7 @@ body {
 
 html {
     cursor: none;
-    background-color: #202020;
+    background-color: #101010;
 }
 
 noscript {

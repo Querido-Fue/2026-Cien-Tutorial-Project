@@ -43,15 +43,17 @@ export class TutorialBattleWorldView {
         try {
             const { boardRect } = viewModel.layout;
             const mapArtwork = this.#assetPort.getMapArtwork?.(viewModel.floor.id) || null;
-            this.#renderPort.renderGL('background', {
-                shape: 'rect',
-                x: boardRect.x + (boardRect.w * 0.5),
-                y: boardRect.y + (boardRect.h * 0.5),
-                w: boardRect.w,
-                h: boardRect.h,
-                fill: viewModel.colors.BoardFrame,
-                alpha: 0.9
-            });
+            if (!mapArtwork) {
+                this.#renderPort.renderGL('background', {
+                    shape: 'rect',
+                    x: boardRect.x + (boardRect.w * 0.5),
+                    y: boardRect.y + (boardRect.h * 0.5),
+                    w: boardRect.w,
+                    h: boardRect.h,
+                    fill: viewModel.colors.BoardFrame,
+                    alpha: 0.9
+                });
+            }
             this.#drawMapArtwork(mapArtwork);
             this.#drawAmbientFire(Boolean(mapArtwork));
             this.#drawQuarterViewBoard(Boolean(mapArtwork));
