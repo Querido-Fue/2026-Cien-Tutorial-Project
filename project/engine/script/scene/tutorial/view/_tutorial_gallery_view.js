@@ -12,6 +12,7 @@ import {
     projectTutorialDesignRect
 } from './_tutorial_design_space.js';
 import { TUTORIAL_UI_LAYOUT_TOKENS } from './_tutorial_ui_layout_tokens.js';
+import { createTutorialRecordGalleryPresentation } from './_tutorial_record_gallery_presentation.js';
 
 /** @param {object} page @returns {object} 페이지 상단 제목 프레임 영역입니다. */
 function createPageTitleRect(page) {
@@ -206,21 +207,26 @@ export class TutorialGalleryView {
 
     /** @param {object} viewModel - 읽기 전용 갤러리 상태입니다. */
     draw(viewModel) {
-        const layout = this.getLayout(viewModel);
+        const presentation = createTutorialRecordGalleryPresentation(
+            viewModel,
+            this.getLayout(viewModel),
+            this.#renderPort
+        );
+        const layout = presentation.layout;
         const frameKeys = ['endingBook4', 'endingBook3', 'endingBook2', 'endingBook1'];
-        const progress = Math.max(0, Math.min(1, Number(viewModel.selectionProgress) || 0));
+        const progress = presentation.pageProgress;
         const frameKey = frameKeys[Math.min(
             frameKeys.length - 1,
             Math.floor(progress * frameKeys.length)
         )];
-        const bookDrawn = drawTutorialPixelAsset(this.#renderPort, {
+        const bookDrawn = drawTutorialPixelAsset(presentation.framePort, {
             image: this.#assetPort.getUiAsset?.(frameKey),
             rect: layout.book,
-            layer: 'ui'
+            layer: presentation.targetLayer
         });
         if (!bookDrawn) {
             drawTutorialBackgroundPanel(
-                this.#renderPort,
+                presentation.framePort,
                 layout.book,
                 viewModel.colors.UI.PanelStrong,
                 0.98
@@ -228,19 +234,19 @@ export class TutorialGalleryView {
         }
 
         if (viewModel.selectedSectionId === 'achievements') {
-            this.#drawAchievements(viewModel, layout);
+            this.#drawAchievements(viewModel, layout, presentation.contentPort);
         } else if (
             viewModel.selectedSectionId === 'lora-diary'
             || viewModel.selectedSectionId === 'developer-diary'
         ) {
-            this.#drawDiaries(viewModel, layout);
+            this.#drawDiaries(viewModel, layout, presentation.contentPort);
         } else {
-            this.#drawMedia(viewModel, layout);
+            this.#drawMedia(viewModel, layout, presentation.contentPort);
         }
     }
 
-    /** @param {object} viewModel @param {object} layout @private */
-    #drawMedia(viewModel, layout) {
+    /** @param {object} viewModel @param {object} layout @param {object} renderPort @private */
+    #drawMedia(viewModel, layout, renderPort) {
         const entries = viewModel.entries || [];
         const count = Math.max(1, entries.length);
         const pageEntries = [
@@ -250,14 +256,14 @@ export class TutorialGalleryView {
         pageEntries.forEach((entry, index) => {
             const titleRect = layout.pageTitles[index];
             const frameRect = layout.mediaFrames[index];
-            drawTutorialPixelAsset(this.#renderPort, {
+            drawTutorialPixelAsset(renderPort, {
                 image: this.#assetPort.getUiAsset?.(
                     entry?.unlocked ? 'galleryTitleOn' : 'galleryTitleOff'
                 ),
                 rect: titleRect,
                 alpha: entry?.unlocked ? 1 : 0.78
             });
-            drawTutorialText(this.#renderPort, {
+            drawTutorialText(renderPort, {
                 text: getPublicTitle(entry),
                 x: titleRect.x + (titleRect.w * 0.5),
                 y: titleRect.y + (titleRect.h * 0.5),
@@ -267,7 +273,7 @@ export class TutorialGalleryView {
                     : viewModel.colors.UI.Muted,
                 align: 'center'
             });
-            drawTutorialPixelAsset(this.#renderPort, {
+            drawTutorialPixelAsset(renderPort, {
                 image: this.#assetPort.getUiAsset?.('galleryAchievementDisplay'),
                 rect: frameRect,
                 alpha: entry?.unlocked ? 1 : 0.86,
@@ -275,13 +281,13 @@ export class TutorialGalleryView {
             });
             const body = entry?.unlocked ? String(entry.body || '') : '???';
             const lines = wrapTutorialText(
-                this.#renderPort,
+                renderPort,
                 body,
                 viewModel.fonts.SMALL,
                 layout.leftPage.w * 0.8,
                 2
             );
-            lines.forEach((line, lineIndex) => drawTutorialText(this.#renderPort, {
+            lines.forEach((line, lineIndex) => drawTutorialText(renderPort, {
                 text: line,
                 x: frameRect.x + (frameRect.w * 0.5),
                 y: frameRect.y + frameRect.h + (layout.leftPage.h * 0.055)
@@ -291,12 +297,12 @@ export class TutorialGalleryView {
                 align: 'center'
             }));
         });
-        drawTutorialPixelAsset(this.#renderPort, {
+        drawTutorialPixelAsset(renderPort, {
             image: this.#assetPort.getUiAsset?.('galleryTitleOff'),
             rect: layout.pageIndicator,
             alpha: 0.76
         });
-        drawTutorialText(this.#renderPort, {
+        drawTutorialText(renderPort, {
             text: String(viewModel.selectedIndex + 1) + '/'
                 + String(Math.max(1, viewModel.entries.length)),
             x: layout.pageIndicator.x + (layout.pageIndicator.w * 0.5),
@@ -307,8 +313,8 @@ export class TutorialGalleryView {
         });
     }
 
-    /** @param {object} viewModel @param {object} layout @private */
-    #drawDiaries(viewModel, layout) {
+    /** @param {object} viewModel @param {object} layout @param {object} renderPort @private */
+    #drawDiaries(viewModel, layout, renderPort) {
         const pageData = [
             {
                 id: 'lora-diary',
@@ -325,11 +331,11 @@ export class TutorialGalleryView {
         ];
         pageData.forEach((page, pageIndex) => {
             const titleRect = layout.pageTitles[pageIndex];
-            drawTutorialPixelAsset(this.#renderPort, {
+            drawTutorialPixelAsset(renderPort, {
                 image: this.#assetPort.getUiAsset?.('galleryTitleOn'),
                 rect: titleRect
             });
-            drawTutorialText(this.#renderPort, {
+            drawTutorialText(renderPort, {
                 text: page.title,
                 x: titleRect.x + (titleRect.w * 0.5),
                 y: titleRect.y + (titleRect.h * 0.5),
@@ -343,14 +349,14 @@ export class TutorialGalleryView {
             if (selectedPage && viewModel.selectedEntry) {
                 const pageRect = pageIndex === 0 ? layout.leftPage : layout.rightPage;
                 const bodyLines = wrapTutorialText(
-                    this.#renderPort,
+                    renderPort,
                     viewModel.selectedEntry.body,
                     viewModel.fonts.SMALL,
                     pageRect.w * 0.72,
                     8
                 );
                 const lineHeight = toTutorialUiHeight(viewModel.viewport, 2.5);
-                bodyLines.forEach((line, lineIndex) => drawTutorialText(this.#renderPort, {
+                bodyLines.forEach((line, lineIndex) => drawTutorialText(renderPort, {
                     text: line,
                     x: pageRect.x + (pageRect.w * 0.5),
                     y: pageRect.y + (pageRect.h * 0.205) + (lineIndex * lineHeight),
@@ -360,7 +366,7 @@ export class TutorialGalleryView {
                 }));
                 occupiedRows = Math.min(page.count, Math.max(1, Math.ceil(bodyLines.length * 0.82)));
             }
-            page.rows.slice(occupiedRows).forEach((row) => drawTutorialText(this.#renderPort, {
+            page.rows.slice(occupiedRows).forEach((row) => drawTutorialText(renderPort, {
                 text: '???',
                 x: row.x + (row.w * 0.5),
                 y: row.y + (row.h * 0.5),
@@ -371,17 +377,17 @@ export class TutorialGalleryView {
         });
     }
 
-    /** @param {object} viewModel @param {object} layout @private */
-    #drawAchievements(viewModel, layout) {
+    /** @param {object} viewModel @param {object} layout @param {object} renderPort @private */
+    #drawAchievements(viewModel, layout, renderPort) {
         layout.achievementSlots.forEach((slot, index) => {
             const entry = viewModel.entries[index];
-            drawTutorialPixelAsset(this.#renderPort, {
+            drawTutorialPixelAsset(renderPort, {
                 image: this.#assetPort.getUiAsset?.('galleryAchievementLocked'),
                 rect: slot,
                 alpha: entry?.unlocked ? 1 : 0.82
             });
             if (entry?.unlocked) {
-                drawTutorialText(this.#renderPort, {
+                drawTutorialText(renderPort, {
                     text: '◆',
                     x: slot.x + (slot.w * 0.5),
                     y: slot.y + (slot.h * 0.5),
@@ -391,7 +397,7 @@ export class TutorialGalleryView {
                 });
             }
         });
-        this.#renderPort.render('ui', {
+        renderPort.render('ui', {
             shape: 'roundRect',
             x: layout.achievementRibbon.x,
             y: layout.achievementRibbon.y,
@@ -403,14 +409,14 @@ export class TutorialGalleryView {
             lineWidth: Math.max(2, layout.space.scale * 2)
         });
         const ornamentRadius = Math.max(2, layout.achievementRibbon.w * 0.035);
-        [0.27, 0.5, 0.73].forEach((ratio) => this.#renderPort.render('ui', {
+        [0.27, 0.5, 0.73].forEach((ratio) => renderPort.render('ui', {
             shape: 'circle',
             x: layout.achievementRibbon.x + (layout.achievementRibbon.w * ratio),
             y: layout.achievementRibbon.y + (layout.achievementRibbon.h * 0.08),
             radius: ornamentRadius,
             fill: '#d9a44d'
         }));
-        this.#renderPort.render('ui', {
+        renderPort.render('ui', {
             shape: 'arrow',
             x: layout.achievementRibbon.x + (layout.achievementRibbon.w * 0.5),
             y: layout.achievementRibbon.y + layout.achievementRibbon.h,
@@ -424,12 +430,12 @@ export class TutorialGalleryView {
         if (!entry?.unlocked) {
             return;
         }
-        drawTutorialPixelAsset(this.#renderPort, {
+        drawTutorialPixelAsset(renderPort, {
             image: this.#assetPort.getUiAsset?.('galleryAchievementDisplay'),
             rect: layout.achievementDetail,
             mode: 'exact'
         });
-        drawTutorialText(this.#renderPort, {
+        drawTutorialText(renderPort, {
             text: entry.title,
             x: layout.achievementDetail.x + (layout.achievementDetail.w * 0.5),
             y: layout.achievementDetail.y + layout.achievementDetail.h
@@ -439,7 +445,7 @@ export class TutorialGalleryView {
             align: 'center'
         });
         if (entry.secondary) {
-            drawTutorialText(this.#renderPort, {
+            drawTutorialText(renderPort, {
                 text: entry.secondary,
                 x: layout.achievementDetail.x + (layout.achievementDetail.w * 0.5),
                 y: layout.achievementDetail.y + layout.achievementDetail.h
@@ -458,9 +464,11 @@ export class TutorialGalleryView {
      */
     getButtonSpecs(viewModel) {
         const layout = this.getLayout(viewModel);
+        const layer = viewModel.recordPopup === true ? 'top' : 'ui';
         const sectionButtons = viewModel.sections.map((section, index) => ({
             key: 'gallery-section-' + section.id,
             ...layout.tabs[index],
+            layer,
             label: '',
             tooltip: section.title,
             active: section.selected,
@@ -478,6 +486,7 @@ export class TutorialGalleryView {
             {
                 key: 'gallery-prev',
                 ...layout.buttons.previous,
+                layer,
                 label: '',
                 backgroundAssetKey: 'galleryTurnButton',
                 backgroundImageAlpha: 1,
@@ -490,6 +499,7 @@ export class TutorialGalleryView {
             {
                 key: 'gallery-next',
                 ...layout.buttons.next,
+                layer,
                 label: '',
                 backgroundAssetKey: 'galleryTurnButton',
                 backgroundImageAlpha: 1,
@@ -501,6 +511,7 @@ export class TutorialGalleryView {
             {
                 key: 'gallery-back',
                 ...layout.buttons.close,
+                layer,
                 label: '',
                 backgroundAssetKey: 'galleryExitButton',
                 backgroundImageAlpha: 1,
@@ -514,6 +525,7 @@ export class TutorialGalleryView {
             buttons.splice(sectionButtons.length + 1, 0, {
                 key: 'gallery-play',
                 ...layout.buttons.play,
+                layer,
                 label: '재생 [Enter]',
                 backgroundAssetKey: 'mainButton',
                 backgroundImageAlpha: 0.94,

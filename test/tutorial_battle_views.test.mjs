@@ -1026,11 +1026,11 @@ test('로라·플레이어 상태와 아이템 설명은 원본 패널 내부에
             smoothing: loraPortrait.smoothing
         },
         {
-            x: 900,
-            y: 27,
-            w: 85,
-            h: 86,
-            clipVertices: [944, 42, 980, 74, 944, 108, 915, 74],
+            x: 904,
+            y: 43,
+            w: 79,
+            h: 81,
+            clipVertices: [944, 49, 973, 74, 944, 101, 922, 74],
             smoothing: false
         }
     );

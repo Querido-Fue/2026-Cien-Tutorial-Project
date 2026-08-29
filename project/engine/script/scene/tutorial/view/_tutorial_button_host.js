@@ -120,6 +120,7 @@ export class TutorialButtonHost {
         if (!spec || typeof spec.key !== 'string') {
             return;
         }
+        const layer = typeof spec.layer === 'string' ? spec.layer : 'ui';
         const enabled = spec.enabled !== false;
         const inspectable = spec.inspectable === true || enabled;
         const icon = spec.icon || this.#createItemIconChild(
@@ -141,7 +142,7 @@ export class TutorialButtonHost {
         const textElement = UIPool.text_element.get();
         textElement.init({
             parent: this.#parent,
-            layer: 'ui',
+            layer,
             text: spec.label,
             font: style.font.family,
             fontWeight: style.font.weight,
@@ -154,7 +155,7 @@ export class TutorialButtonHost {
         const button = UIPool.button.get();
         button.init({
             parent: this.#parent,
-            layer: 'ui',
+            layer,
             x: interactiveRect.x,
             y: interactiveRect.y,
             width: interactiveRect.w,

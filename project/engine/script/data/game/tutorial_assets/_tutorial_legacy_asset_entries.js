@@ -8,8 +8,8 @@ export const TUTORIAL_LEGACY_ASSET_IDS = Object.freeze({
 export const TUTORIAL_LEGACY_ASSET_ENTRIES = Object.freeze([
     createTutorialPngAssetEntry({
         id: TUTORIAL_LEGACY_ASSET_IDS.loraPortrait,
-        runtimePath: '../asset/tutorial/characters/lora-portrait-pixel.png',
-        sourceName: 'generated/tutorial/characters/lora-portrait-pixel.png',
+        runtimePath: '../asset/tutorial/characters/lora-portrait-pixel-v2.png',
+        sourceName: 'generated/tutorial/characters/lora-portrait-pixel-v2.png',
         expectedDimensions: { width: 1254, height: 1254 },
         actualDimensions: { width: 1254, height: 1254 },
         layer: 'portrait',

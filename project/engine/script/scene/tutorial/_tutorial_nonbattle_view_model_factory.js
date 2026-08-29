@@ -20,6 +20,32 @@ function createTitleTransitionSnapshot(transition) {
     });
 }
 
+/** @param {object|null} transition @returns {Readonly<object>} 방어 복제한 기록 책 전환 상태입니다. */
+function createRecordPresentationSnapshot(transition) {
+    const progress = Number.isFinite(Number(transition?.progress))
+        ? Math.max(0, Math.min(1, Number(transition.progress)))
+        : 1;
+    return Object.freeze({
+        phase: String(transition?.phase || 'open'),
+        progress,
+        alpha: Number.isFinite(Number(transition?.alpha))
+            ? Math.max(0, Math.min(1, Number(transition.alpha)))
+            : progress,
+        scale: Number.isFinite(Number(transition?.scale))
+            ? Math.max(0.1, Math.min(1, Number(transition.scale)))
+            : 1,
+        pageProgress: Number.isFinite(Number(transition?.pageProgress))
+            ? Math.max(0, Math.min(1, Number(transition.pageProgress)))
+            : progress,
+        contentAlpha: Number.isFinite(Number(transition?.contentAlpha))
+            ? Math.max(0, Math.min(1, Number(transition.contentAlpha)))
+            : progress,
+        visible: transition?.visible !== false,
+        interactive: transition?.interactive !== false,
+        revision: Math.max(0, Math.trunc(Number(transition?.revision)) || 0)
+    });
+}
+
 /**
  * 비전투 화면과 전투 안내가 소비할 직렬화 가능한 뷰 모델을 조립합니다.
  */
@@ -115,14 +141,23 @@ export class TutorialNonbattleViewModelFactory {
     }
 
     /** @param {object} frame @param {object} options @returns {object} */
-    createGallery(frame, { gallery, mode, selectionProgress }) {
+    createGallery(frame, {
+        gallery,
+        mode,
+        selectionProgress,
+        recordPresentation = null
+    }) {
+        const recordPopup = mode === MODES.RECORD;
         return Object.freeze({
             ...frame,
             ...gallery,
-            closeCommandType: mode === MODES.RECORD
+            closeCommandType: recordPopup
                 ? COMMANDS.CLOSE_RECORD
                 : COMMANDS.RETURN_MENU,
-            recordPopup: mode === MODES.RECORD,
+            recordPopup,
+            recordPresentation: recordPopup
+                ? createRecordPresentationSnapshot(recordPresentation)
+                : null,
             selectionProgress: Number(selectionProgress) || 0,
             selectionMinScale: Number(this.data.ANIMATION.SELECTION_MIN_SCALE) || 0.72
         });

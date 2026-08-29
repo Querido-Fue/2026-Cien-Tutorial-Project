@@ -14,13 +14,13 @@ import {
 const LORA_STATUS_PANEL_LAYOUT = Object.freeze({
     SOURCE: Object.freeze({ WIDTH: 247, HEIGHT: 90 }),
     PORTRAIT_VIEWPORT: Object.freeze({ X: 0, Y: 0, WIDTH: 55, HEIGHT: 56 }),
-    PORTRAIT_SCALE: 1.3,
-    PORTRAIT_VISUAL_CENTER: Object.freeze({ X: 0.56, Y: 0.56 }),
+    PORTRAIT_SCALE: 1.22,
+    PORTRAIT_VISUAL_CENTER: Object.freeze({ X: 0.55, Y: 0.4 }),
     PORTRAIT_CLIP: Object.freeze([
-        Object.freeze({ X: 25, Y: 0 }),
-        Object.freeze({ X: 55, Y: 27 }),
-        Object.freeze({ X: 25, Y: 56 }),
-        Object.freeze({ X: 0, Y: 27 })
+        Object.freeze({ X: 25, Y: 6 }),
+        Object.freeze({ X: 49, Y: 27 }),
+        Object.freeze({ X: 25, Y: 50 }),
+        Object.freeze({ X: 6, Y: 27 })
     ]),
     PORTRAIT_FRAME_CLIPS: Object.freeze([
         Object.freeze([

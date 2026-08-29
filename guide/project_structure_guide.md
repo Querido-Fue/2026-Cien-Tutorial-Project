@@ -20,6 +20,7 @@
 | `test/tutorial_scene_seams.test.mjs` | 튜토리얼 모드·명령·키·값 유틸·모드 정책과 scene seam의 비순환 의존성을 고정하는 계약 테스트 |
 | `test/tutorial_content_meta.test.mjs` | 확정 기록·업적명·설명·사건 조건, 컷씬 트리거, 갤러리 잠금·재생, 메타 멱등성·손상 정규화·완료 횟수 경계를 검증하는 콘텐츠 계약 테스트 |
 | `test/tutorial_records.test.mjs` | 안정된 기록 ID, 층별 배치, 해금 전후 갤러리, 직접 선택과 전투 팝업 큐 계약을 검증하는 기록 수집 테스트 |
+| `test/tutorial_record_presentation.test.mjs` | 기록 책의 expo 진입·퇴장, vignette 블러·감광 복원, top 레이어 확대·페이드·페이지 프레임 계약을 검증하는 테스트 |
 | `test/tutorial_nonbattle_views.test.mjs` | 비전투 뷰의 기준·와이드·최소 높이 순수 레이아웃, 직렬화 가능한 버튼 명령, 단방향 의존 계약 테스트 |
 | `test/web_release_manifest_builder.test.mjs` | KST 버전 형식과 실제 Git 기록→한글 체인지로그 매핑을 검증하는 빌드 계약 테스트 |
 | `test/web_release_bootstrap.test.mjs` | 최신 확인 전 모듈 차단과 구버전 문서 재접속 순서를 검증하는 bootstrap 테스트 |
@@ -97,6 +98,9 @@
 | `script/scene/tutorial/_tutorial_cutscene_trigger_router.js` | 첫 실행 메타와 실제 모델 사건을 기존 컷씬 ID로만 변환하는 런 단위 라우터 |
 | `script/scene/tutorial/_tutorial_gallery_controller.js` | 업적·일기·엔딩·컷씬 섹션 선택과 메타 기반 열람·재생 스냅샷을 소유하는 클래스 |
 | `script/scene/tutorial/_tutorial_record_popup_queue.js` | 한 경로에서 여러 기록을 획득해도 순서대로 갤러리 책을 열도록 활성·대기 기록과 중복 제거를 소유하는 클래스 |
+| `script/scene/tutorial/_tutorial_record_popup_controller.js` | 기록 대기열을 0.6초 `easeOutExpo` 진입·0.4초 `easeInExpo` 퇴장과 결합하고 입력 잠금·배경 표현 수명을 조율하는 클래스 |
+| `script/scene/tutorial/view/_tutorial_record_backdrop_view.js` | 기록 책 아래 vignette surface에 진행도 기반 블러·감광을 적용하고 닫힐 때 기존 inline style을 복원하는 뷰 |
+| `script/scene/tutorial/view/_tutorial_record_gallery_presentation.js` | 기록 책 레이아웃을 중심 확대하고 프레임·본문 알파와 `top` 레이어 렌더 포트를 만드는 순수 표현 모듈 |
 | `script/scene/tutorial/_tutorial_combat_rules.js` | 행동 가능 여부, 대상, 피해·불안정도와 아이템 효과를 실제 행동·미리보기에 공통 제공하는 순수 규칙 클래스 |
 | `script/scene/tutorial/_tutorial_effect_contract.js` | 선언형 효과가 공유하는 안정된 trigger·operation·condition·mode ID의 단일 원본 |
 | `script/scene/tutorial/_tutorial_effect_registry.js` | 아이템·이벤트 effect 데이터와 참조를 검증·정규화하고 원본 순서의 레코드를 제공하는 순수 레지스트리 클래스 |
@@ -121,6 +125,7 @@
 | `script/scene/tutorial/_tutorial_mode_policy.js` | 모드별 view/button 정책과 메뉴 복귀·재시작·전투 입력 허용 판정 |
 | `script/data/game/tutorial_game_data.js` | 가로 9×세로 8 두 층, 유닛, 공개 이벤트 타일·짝 포탈·기록 배치, `ITEMS[*].effects`·`EVENT_TILE_EFFECTS`, 활성 고정 컷씬, 규칙, 레이아웃과 문구를 제공하는 `TUTORIAL_GAME_DATA` |
 | `script/data/game/tutorial_content_data.js` | 확정 업적명·설명·사건 조건, 안정된 기록 ID와 본문, 엔딩 표시명, 갤러리 순서를 제공하는 `TUTORIAL_CONTENT_DATA` |
+| `script/data/game/tutorial_record_presentation_data.js` | 기록 책 진입·퇴장 시간, expo easing, 최소 배율과 backdrop 블러·감광 강도를 제공하는 정적 데이터 |
 | `script/data/game/tutorial_changelog_data.js` | 실제 Git 커밋/제목과 사용자에게 표시할 한글 변경 요약을 연결하는 카탈로그 |
 | `script/data/game/tutorial_asset_manifest.js` | 맵·UI·아이템·정적 인물 에셋 선언과 실제 맵 격자 꼭짓점을 조합하는 단일 매니페스트 |
 | `script/data/game/tutorial_assets/` | 매니페스트 항목 생성을 맵·UI·아이템·레거시 도메인으로 분리한 데이터 모듈 |

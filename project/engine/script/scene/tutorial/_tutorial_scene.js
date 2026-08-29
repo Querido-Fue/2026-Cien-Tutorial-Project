@@ -84,7 +84,7 @@ import { TutorialSpriteAnimator } from './_tutorial_sprite_animator.js';
 import { TutorialSpriteClipResolver } from './_tutorial_sprite_clip_resolver.js';
 import { TutorialSpriteCueRouter } from './_tutorial_sprite_cue_router.js';
 import { TutorialSpriteRoster } from './_tutorial_sprite_roster.js';
-import { TutorialRecordPopupQueue } from './_tutorial_record_popup_queue.js';
+import { TutorialRecordPopupController } from './_tutorial_record_popup_controller.js';
 import { TutorialResultController } from './_tutorial_result_controller.js';
 import { TutorialBattleFeedbackView } from './view/_tutorial_battle_feedback_view.js';
 import { TutorialBattleHudView } from './view/_tutorial_battle_hud_view.js';
@@ -106,6 +106,7 @@ import { TutorialTitleTransitionView } from './view/_tutorial_title_transition_v
 const TUTORIAL_GAME_DATA = getData('TUTORIAL_GAME_DATA');
 const TUTORIAL_CONTENT_DATA = getData('TUTORIAL_CONTENT_DATA');
 const TUTORIAL_ASSET_MANIFEST = getData('TUTORIAL_ASSET_MANIFEST');
+const TUTORIAL_RECORD_PRESENTATION_DATA = getData('TUTORIAL_RECORD_PRESENTATION_DATA');
 const TUTORIAL_SPRITE_CLIPS = getData('TUTORIAL_SPRITE_CLIPS');
 
 const PLAYER_ID = 'player';
@@ -159,7 +160,10 @@ export class TutorialScene extends BaseScene {
             content: this.content,
             cutscenes: this.data.CUTSCENES
         });
-        this.recordPopups = new TutorialRecordPopupQueue();
+        this.recordPopups = new TutorialRecordPopupController({
+            animationPort: Object.freeze({ animate, remove }),
+            config: TUTORIAL_RECORD_PRESENTATION_DATA
+        });
         this.achievementEvaluator = new TutorialAchievementEvaluator(
             this.content.ACHIEVEMENTS
         );
@@ -419,7 +423,9 @@ export class TutorialScene extends BaseScene {
         this.uiActionHandled = false;
 
         this.#ensureButtons();
-        this.buttonHost.setPresentation(this.titleFlow.getButtonPresentation());
+        this.buttonHost.setPresentation(this.recordPopups.createButtonPresentation(
+            this.titleFlow.getButtonPresentation(), this.mode === MODES.RECORD
+        ));
         this.buttonHost.update();
         if (this.#openNextRecordPopup()) {
             this.#ensureButtons();
@@ -451,15 +457,23 @@ export class TutorialScene extends BaseScene {
         this.keyboardEdges.capture();
     }
 
-    /**
-     * 현재 모드에 맞는 화면과 컷씬 카드를 그립니다.
-     * @override
-     */
+    /** 현재 모드에 맞는 화면과 컷씬 카드를 그립니다. @override */
     draw() {
         this.#ensureButtons();
-        this.buttonHost.setPresentation(this.titleFlow.getButtonPresentation());
+        this.buttonHost.setPresentation(this.recordPopups.createButtonPresentation(
+            this.titleFlow.getButtonPresentation(), this.mode === MODES.RECORD
+        ));
         this.#drawBackdrop();
+        this.recordPopups.syncBackdrop();
         const view = getTutorialModePolicy(this.mode)?.view;
+        const battleViewModel = view === 'battle' || view === 'pause'
+            || this.mode === MODES.RECORD ? this.#createBattleViewModel() : null;
+        if (battleViewModel) {
+            this.battleWorldView.draw(battleViewModel);
+            this.battleFeedbackView.draw(battleViewModel);
+            this.battleHudView.draw(battleViewModel);
+            this.battleAchievementView.draw(battleViewModel);
+        }
 
         if (view === 'loading') {
             this.loadingView.draw(this.#createLoadingViewModel());
@@ -473,11 +487,6 @@ export class TutorialScene extends BaseScene {
         } else if (view === 'changelog') {
             this.changelogView.draw(this.#createChangelogViewModel());
         } else if (view === 'battle' || view === 'pause') {
-            const battleViewModel = this.#createBattleViewModel();
-            this.battleWorldView.draw(battleViewModel);
-            this.battleFeedbackView.draw(battleViewModel);
-            this.battleHudView.draw(battleViewModel);
-            this.battleAchievementView.draw(battleViewModel);
             if (view === 'battle') {
                 this.battleTutorialView.draw(
                     this.#createBattleTutorialViewModel(battleViewModel)
@@ -677,7 +686,7 @@ export class TutorialScene extends BaseScene {
         this.pendingCutscenes = [];
         this.results.reset();
         this.runCutsceneIds.clear();
-        this.recordPopups.clear();
+        this.recordPopups.destroy();
         this.battleFocus.reset();
         this.guidance.reset();
         this.loraTurns.reset();
@@ -979,20 +988,20 @@ export class TutorialScene extends BaseScene {
         if (this.mode !== MODES.RECORD || this.cutscenes.isOpen()) {
             return;
         }
-        this.recordPopups.closeActive();
-        this.mode = MODES.BATTLE;
-        this.#refreshBattleCache();
-        if (this.#openNextRecordPopup()) {
-            return;
-        }
-        this.#enterResultIfNeeded();
+        this.recordPopups.close(() => {
+            if (this.destroyed) {
+                return;
+            }
+            this.mode = MODES.BATTLE;
+            this.#refreshBattleCache();
+            if (!this.#openNextRecordPopup()) {
+                this.#enterResultIfNeeded();
+            }
+            this.buttonHost.invalidate();
+        });
     }
 
-    /**
-     * 전투가 다른 오버레이로 점유되지 않았을 때 다음 기록을 갤러리 책으로 엽니다.
-     * @returns {boolean} 기록 팝업을 열었는지 여부입니다.
-     * @private
-     */
+    /** 전투가 비어 있을 때 다음 기록을 엽니다. @returns {boolean} 열림 여부입니다. @private */
     #openNextRecordPopup() {
         if (this.mode !== MODES.BATTLE
             || this.cutscenes.isOpen()
@@ -1000,18 +1009,16 @@ export class TutorialScene extends BaseScene {
             || !this.model) {
             return false;
         }
-        let recordId = this.recordPopups.openNext();
-        while (recordId) {
-            if (this.galleryController.selectEntry(recordId, this.meta)) {
-                this.mode = MODES.RECORD;
-                this.battleSelection.clearHover();
-                this.buttonHost.invalidate();
-                return true;
-            }
-            this.recordPopups.closeActive();
-            recordId = this.recordPopups.openNext();
+        const opened = this.recordPopups.openNext(
+            (recordId) => this.galleryController.selectEntry(recordId, this.meta)
+        );
+        if (!opened) {
+            return false;
         }
-        return false;
+        this.mode = MODES.RECORD;
+        this.battleSelection.clearHover();
+        this.buttonHost.invalidate();
+        return true;
     }
 
     /**
@@ -1245,7 +1252,9 @@ export class TutorialScene extends BaseScene {
 
     /** @returns {boolean} 전투 또는 타이틀 표현 전환의 통합 입력 잠금입니다. @private */
     #isPresentationLocked() {
-        return this.presentationTimeline.isLocked() || this.titleFlow.isLocked();
+        return this.presentationTimeline.isLocked()
+            || this.titleFlow.isLocked()
+            || this.recordPopups.isLocked();
     }
 
     /**
@@ -1432,6 +1441,7 @@ export class TutorialScene extends BaseScene {
             {
                 gallery: this.galleryController.getSnapshot(this.meta),
                 mode: this.mode,
+                recordPresentation: this.recordPopups.getSnapshot(),
                 selectionProgress:
                     this.presentationTimeline.getState().menuSelectionProgress
             }
@@ -1476,11 +1486,7 @@ export class TutorialScene extends BaseScene {
         });
     }
 
-    /**
-     * 한 프레임의 모델·선택·표현 상태를 전용 팩토리에 전달합니다.
-     * @returns {object|null} 전투 뷰들이 공유할 읽기 전용 모델입니다.
-     * @private
-     */
+    /** @returns {object|null} 전투 뷰들이 공유할 한 프레임 모델입니다. @private */
     #createBattleViewModel() {
         if (!this.model) {
             return null;
@@ -1504,12 +1510,7 @@ export class TutorialScene extends BaseScene {
         });
     }
 
-    /**
-     * 전투 안내 뷰가 필요한 레이아웃·문구·표시 상태만 조립합니다.
-     * @param {object|null} battleViewModel - 같은 프레임의 전투 뷰 모델입니다.
-     * @returns {object|null} 안내 오버레이 표시 모델입니다.
-     * @private
-     */
+    /** @param {object|null} battleViewModel @returns {object|null} 전투 안내 모델입니다. @private */
     #createBattleTutorialViewModel(battleViewModel) {
         return this.nonbattleViewModels.createBattleTutorial(
             battleViewModel,
@@ -1898,13 +1899,10 @@ export class TutorialScene extends BaseScene {
         });
     }
 
-    /**
-     * 공통 전체 화면 배경을 그립니다.
-     * @private
-     */
+    /** 현재 모드의 공통 전체 화면 배경을 그립니다. @private */
     #drawBackdrop() {
         const view = getTutorialModePolicy(this.mode)?.view;
-        const fill = view === 'battle' || view === 'pause'
+        const fill = view === 'battle' || view === 'pause' || this.mode === MODES.RECORD
             ? ColorSchemes.Tactics.WorldBackdrop
             : ColorSchemes.Tactics.Backdrop;
         renderGL('background', {

@@ -35,6 +35,7 @@ import { MOUSE_BUTTON_INPUT_DATA } from 'data/input/mouse_button_input_data.js';
 import { TUTORIAL_GAME_DATA } from 'data/game/tutorial_game_data.js';
 import { TUTORIAL_CONTENT_DATA } from 'data/game/tutorial_content_data.js';
 import { TUTORIAL_ASSET_MANIFEST } from 'data/game/tutorial_asset_manifest.js';
+import { TUTORIAL_RECORD_PRESENTATION_DATA } from 'data/game/tutorial_record_presentation_data.js';
 import { TUTORIAL_SPRITE_CLIPS } from 'data/game/tutorial_sprite_clips.js';
 
 const DATA_REGISTRY = Object.freeze({
@@ -71,6 +72,7 @@ const DATA_REGISTRY = Object.freeze({
     TUTORIAL_GAME_DATA,
     TUTORIAL_CONTENT_DATA,
     TUTORIAL_ASSET_MANIFEST,
+    TUTORIAL_RECORD_PRESENTATION_DATA,
     TUTORIAL_SPRITE_CLIPS
 });
 
