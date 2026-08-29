@@ -21,9 +21,14 @@ function normalizeRenderTargetSize(size) {
 export class EffectRenderer {
     /**
      * @param {WebGLRenderingContext} gl - 대상 WebGL 컨텍스트입니다.
+     * @param {{getFramebuffer?: Function}} [options] - 선택적 외부 렌더 타깃입니다.
      */
-    constructor(gl) {
+    constructor(gl, options = {}) {
         this.gl = gl;
+        this.hasExternalFramebuffer = typeof options.getFramebuffer === 'function';
+        this.getFramebuffer = this.hasExternalFramebuffer
+            ? options.getFramebuffer
+            : () => null;
         this.width = 0;
         this.height = 0;
         this.commands = [];
@@ -47,10 +52,11 @@ export class EffectRenderer {
      */
     beginFrame(width, height) {
         this.resize(width, height);
-        this.width = normalizeRenderTargetSize(this.gl.drawingBufferWidth || this.width);
-        this.height = normalizeRenderTargetSize(this.gl.drawingBufferHeight || this.height);
-        this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null);
-        this.gl.viewport(0, 0, this.width, this.height);
+        if (!this.hasExternalFramebuffer) {
+            this.width = normalizeRenderTargetSize(this.gl.drawingBufferWidth || this.width);
+            this.height = normalizeRenderTargetSize(this.gl.drawingBufferHeight || this.height);
+        }
+        this.#bindRenderTarget();
         this.commands.length = 0;
     }
 
@@ -75,6 +81,7 @@ export class EffectRenderer {
             return;
         }
 
+        this.#bindRenderTarget();
         for (let index = 0; index < this.commands.length; index++) {
             const command = this.commands[index];
             const effectType = command.effectType || command.shape;
@@ -87,6 +94,12 @@ export class EffectRenderer {
         }
 
         this.commands.length = 0;
+    }
+
+    /** 외부 패스가 바꾼 framebuffer와 viewport를 effect 타깃으로 복구합니다. @private */
+    #bindRenderTarget() {
+        this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, this.getFramebuffer());
+        this.gl.viewport(0, 0, this.width, this.height);
     }
 
     /**

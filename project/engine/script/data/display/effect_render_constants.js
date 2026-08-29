@@ -10,8 +10,12 @@ export const EFFECT_RENDER_CONSTANTS = Object.freeze({
         MAX_EMITTERS_PER_COMMAND: 32,
         MIN_SIZE: 1,
         MAX_SIZE: 64,
+        PIXEL_GRID_SIZE: 2,
         BOUNDS_X_SIZE_RATIO: 3.2,
         BOUNDS_TOP_SIZE_RATIO: 4.2,
         BOUNDS_BOTTOM_SIZE_RATIO: 1.8
+    }),
+    MAGNETIC_SHIELD: Object.freeze({
+        PIXEL_GRID_SIZE: 2
     })
 });

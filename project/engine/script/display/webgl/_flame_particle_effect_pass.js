@@ -67,6 +67,10 @@ export class FlameParticleEffectPass {
             Number.isFinite(Number(command.time)) ? Number(command.time) : 0
         );
         gl.uniform1f(this.programInfo.uniforms.u_alpha, alpha);
+        gl.uniform1f(
+            this.programInfo.uniforms.u_pixelSize,
+            this.#resolvePixelSize(command.pixelSize)
+        );
         gl.uniform3fv(
             this.programInfo.uniforms.u_outerColor,
             this.#resolveColor(command.outerColor, [1, 0.31, 0.055])
@@ -152,6 +156,7 @@ export class FlameParticleEffectPass {
                 u_time: gl.getUniformLocation(program, 'u_time'),
                 u_phase: gl.getUniformLocation(program, 'u_phase'),
                 u_alpha: gl.getUniformLocation(program, 'u_alpha'),
+                u_pixelSize: gl.getUniformLocation(program, 'u_pixelSize'),
                 u_outerColor: gl.getUniformLocation(program, 'u_outerColor'),
                 u_coreColor: gl.getUniformLocation(program, 'u_coreColor'),
                 u_emberColor: gl.getUniformLocation(program, 'u_emberColor')
@@ -212,6 +217,20 @@ export class FlameParticleEffectPass {
             Math.max(0, renderHeight - rect.y - rect.h),
             rect.w,
             rect.h
+        );
+    }
+
+    /** 픽셀 블록 크기를 안전한 화면 픽셀 범위로 제한합니다. @private */
+    #resolvePixelSize(pixelSize) {
+        const numericSize = Number(pixelSize);
+        return Math.max(
+            1,
+            Math.min(
+                8,
+                Number.isFinite(numericSize)
+                    ? numericSize
+                    : FLAME_CONSTANTS.PIXEL_GRID_SIZE
+            )
         );
     }
 

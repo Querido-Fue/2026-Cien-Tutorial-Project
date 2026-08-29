@@ -5,7 +5,8 @@ export const DISPLAY_SURFACE_DATA = Object.freeze({
     WEBGL_RENDER_MODES: Object.freeze({
         BATCH: 'batch',
         OVERLAY_EFFECT: 'overlay-effect',
-        EFFECT: 'effect'
+        EFFECT: 'effect',
+        WORLD_POSTPROCESS: 'world-postprocess'
     }),
     WEBGL_LAYER_NAME_MAP: Object.freeze({
         main: 'object',
@@ -18,6 +19,7 @@ export const DISPLAY_SURFACE_DATA = Object.freeze({
         background: 0,
         object: 10,
         effect: 20,
+        'world-postprocess': 25,
         texteffect: 30,
         ui: 40,
         top: 1000

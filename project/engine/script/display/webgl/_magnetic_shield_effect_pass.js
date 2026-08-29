@@ -1,3 +1,4 @@
+import { getData } from 'data/data_handler.js';
 import { clamp01 } from 'util/number_util.js';
 import {
     compileShader,
@@ -7,6 +8,8 @@ import {
     MAGNETIC_SHIELD_MAX_DENTS,
     MAGNETIC_SHIELD_MAX_IMPACTS
 } from './_shader_utils.js';
+
+const SHIELD_CONSTANTS = getData('EFFECT_RENDER_CONSTANTS').MAGNETIC_SHIELD;
 
 /**
  * @class MagneticShieldEffectPass
@@ -76,6 +79,10 @@ export class MagneticShieldEffectPass {
         gl.uniform1f(this.programInfo.uniforms.u_alpha, alpha);
         gl.uniform1f(this.programInfo.uniforms.u_ringThickness, ringThickness);
         gl.uniform1f(this.programInfo.uniforms.u_glowWidth, glowWidth);
+        gl.uniform1f(
+            this.programInfo.uniforms.u_pixelSize,
+            this.#resolvePixelSize(command.pixelSize)
+        );
         gl.uniform3fv(this.programInfo.uniforms.u_shadowColor, command.shadowColor || [0.07, 0.04, 0.25]);
         gl.uniform3fv(this.programInfo.uniforms.u_lowColor, command.lowColor || [0.60, 0.36, 0.98]);
         gl.uniform3fv(this.programInfo.uniforms.u_highColor, command.highColor || [0.70, 0.93, 1.0]);
@@ -126,6 +133,7 @@ export class MagneticShieldEffectPass {
                 u_alpha: gl.getUniformLocation(program, 'u_alpha'),
                 u_ringThickness: gl.getUniformLocation(program, 'u_ringThickness'),
                 u_glowWidth: gl.getUniformLocation(program, 'u_glowWidth'),
+                u_pixelSize: gl.getUniformLocation(program, 'u_pixelSize'),
                 u_shadowColor: gl.getUniformLocation(program, 'u_shadowColor'),
                 u_lowColor: gl.getUniformLocation(program, 'u_lowColor'),
                 u_highColor: gl.getUniformLocation(program, 'u_highColor'),
@@ -205,6 +213,20 @@ export class MagneticShieldEffectPass {
             Math.max(0, renderHeight - rect.y - rect.h),
             rect.w,
             rect.h
+        );
+    }
+
+    /** 픽셀 블록 크기를 안전한 화면 픽셀 범위로 제한합니다. @private */
+    #resolvePixelSize(pixelSize) {
+        const numericSize = Number(pixelSize);
+        return Math.max(
+            1,
+            Math.min(
+                8,
+                Number.isFinite(numericSize)
+                    ? numericSize
+                    : SHIELD_CONSTANTS.PIXEL_GRID_SIZE
+            )
         );
     }
 

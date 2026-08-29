@@ -54,6 +54,12 @@ noscript {
     background-color: rgba(0, 0, 0, 0);
 }
 
+#world-postprocess {
+    z-index: 25;
+    visibility: hidden;
+    background-color: #101010;
+}
+
 #texteffect {
     z-index: 30;
     background-color: rgba(0, 0, 0, 0);

@@ -21,12 +21,17 @@ import {
 
 let displaySystemInstance = null;
 const DISPLAY_WEBGL_RENDER_MODES = getData('DISPLAY_SURFACE_DATA').WEBGL_RENDER_MODES;
+const WORLD_POSTPROCESS_CONSTANTS = getData('WORLD_POSTPROCESS_CONSTANTS');
+const WORLD_POSTPROCESS_LAYER_ID = WORLD_POSTPROCESS_CONSTANTS.LAYER_ID;
+const WORLD_POSTPROCESS_SOURCE_LAYER_ID_SET = new Set(
+    WORLD_POSTPROCESS_CONSTANTS.SOURCE_LAYER_IDS
+);
 
 /**
  * @typedef {object} DisplaySurfaceDescriptor
  * @property {string} id - surface 식별자입니다.
  * @property {'2d'|'webgl'} type - surface 타입입니다.
- * @property {'batch'|'overlay-effect'|'effect'} mode - WebGL 모드 또는 기본 모드입니다.
+ * @property {'batch'|'overlay-effect'|'effect'|'world-postprocess'} mode - WebGL 모드 또는 기본 모드입니다.
  * @property {HTMLCanvasElement} canvas - DOM 캔버스입니다.
  * @property {CanvasRenderingContext2D|WebGLRenderingContext|null} context - 연결된 컨텍스트입니다.
  * @property {number} order - 표시 순서입니다.
@@ -81,6 +86,15 @@ export class DisplaySystem {
             alpha: true,
             mode: DISPLAY_WEBGL_RENDER_MODES.EFFECT
         });
+        this.#registerStaticSurface(
+            WORLD_POSTPROCESS_LAYER_ID,
+            WORLD_POSTPROCESS_LAYER_ID,
+            'webgl',
+            {
+                alpha: false,
+                mode: DISPLAY_WEBGL_RENDER_MODES.WORLD_POSTPROCESS
+            }
+        );
         this.#registerStaticSurface('texteffect', 'texteffect', '2d');
         this.#registerStaticSurface('ui', 'ui', '2d');
         this.#registerStaticSurface('vignette', 'vignette', '2d', {
@@ -94,6 +108,7 @@ export class DisplaySystem {
             const rgb = colorUtil().cssToRgb(ColorSchemes.Background);
             this.webGLHandler.setBackgroundColor(rgb.r / 255, rgb.g / 255, rgb.b / 255);
         }
+        this.#syncWorldPostProcessVignetteStyle();
 
         await this.screenHandler.init();
 
@@ -245,6 +260,9 @@ export class DisplaySystem {
 
         const sources = [];
         for (const descriptor of this.#getSortedSurfaceDescriptors()) {
+            if (!this.#isActiveCompositeSurface(descriptor)) {
+                continue;
+            }
             if (shouldIncludeDisplayCompositeSource(descriptor, target)) {
                 sources.push(createDisplayCompositeCanvasSource(descriptor));
             }
@@ -288,6 +306,9 @@ export class DisplaySystem {
 
         if (this.webGLHandler) {
             this.webGLHandler.resize(this.screenHandler.width, this.screenHandler.height);
+            this.webGLHandler.setWorldPostProcessQualityForRenderScale(
+                getSetting('renderScale')
+            );
         }
 
         if (this.vignetteRenderer) {
@@ -306,6 +327,16 @@ export class DisplaySystem {
             return;
         }
 
+        const postProcessActive = this.webGLHandler?.isWorldPostProcessActive() === true;
+        const vignetteSurface = this.surfaceMap.get('vignette');
+        if (vignetteSurface?.canvas?.style) {
+            vignetteSurface.canvas.style.visibility = postProcessActive ? 'hidden' : 'visible';
+        }
+        if (postProcessActive) {
+            this.#syncWorldPostProcessVignetteStyle();
+            return;
+        }
+
         this.vignetteRenderer.draw(this.drawHandler);
     }
 
@@ -315,12 +346,19 @@ export class DisplaySystem {
      * @param {string} surfaceId - 등록할 식별자입니다.
      * @param {string} domId - 연결할 DOM id입니다.
      * @param {'2d'|'webgl'} type - surface 타입입니다.
-     * @param {{alpha?: boolean, mode?: 'batch'|'overlay-effect'|'effect', includeInComposite?: boolean, compositeOpacityFactor?: number, order?: number, persistent?: boolean}} [options] - 옵션입니다.
+     * @param {{alpha?: boolean, mode?: 'batch'|'overlay-effect'|'effect'|'world-postprocess', includeInComposite?: boolean, compositeOpacityFactor?: number, order?: number, persistent?: boolean}} [options] - 옵션입니다.
      */
     #registerStaticSurface(surfaceId, domId, type, options = {}) {
         const canvas = document.getElementById(domId);
         const context = type === 'webgl'
-            ? canvas.getContext('webgl', { alpha: options.alpha !== false, preserveDrawingBuffer: false })
+            ? canvas.getContext('webgl', {
+                alpha: options.alpha !== false,
+                antialias: false,
+                depth: false,
+                stencil: false,
+                premultipliedAlpha: true,
+                preserveDrawingBuffer: false
+            })
             : canvas.getContext('2d');
 
         const descriptor = createDisplaySurfaceDescriptor({
@@ -458,6 +496,29 @@ export class DisplaySystem {
     #getSortedSurfaceDescriptors() {
         return Array.from(this.surfaceMap.values()).sort(compareDisplaySurfaceDescriptors);
     }
+
+    /**
+     * 현재 후처리/폴백 상태에서 blur 합성에 사용할 정적 월드 surface인지 판정합니다.
+     * @param {DisplaySurfaceDescriptor} descriptor - 후보 surface입니다.
+     * @returns {boolean} 활성 surface이면 true입니다.
+     * @private
+     */
+    #isActiveCompositeSurface(descriptor) {
+        const postProcessActive = this.webGLHandler?.isWorldPostProcessActive() === true;
+        if (postProcessActive) {
+            return !WORLD_POSTPROCESS_SOURCE_LAYER_ID_SET.has(descriptor.id);
+        }
+        return descriptor.id !== WORLD_POSTPROCESS_LAYER_ID;
+    }
+
+    /** 기존 테마 비네팅 계약을 후처리 셰이더에 동기화합니다. @private */
+    #syncWorldPostProcessVignetteStyle() {
+        const worldVignette = ColorSchemes.Vignette?.WORLD;
+        this.webGLHandler?.setWorldPostProcessVignetteStyle({
+            rgb: worldVignette?.RGB,
+            alphaMultiplier: worldVignette?.AlphaMultiplier
+        });
+    }
 }
 
 /**
@@ -592,6 +653,18 @@ export const getCanvasPoolStats = () => displaySystemInstance
     : {
         twoD: { activeCount: 0, createdCount: 0, availableCount: 0 },
         webgl: { activeCount: 0, createdCount: 0, availableCount: 0 }
+    };
+
+/**
+ * 월드 후처리 활성 상태와 최근 CPU 제출 시간을 반환합니다.
+ * @returns {object} 후처리 진단 정보입니다.
+ */
+export const getWorldPostProcessDiagnostics = () => displaySystemInstance?.webGLHandler
+    ?.getWorldPostProcessDiagnostics() || {
+        active: false,
+        quality: null,
+        bloomScale: WORLD_POSTPROCESS_CONSTANTS.BLOOM_SCALE,
+        fallbackReason: 'display system unavailable'
     };
 
 /**

@@ -45,9 +45,13 @@ const TRANSPARENT_TEXTURE_PIXEL = new Uint8Array([0, 0, 0, 0]);
 export class WebGLBatch {
     /**
      * @param {WebGLRenderingContext} gl - 대상 WebGL 컨텍스트입니다.
+     * @param {{getFramebuffer?: Function}} [options] - 선택적 외부 렌더 타깃입니다.
      */
-    constructor(gl) {
+    constructor(gl, options = {}) {
         this.gl = gl;
+        this.getFramebuffer = typeof options.getFramebuffer === 'function'
+            ? options.getFramebuffer
+            : () => null;
         this.maxSprites = GLOBAL_CONSTANTS.WEBGL_MAX_SPRITES;
         this.vertexSize = WEBGL_CONSTANTS.BATCH_VERTEX_SIZE;
         this.vertices = new Float32Array(this.maxSprites * VERTICES_PER_SPRITE * this.vertexSize);
@@ -255,7 +259,8 @@ export class WebGLBatch {
      */
     #bindRenderState() {
         const gl = this.gl;
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.getFramebuffer());
+        gl.viewport(0, 0, this.frameWidth, this.frameHeight);
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
         gl.useProgram(this.program);

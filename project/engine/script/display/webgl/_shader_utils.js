@@ -355,6 +355,7 @@ export const FLAME_PARTICLE_FRAGMENT_SHADER = `
     uniform float u_time;
     uniform float u_phase;
     uniform float u_alpha;
+    uniform float u_pixelSize;
     uniform vec3 u_outerColor;
     uniform vec3 u_coreColor;
     uniform vec3 u_emberColor;
@@ -375,10 +376,16 @@ export const FLAME_PARTICLE_FRAGMENT_SHADER = `
             v_uv.x * u_resolution.x,
             (1.0 - v_uv.y) * u_resolution.y
         );
-        vec2 pixelPoint = floor(screenPoint) + 0.5;
+        float pixelSize = max(1.0, u_pixelSize);
+        vec2 pixelPoint = (
+            floor(screenPoint / pixelSize) * pixelSize
+        ) + (pixelSize * 0.5);
+        vec2 pixelCenter = floor(
+            (u_center + (pixelSize * 0.5)) / pixelSize
+        ) * pixelSize;
         vec2 point = vec2(
-            (pixelPoint.x - u_center.x) / max(1.0, u_size),
-            (u_center.y - pixelPoint.y) / max(1.0, u_size)
+            (pixelPoint.x - pixelCenter.x) / max(1.0, u_size),
+            (pixelCenter.y - pixelPoint.y) / max(1.0, u_size)
         );
         float phase = u_phase * 6.28318530718;
         float turbulence = flameTurbulence(point, u_time, phase);
@@ -486,6 +493,7 @@ export const MAGNETIC_SHIELD_FRAGMENT_SHADER = `
     uniform float u_alpha;
     uniform float u_ringThickness;
     uniform float u_glowWidth;
+    uniform float u_pixelSize;
     uniform vec3 u_shadowColor;
     uniform vec3 u_lowColor;
     uniform vec3 u_highColor;
@@ -510,8 +518,18 @@ export const MAGNETIC_SHIELD_FRAGMENT_SHADER = `
     }
 
     void main() {
-        vec2 fragCoord = vec2(v_uv.x * u_resolution.x, (1.0 - v_uv.y) * u_resolution.y);
-        vec2 toPixel = fragCoord - u_center;
+        vec2 rawFragCoord = vec2(
+            v_uv.x * u_resolution.x,
+            (1.0 - v_uv.y) * u_resolution.y
+        );
+        float pixelSize = max(1.0, u_pixelSize);
+        vec2 fragCoord = (
+            floor(rawFragCoord / pixelSize) * pixelSize
+        ) + (pixelSize * 0.5);
+        vec2 pixelCenter = floor(
+            (u_center + (pixelSize * 0.5)) / pixelSize
+        ) * pixelSize;
+        vec2 toPixel = fragCoord - pixelCenter;
         float distanceFromCenter = length(toPixel);
         float angle = atan(toPixel.y, toPixel.x);
 
