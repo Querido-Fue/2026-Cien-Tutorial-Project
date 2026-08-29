@@ -96,6 +96,20 @@
       "releaseStatus": "approved"
     },
     {
+      "id": "imagegen-battle-command-icons",
+      "category": "project-generated-art",
+      "paths": [
+        "project/asset/generated/tutorial/ui/battle/attack-sword-icon.png",
+        "project/asset/tutorial/ui/battle/attack-sword-icon.png",
+        "project/asset/generated/tutorial/ui/battle/reset-arrow-icon.png",
+        "project/asset/tutorial/ui/battle/reset-arrow-icon.png"
+      ],
+      "origin": "2026-08-30 OpenAI 내장 image_gen 도구로 게임의 고딕 금장 UI에 맞춰 생성한 투명 배경 도트 칼·원형 화살표 커맨드 아이콘",
+      "originStatus": "project-generated",
+      "license": "OpenAI 서비스 약관이 적용되는 사용자 생성 출력물",
+      "releaseStatus": "approved"
+    },
+    {
       "id": "provided-audio-sources",
       "category": "audio",
       "paths": [

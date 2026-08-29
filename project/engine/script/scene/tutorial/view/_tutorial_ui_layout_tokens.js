@@ -40,7 +40,7 @@ export const TUTORIAL_UI_LAYOUT_TOKENS = Object.freeze({
         PLAYER: rect(0.047, 0.8129, 0.2247, 0.1275),
         ACTION: rect(0.82, 0.77, 0.13, 0.17),
         SECONDARY: rect(0.72, 0.69, 0.23, 0.075),
-        ITEM_FOCUS: rect(0.045, 0.5949, 0.086, 0.2121),
+        ITEM_FOCUS: rect(0.0321, 0.53127, 0.1118, 0.27573),
         ACHIEVEMENT: rect(0.39, 0.07, 0.155, 0.065)
     }),
     TUTORIAL: Object.freeze({

@@ -31,7 +31,7 @@ export const SOURCE_RESPONSIBILITY_POLICY = Object.freeze({
             maximumFileLines: 1158
         }),
         'project/engine/script/scene/tutorial/view/_tutorial_battle_hud_view.js': Object.freeze({
-            maximumFileLines: 1072
+            maximumFileLines: 800
         }),
         'project/engine/script/overlay/_diagnostic_test_overlay.js': Object.freeze({
             maximumFileLines: 944

@@ -79,7 +79,8 @@
 | `script/scene/tutorial/view/_tutorial_battle_layout.js` | 전투 보드·HUD 기하와 흔들림이 적용된 타일 투영·히트테스트를 같은 프레임으로 제공하는 순수 레이아웃 클래스 |
 | `script/scene/tutorial/_tutorial_battle_camera.js` | 플레이어 표시 좌표를 0.3초 `easeOutExpo` 감쇠로 추적해 레이아웃에 카메라 snapshot을 제공하는 전투 표현 컨트롤러 |
 | `script/scene/tutorial/view/_tutorial_battle_world_view.js` | 읽기 전용 BattleViewModel로 타일·경로·월드 오브젝트·액터를 그리는 전투 월드 뷰 |
-| `script/scene/tutorial/view/_tutorial_battle_hud_view.js` | 전투 상태·미션·인벤토리 HUD와 직렬화 가능한 전투 버튼 사양을 만드는 HUD 뷰 |
+| `script/scene/tutorial/view/_tutorial_battle_hud_view.js` | 전투 상태·미션·인벤토리 HUD를 그리고 커맨드 메뉴·인벤토리 버튼 사양을 조합하는 HUD 뷰 |
+| `script/scene/tutorial/view/_tutorial_battle_command_menu_view.js` | 이동 확정/초기화와 공격·회복·대기 배치, X축 플립·보조 버튼 이동/페이드, 동일 히트 영역을 소유하는 커맨드 메뉴 뷰 |
 | `script/scene/tutorial/view/_tutorial_battle_feedback_view.js` | 장면이 조립한 피드백 snapshot으로 입자와 떠오르는 텍스트를 그리는 피드백 뷰 |
 | `script/scene/tutorial/view/_tutorial_battle_tutorial_view.js` | 첫 플레이 전투 안내 오버레이와 다시 열기/닫기 버튼 사양만 그리는 안내 뷰 |
 | `script/scene/tutorial/view/_tutorial_achievement_view.js` | 판정된 업적 해금을 에셋 기반 배너로 표시하는 뷰 |

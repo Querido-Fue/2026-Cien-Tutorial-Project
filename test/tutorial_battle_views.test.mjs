@@ -757,14 +757,27 @@ test('이동 경로 초기화 버튼은 한 칸 이상 선택한 이동 단계�
 
     assert.equal(inactive.enabled, false);
     assert.equal(active.enabled, true);
+    assert.equal(active.tooltip, '이동 초기화');
     assert.deepEqual(active.command, { type: TUTORIAL_COMMANDS.PLAN_RESET, payload: undefined });
+    const moveConfirm = view.getButtonSpecs(createViewModel(2))
+        .find((spec) => spec.key === 'battle-end');
+    assert.equal(moveConfirm.tooltip, '2칸 이동 확정');
+    assert.equal(
+        view.getButtonSpecs(createViewModel(2))
+            .some((spec) => [
+                'battle-melee', 'battle-ranged', 'battle-heal', 'battle-idle'
+            ].includes(spec.key)),
+        false
+    );
 });
 
-test('우하단 행동 메뉴는 원본 다이아 프레임 하나와 상단 회복·대기 아이콘으로 조립된다', () => {
+test('이동 확정 뒤 우하단 행동 메뉴는 확대된 공격과 60% 회복·대기 버튼으로 교체된다', () => {
     const commands = [];
     const assets = {
         actionButton: { naturalWidth: 135, naturalHeight: 96 },
         waitHealButton: { naturalWidth: 40, naturalHeight: 40 },
+        attackIcon: { naturalWidth: 1038, naturalHeight: 1104 },
+        resetIcon: { naturalWidth: 994, naturalHeight: 1004 },
         healIcon: { naturalWidth: 12, naturalHeight: 12 },
         waitIcon: { naturalWidth: 12, naturalHeight: 14 }
     };
@@ -795,7 +808,8 @@ test('우하단 행동 메뉴는 원본 다이아 프레임 하나와 상단 회
         },
         fonts: { BUTTON: '18px LanaPixel', SMALL: '14px LanaPixel' },
         world: {
-            presentation: { playerHp: 100, loraHp: 100, instability: 70 }
+            presentation: { playerHp: 100, loraHp: 100, instability: 70 },
+            elapsedSeconds: 3
         },
         hud: {
             attackSelected: false,
@@ -808,7 +822,8 @@ test('우하단 행동 메뉴는 원본 다이아 프레임 하나와 상단 회
                 actionReady: true,
                 meleeTargetCount: 1,
                 bowTargetCount: 1,
-                hasBow: true
+                hasBow: true,
+                preferredAttackWeapon: 'bow'
             },
             inventory: { entries: [], page: 0, pageCount: 1 },
             config: {
@@ -829,7 +844,7 @@ test('우하단 행동 메뉴는 원본 다이아 프레임 하나와 상단 회
 
     assert.deepEqual(
         actionSpecs.map((spec) => spec.key),
-        ['battle-melee', 'battle-ranged', 'battle-heal', 'battle-idle', 'battle-end']
+        ['battle-ranged', 'battle-heal', 'battle-idle']
     );
     assert.equal(actionSpecs.every((spec) => spec.label === ''), true);
     assert.equal(actionSpecs.every((spec) => spec.drawBackground === false), true);
@@ -844,20 +859,133 @@ test('우하단 행동 메뉴는 원본 다이아 프레임 하나와 상단 회
     }
     const heal = actionSpecs.find((spec) => spec.key === 'battle-heal');
     const idle = actionSpecs.find((spec) => spec.key === 'battle-idle');
-    const primary = actionSpecs.find((spec) => spec.key === 'battle-end');
-    assert.equal(heal.y + heal.h < primary.y, true);
-    assert.equal(idle.y + idle.h < primary.y, true);
-    assert.equal(heal.x < idle.x, true);
+    const primary = actionSpecs.find((spec) => spec.key === 'battle-ranged');
+    assert.equal(heal.x + heal.w < primary.x, true);
+    assert.equal(primary.x + primary.w < idle.x, true);
+    assert.ok(Math.abs((heal.h / primary.h) - 0.6) < 0.02);
+    assert.ok(Math.abs((idle.h / primary.h) - 0.6) < 0.02);
+    assert.deepEqual(primary.command, {
+        type: TUTORIAL_COMMANDS.SELECT_ATTACK,
+        payload: { weapon: 'bow' }
+    });
+    assert.equal(actionSpecs.some((spec) => spec.key === 'battle-reset-path'), false);
+    assert.equal(actionSpecs.some((spec) => spec.key === 'battle-end'), false);
 
     view.draw(viewModel);
     assert.equal(commands.filter((command) => command.image === assets.actionButton).length, 1);
     assert.equal(commands.filter((command) => command.image === assets.waitHealButton).length, 2);
+    assert.equal(commands.filter((command) => command.image === assets.attackIcon).length, 1);
     assert.equal(commands.filter((command) => command.image === assets.healIcon).length, 1);
     assert.equal(commands.filter((command) => command.image === assets.waitIcon).length, 1);
-    assert.equal(commands.filter((command) => command.text === '액션').length, 1);
+    assert.equal(commands.filter((command) => command.text === '공격').length, 1);
     assert.equal(commands.some((command) => (
-        ['근접', '원거리', '회복', '대기'].includes(command.text)
+        ['근접', '원거리', '회복', '대기', '액션'].includes(command.text)
     )), false);
+});
+
+test('우하단 커맨드 전환은 90% 플립 뒤 보조 버튼을 펼치고 역순에서는 먼저 접는다', () => {
+    const commands = [];
+    const assets = {
+        actionButton: { naturalWidth: 135, naturalHeight: 96 },
+        waitHealButton: { naturalWidth: 40, naturalHeight: 40 },
+        attackIcon: { naturalWidth: 1038, naturalHeight: 1104 },
+        resetIcon: { naturalWidth: 994, naturalHeight: 1004 },
+        healIcon: { naturalWidth: 12, naturalHeight: 12 },
+        waitIcon: { naturalWidth: 12, naturalHeight: 14 }
+    };
+    const renderPort = {
+        render(layer, command) {
+            commands.push({ layer, ...command });
+        },
+        measureText(text) {
+            return String(text).length * 8;
+        },
+        wrapText(text) {
+            return [String(text)];
+        }
+    };
+    const layout = createLayout().resize(VIEWPORTS[0]);
+    const viewModel = {
+        snapshot: { phase: 'move', actionUsed: false },
+        layout,
+        colors: { UI: { OnPrimary: '#fff', Text: '#eee' } },
+        fonts: { BUTTON: '18px LanaPixel', SMALL: '14px LanaPixel' },
+        world: {
+            elapsedSeconds: 0,
+            presentation: { playerHp: 100, loraHp: 100, instability: 70 }
+        },
+        hud: {
+            attackSelected: false,
+            attackWeapon: 'melee',
+            focusedControlKey: null,
+            movePreview: { ok: true, stepsUsed: 2 },
+            readability: { playerPreview: null, inspectedItem: null },
+            controls: {
+                ready: true,
+                actionReady: false,
+                meleeTargetCount: 1,
+                bowTargetCount: 0,
+                hasBow: false,
+                preferredAttackWeapon: 'melee'
+            },
+            inventory: { entries: [], page: 0, pageCount: 1 },
+            config: {
+                actions: TUTORIAL_GAME_DATA.LAYOUT.ACTIONS,
+                inventory: TUTORIAL_GAME_DATA.LAYOUT.INVENTORY,
+                itemIcon: TUTORIAL_GAME_DATA.SPRITES.ITEM
+            }
+        }
+    };
+    const view = new TutorialBattleHudView(renderPort, {
+        getUiAsset(key) {
+            return assets[key] || null;
+        }
+    });
+
+    view.draw(viewModel);
+    assert.equal(commands.some((command) => command.text === '2칸 이동 확정'), true);
+    assert.equal(commands.some((command) => command.image === assets.resetIcon), true);
+    assert.equal(commands.some((command) => command.image === assets.healIcon), false);
+
+    viewModel.snapshot.phase = 'action';
+    viewModel.hud.controls.actionReady = true;
+    commands.length = 0;
+    viewModel.world.elapsedSeconds = 0;
+    view.draw(viewModel);
+
+    commands.length = 0;
+    viewModel.world.elapsedSeconds = 0.44;
+    view.draw(viewModel);
+    assert.equal(commands.some((command) => command.image === assets.healIcon), false);
+
+    commands.length = 0;
+    viewModel.world.elapsedSeconds = 0.46;
+    view.draw(viewModel);
+    assert.equal(commands.some((command) => command.image === assets.healIcon), true);
+
+    commands.length = 0;
+    viewModel.world.elapsedSeconds = 0.72;
+    view.draw(viewModel);
+    assert.equal(commands.some((command) => command.image === assets.attackIcon), true);
+    assert.equal(commands.some((command) => command.image === assets.resetIcon), false);
+
+    viewModel.snapshot.phase = 'move';
+    viewModel.hud.controls.actionReady = false;
+    commands.length = 0;
+    viewModel.world.elapsedSeconds = 0.72;
+    view.draw(viewModel);
+
+    commands.length = 0;
+    viewModel.world.elapsedSeconds = 0.85;
+    view.draw(viewModel);
+    const retreatingHeal = commands.find((command) => command.image === assets.healIcon);
+    assert.ok(retreatingHeal);
+    assert.equal(retreatingHeal.alpha < 0.92, true);
+
+    commands.length = 0;
+    viewModel.world.elapsedSeconds = 1.12;
+    view.draw(viewModel);
+    assert.equal(commands.some((command) => command.image === assets.healIcon), false);
 });
 
 test('로라·플레이어 상태와 아이템 설명은 원본 패널 내부에 맞춰진다', () => {
@@ -986,6 +1114,7 @@ test('로라·플레이어 상태와 아이템 설명은 원본 패널 내부에
     assert.equal(itemSpecs.every((spec) => spec.label === ''), true);
     assert.equal(itemSpecs.every((spec) => spec.drawBackground === false), true);
     assert.equal(itemSpecs.every((spec) => spec.itemSpacing === 0), true);
+    assert.equal(itemSpecs.every((spec) => spec.tooltip == null), true);
     assert.deepEqual(
         itemSpecs[0].iconVisualCenter,
         TUTORIAL_GAME_DATA.SPRITES.ITEM.VISUAL_CENTERS.bow
@@ -1080,7 +1209,7 @@ test('로라·플레이어 상태와 아이템 설명은 원본 패널 내부에
             alpha: itemPanel.alpha,
             smoothing: itemPanel.smoothing
         },
-        { x: 62, y: 428, w: 103, h: 153, alpha: 1, smoothing: false }
+        { x: 46, y: 383, w: 134, h: 199, alpha: 1, smoothing: false }
     );
     const inventoryRect = layout.hudRects.INVENTORY_CARD;
     assert.equal(
@@ -1091,10 +1220,9 @@ test('로라·플레이어 상태와 아이템 설명은 원본 패널 내부에
     assert.deepEqual(wrapRequests, [{
         text: '받는 피해를 줄여줍니다.',
         font: '12px sans-serif',
-        maxWidth: 79,
+        maxWidth: 90,
         maxLines: 5
     }]);
-    const safeTextRight = 74 + 79;
     const itemText = commands.filter((command) => [
         '인형탈 ×1',
         '사용 가능',
@@ -1102,18 +1230,21 @@ test('로라·플레이어 상태와 아이템 설명은 원본 패널 내부에
         '1/1'
     ].includes(command.text));
     assert.equal(itemText.length, 5);
-    itemText.filter((command) => command.align === 'left').forEach((command) => {
-        assert.equal(command.x, 74);
-        assert.equal(
-            command.x + renderPort.measureText(command.text, command.font)
-                <= safeTextRight,
-            true
-        );
-    });
+    itemText.filter((command) => descriptionLines.includes(command.text))
+        .forEach((command) => {
+            assert.equal(command.x, 68);
+            assert.equal(
+                command.x + renderPort.measureText(command.text, command.font)
+                    <= 158,
+                true
+            );
+        });
+    assert.equal(itemText.find((command) => command.text === '인형탈 ×1').x, 62);
+    assert.equal(itemText.find((command) => command.text === '사용 가능').x, 62);
     const pageText = itemText.find((command) => command.text === '1/1');
     assert.deepEqual(
         { x: pageText.x, y: pageText.y, align: pageText.align },
-        { x: 113, y: 545, align: 'center' }
+        { x: 112.5, y: 535, align: 'center' }
     );
     assert.deepEqual(
         { x: playerPanel.x, y: playerPanel.y, w: playerPanel.w, h: playerPanel.h },
@@ -1261,6 +1392,7 @@ test('전투 뷰는 장면·모델·저장·명령 큐를 직접 import하지 �
         '_tutorial_battle_layout.js',
         '_tutorial_battle_world_view.js',
         '_tutorial_battle_hud_view.js',
+        '_tutorial_battle_command_menu_view.js',
         '_tutorial_battle_feedback_view.js',
         '_tutorial_achievement_view.js',
         '_tutorial_battle_tutorial_view.js'

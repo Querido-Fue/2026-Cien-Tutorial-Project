@@ -20,6 +20,8 @@ export const TUTORIAL_UI_ASSET_IDS = Object.freeze({
     playerPanel: 'ui.battle.player-panel',
     actionButton: 'ui.battle.action-button',
     waitHealButton: 'ui.battle.wait-heal-button',
+    attackIcon: 'ui.battle.attack-icon',
+    resetIcon: 'ui.battle.reset-icon',
     itemPanel: 'ui.battle.item-panel',
     tutorialPopup: 'ui.battle.tutorial-popup',
     achievementPopup: 'ui.battle.achievement-popup',
@@ -146,6 +148,24 @@ export const TUTORIAL_UI_ASSET_ENTRIES = Object.freeze([
         actualDimensions: { width: 512, height: 300 },
         sourceRect: { x: 16, y: 16, w: 40, h: 40 },
         usage: '대기와 회복 행동의 보조 픽셀 프레임'
+    }),
+    createUiEntry({
+        id: TUTORIAL_UI_ASSET_IDS.attackIcon,
+        runtimePath: '../asset/tutorial/ui/battle/attack-sword-icon.png',
+        sourceName: 'generated/tutorial/ui/battle/attack-sword-icon.png',
+        expectedDimensions: { width: 1254, height: 1254 },
+        actualDimensions: { width: 1254, height: 1254 },
+        sourceRect: { x: 113, y: 77, w: 1038, h: 1104 },
+        usage: '중앙 공격 커맨드의 금빛 단검 아이콘'
+    }),
+    createUiEntry({
+        id: TUTORIAL_UI_ASSET_IDS.resetIcon,
+        runtimePath: '../asset/tutorial/ui/battle/reset-arrow-icon.png',
+        sourceName: 'generated/tutorial/ui/battle/reset-arrow-icon.png',
+        expectedDimensions: { width: 1254, height: 1254 },
+        actualDimensions: { width: 1254, height: 1254 },
+        sourceRect: { x: 131, y: 109, w: 994, h: 1004 },
+        usage: '이동 초기화 커맨드의 한 바퀴 원형 화살표 아이콘'
     }),
     createUiEntry({
         id: TUTORIAL_UI_ASSET_IDS.itemPanel,

@@ -44,6 +44,12 @@ export class TutorialBattleViewModelFactory {
             actionReady,
             cleanseTargetCount: cleanseTargets.length
         });
+        const hasBow = inventoryView.entries.some(
+            (entry) => entry.itemId === 'bow'
+        );
+        const preferredAttackWeapon = selection.attackSelected
+            ? selection.attackWeapon
+            : (hasBow ? 'bow' : 'melee');
         const pathExtensions = this.#createPathExtensions({
             model,
             snapshot,
@@ -57,8 +63,7 @@ export class TutorialBattleViewModelFactory {
             (entry) => 'item-' + entry.itemId
         );
         const actionFocusKeys = [
-            'battle-melee',
-            'battle-ranged',
+            preferredAttackWeapon === 'bow' ? 'battle-ranged' : 'battle-melee',
             'battle-heal',
             'battle-idle'
         ];
@@ -118,9 +123,8 @@ export class TutorialBattleViewModelFactory {
                     actionReady,
                     meleeTargetCount: meleeTargets.length,
                     bowTargetCount: bowTargets.length,
-                    hasBow: inventoryView.entries.some(
-                        (entry) => entry.itemId === 'bow'
-                    ),
+                    hasBow,
+                    preferredAttackWeapon,
                     cleanseTargetCount: cleanseTargets.length
                 }),
                 config: Object.freeze({
@@ -222,7 +226,11 @@ export class TutorialBattleViewModelFactory {
     }
 
     /** 공격·회복·아이템 포커스를 모델의 비변이 행동 미리보기로 바꿉니다. */
-    #createActionPreviewSelection({ model, selection, focusedControlKey }) {
+    #createActionPreviewSelection({
+        model,
+        selection,
+        focusedControlKey
+    }) {
         if (model.phase !== 'action' || model.result) {
             return { preview: null, label: '이동 경로' };
         }
@@ -240,7 +248,9 @@ export class TutorialBattleViewModelFactory {
         }
         if (focusedControlKey === 'battle-melee'
             || focusedControlKey === 'battle-ranged') {
-            const weapon = focusedControlKey === 'battle-ranged' ? 'bow' : 'melee';
+            const weapon = focusedControlKey === 'battle-ranged'
+                ? 'bow'
+                : 'melee';
             const target = toList(model.getValidTargets({ weapon }))[0];
             return {
                 preview: model.previewPlayerAction('attack', {

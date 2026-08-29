@@ -696,20 +696,21 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         ACTIONS: {
             BUTTON_RADIUS_WH: 1,
             CLUSTER: {
+                PRIMARY_SCALE: 1.3,
                 PRIMARY_HEIGHT_WH: 15,
                 PRIMARY_MIN_HEIGHT_PX: 72,
                 PRIMARY_MAX_HEIGHT_PX: 116,
-                SIDE_HIT_WIDTH_RATIO: 0.18,
-                SIDE_HIT_HEIGHT_RATIO: 0.44,
-                HIT_GAP_PX: 2,
-                TOP_BUTTON_SIZE_TO_PRIMARY_WIDTH_RATIO: 0.2963,
-                TOP_BUTTON_CENTER_X_RATIOS: [0.27, 0.73],
-                TOP_BUTTON_GAP_TO_PRIMARY_RATIO: 0.03,
-                TOP_ICON_SIZE_RATIO: 0.36,
+                SIDE_BUTTON_SCALE_RATIO: 0.6,
+                SIDE_GAP_TO_PRIMARY_WIDTH_RATIO: 0.08,
+                RESET_BUTTON_SCALE_RATIO: 0.6,
+                RESET_GAP_TO_PRIMARY_HEIGHT_RATIO: 0.08,
                 PRIMARY_LABEL_Y_RATIO: 0.52,
-                SPARK_CENTER_X_RATIO: 0.36,
-                SPARK_SIZE_TO_TOP_BUTTON_RATIO: 0.12,
-                SPARK_GAP_TO_TOP_BUTTON_RATIO: 0.18
+                PRIMARY_ICON_SIZE_RATIO: 0.28,
+                SIDE_ICON_SIZE_RATIO: 0.42,
+                RESET_ICON_SIZE_RATIO: 0.46,
+                FLIP_SECONDS: 0.5,
+                SIDE_TRAVEL_SECONDS: 0.26,
+                SIDE_START_AT_FLIP_RATIO: 0.9
             }
         },
         INVENTORY: {
@@ -736,7 +737,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
             MENU: { X_UIWW: 22.5, Y_WH: 6, WIDTH_UIWW: 8, HEIGHT_WH: 4.5 },
             LORA_CARD: { X_UIWW: 70.85, Y_WH: 5.8, WIDTH_UIWW: 23.92, HEIGHT_WH: 14.71 },
             PLAYER_STATUS: { X_UIWW: 4.7, Y_WH: 81.29, WIDTH_UIWW: 22.47, HEIGHT_WH: 12.75 },
-            INVENTORY_CARD: { X_UIWW: 4.5, Y_WH: 59.49, WIDTH_UIWW: 8.6, HEIGHT_WH: 21.21 },
+            INVENTORY_CARD: { X_UIWW: 3.21, Y_WH: 53.127, WIDTH_UIWW: 11.18, HEIGHT_WH: 27.573 },
             SECONDARY_ACTIONS: { X_UIWW: 72, Y_WH: 69, WIDTH_UIWW: 23, HEIGHT_WH: 7.5 },
             PRIMARY_ACTION: { X_UIWW: 82, Y_WH: 77, WIDTH_UIWW: 13, HEIGHT_WH: 17 }
         },
