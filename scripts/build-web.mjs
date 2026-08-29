@@ -83,7 +83,7 @@ const rewriteAssetPaths = async (outputRoot, releaseId) => {
         const rewrittenText = originalText
             .replaceAll('../asset/', './asset/')
             .replace(
-                /(['"`])(\.\/asset\/[^'"`\s<>]+)\1/g,
+                /(['"`])(\.\/asset\/[^'"`\s<>]+?\.[a-z0-9]{2,8}(?:\?[^'"`\s<>]*)?)\1/gi,
                 (literal, quote, assetPath) => (
                     assetPath.includes('?') || assetPath.includes('${')
                         ? literal

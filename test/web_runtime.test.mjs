@@ -90,6 +90,17 @@ test('웹 빌드는 Pages 하위 경로에서 동작하는 정적 번들을 만�
         path.join(outputRoot, 'script', 'data', 'sound', '_tutorial_sfx_entries.js'),
         'utf-8',
     );
+    const itemManifest = await readFile(
+        path.join(
+            outputRoot,
+            'script',
+            'data',
+            'game',
+            'tutorial_assets',
+            '_tutorial_item_asset_entries.js'
+        ),
+        'utf-8',
+    );
     const releaseManifest = JSON.parse(await readFile(
         path.join(outputRoot, 'release.json'),
         'utf-8',
@@ -114,6 +125,11 @@ test('웹 빌드는 Pages 하위 경로에서 동작하는 정적 번들을 만�
         /runtimePath: `\.\/asset\/tutorial\/audio\/sfx\/\$\{runtimeName\}\.mp3`/
     );
     assert.doesNotMatch(audioManifest, /\.mp3`,\?v=/);
+    assert.match(
+        itemManifest,
+        /runtimePath: '\.\/asset\/tutorial\/ui\/items\/'\s*\+ itemId/
+    );
+    assert.doesNotMatch(itemManifest, /items\/\?v=/);
     assert.deepEqual(releaseManifest, RELEASE_FIXTURE);
 
     await stat(path.join(outputRoot, '.nojekyll'));
@@ -150,6 +166,12 @@ test('Cloudflare 경로 프록시는 릴리스 확인과 버전 자산의 캐시
     assert.equal(
         resolvePublicCacheControl(new URL(
             'https://jukchang.com/game/nthplayer/script/main.js'
+        )),
+        'no-cache, max-age=0, must-revalidate'
+    );
+    assert.equal(
+        resolvePublicCacheControl(new URL(
+            'https://jukchang.com/game/nthplayer/asset/tutorial/ui/items/bow.png'
         )),
         'no-cache, max-age=0, must-revalidate'
     );

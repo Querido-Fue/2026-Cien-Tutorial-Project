@@ -5,6 +5,10 @@
  */
 export const TUTORIAL_CHANGELOG_CATALOG = Object.freeze([
     Object.freeze({
+        subject: 'fix: preserve composed asset paths in web builds',
+        summary: '동적 아이템·오디오 자산 경로를 보존하고 최신 파일 재검증을 보강했습니다.'
+    }),
+    Object.freeze({
         subject: 'feat: add automatic web release updates and changelog',
         summary: '최신 배포 자동 확인, 버전 표시와 한글 체인지로그를 추가했습니다.'
     }),

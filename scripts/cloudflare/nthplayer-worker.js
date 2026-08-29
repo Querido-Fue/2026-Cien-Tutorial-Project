@@ -54,7 +54,8 @@ export const resolvePublicCacheControl = (publicUrl) => {
         || publicUrl.searchParams.has('v')) {
         return 'public, max-age=31536000, immutable';
     }
-    if (/\.(?:js|css|json)$/i.test(publicUrl.pathname)) {
+    if (/\.(?:js|css|json)$/i.test(publicUrl.pathname)
+        || publicUrl.pathname.includes('/asset/')) {
         return 'no-cache, max-age=0, must-revalidate';
     }
     return 'public, max-age=3600';
