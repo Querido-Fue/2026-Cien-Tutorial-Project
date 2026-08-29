@@ -10,6 +10,7 @@ import { TutorialKeyboardCommandMapper } from '../project/engine/script/scene/tu
 import { TutorialLoraTurnController } from '../project/engine/script/scene/tutorial/_tutorial_lora_turn_controller.js';
 import { TutorialMetaSession } from '../project/engine/script/scene/tutorial/_tutorial_meta_session.js';
 import { TutorialNonbattleViewModelFactory } from '../project/engine/script/scene/tutorial/_tutorial_nonbattle_view_model_factory.js';
+import { TutorialResultController } from '../project/engine/script/scene/tutorial/_tutorial_result_controller.js';
 import { createDefaultTutorialMeta } from '../project/engine/script/scene/tutorial/_tutorial_meta_progress.js';
 import {
     TUTORIAL_COMMANDS,
@@ -343,6 +344,35 @@ test('로라 턴 컨트롤러는 같은 세대에서 행동과 완료를 각각 
         'clear',
         ['reset', { x: 2, y: 3 }]
     ]);
+});
+
+test('결과 컨트롤러는 연출 차단 뒤 엔딩 데이터와 컷씬을 한 번만 확정한다', () => {
+    const recorded = [];
+    const results = new TutorialResultController({
+        endings: [
+            { id: 'failure', displayName: '실패', cutsceneId: null },
+            { id: 'true-ending', displayName: '진엔딩', cutsceneId: 'ending-true' }
+        ],
+        recordResult: (endingId) => recorded.push(endingId)
+    });
+    const model = {
+        result: { endingId: 'true-ending', instability: 120 },
+        lora: { instability: 80 }
+    };
+    results.queueEndingCutscene('ending-true');
+
+    assert.equal(results.tryEnter({ model, blocked: true }).entered, false);
+    const transition = results.tryEnter({ model, snapshot: {} });
+
+    assert.equal(transition.entered, true);
+    assert.equal(transition.endingCutsceneId, 'ending-true');
+    assert.equal(transition.data.displayName, '진엔딩');
+    assert.equal(transition.data.instability, 100);
+    assert.deepEqual(recorded, ['true-ending']);
+    assert.equal(results.tryEnter({ model }).entered, false);
+
+    transition.data.displayName = '변조';
+    assert.equal(results.getData().displayName, '진엔딩');
 });
 
 test('비전투 뷰 모델 팩토리는 장면 상태 없이 표시 데이터만 조립한다', () => {

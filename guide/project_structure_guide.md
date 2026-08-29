@@ -72,6 +72,7 @@
 | `script/scene/tutorial/_tutorial_battle_selection_controller.js` | 계획 경로·도달 범위·공격/정화 대상·보드 호버 상태와 그 상태에서 파생되는 키보드/포인터 명령을 소유하는 클래스 |
 | `script/scene/tutorial/_tutorial_battle_command_controller.js` | 플레이어 이동·공격·회복·대기·정화·아이템 명령을 검증해 모델 공개 API와 전투 연출에 연결하는 클래스 |
 | `script/scene/tutorial/_tutorial_lora_turn_controller.js` | 로라 턴의 행동 전 대기·행동 표시·완료 명령을 타임라인 세대별로 한 번씩 예약하고 적용하는 클래스 |
+| `script/scene/tutorial/_tutorial_result_controller.js` | 모델 종료 결과를 엔딩 표시 데이터로 정규화하고 결과 1회 기록·엔딩 컷씬 대기 상태를 소유하는 클래스 |
 | `script/scene/tutorial/view/_tutorial_*_view.js` | 로딩·메뉴·스타터·책 기반 갤러리·체인지로그·결과·컷씬을 직렬화 가능한 view model과 render/asset port로 그리는 파일당 한 클래스의 비전투 뷰 |
 | `script/scene/tutorial/view/_tutorial_battle_layout.js` | 전투 보드·HUD 기하와 흔들림이 적용된 타일 투영·히트테스트를 같은 프레임으로 제공하는 순수 레이아웃 클래스 |
 | `script/scene/tutorial/_tutorial_battle_camera.js` | 플레이어 표시 좌표를 0.3초 `easeOutExpo` 감쇠로 추적해 레이아웃에 카메라 snapshot을 제공하는 전투 표현 컨트롤러 |

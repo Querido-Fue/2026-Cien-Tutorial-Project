@@ -5,6 +5,10 @@
  */
 export const TUTORIAL_CHANGELOG_CATALOG = Object.freeze([
     Object.freeze({
+        subject: 'refactor: extract tutorial result state',
+        summary: '전투 종료 판정·엔딩 표시·엔딩 컷씬 대기 상태를 장면에서 분리했습니다.'
+    }),
+    Object.freeze({
         subject: 'refactor: extract tutorial lora turn lifecycle',
         summary: '로라 턴의 대기·행동·완료 예약 수명주기를 장면에서 분리했습니다.'
     }),

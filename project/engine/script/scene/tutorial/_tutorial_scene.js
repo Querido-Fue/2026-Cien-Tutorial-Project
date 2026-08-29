@@ -82,6 +82,7 @@ import { TutorialSpriteClipResolver } from './_tutorial_sprite_clip_resolver.js'
 import { TutorialSpriteCueRouter } from './_tutorial_sprite_cue_router.js';
 import { TutorialSpriteRoster } from './_tutorial_sprite_roster.js';
 import { TutorialRecordPopupQueue } from './_tutorial_record_popup_queue.js';
+import { TutorialResultController } from './_tutorial_result_controller.js';
 import { TutorialBattleFeedbackView } from './view/_tutorial_battle_feedback_view.js';
 import { TutorialBattleHudView } from './view/_tutorial_battle_hud_view.js';
 import { TutorialBattleLayout } from './view/_tutorial_battle_layout.js';
@@ -136,6 +137,10 @@ export class TutorialScene extends BaseScene {
         this.floorView = null;
         this.floorActorView = null;
         this.metaSession = new TutorialMetaSession();
+        this.results = new TutorialResultController({
+            endings: this.content.ENDINGS,
+            recordResult: (endingId) => this.metaSession.recordResult(endingId)
+        });
         this.keyboardCommandMapper = new TutorialKeyboardCommandMapper();
         this.nonbattleViewModels = new TutorialNonbattleViewModelFactory(this.data);
         this.cutscenes = new TutorialCutsceneController(this.data.CUTSCENES);
@@ -156,7 +161,6 @@ export class TutorialScene extends BaseScene {
         );
         this.cutsceneReturnMode = MODES.MENU;
         this.pendingCutscenes = [];
-        this.pendingEndingCutsceneId = null;
         this.runCutsceneIds = new Set();
         this.battleFocus = new TutorialBattleFocusController();
         this.battleSelection = new TutorialBattleSelectionController();
@@ -166,8 +170,6 @@ export class TutorialScene extends BaseScene {
             this.data.STARTER_CHOICES.findIndex((choice) => choice.id === 'mascot-costume')
         );
         this.starterItemId = this.data.STARTER_CHOICES[this.starterIndex]?.id || 'mascot-costume';
-        this.resultData = null;
-        this.resultRecorded = false;
         this.pauseIndex = 0;
         this.destroyed = false;
         this.timelineRevision = 0;
@@ -634,7 +636,7 @@ export class TutorialScene extends BaseScene {
         this.cutscenes.close();
         this.cutsceneTriggers.reset();
         this.pendingCutscenes = [];
-        this.pendingEndingCutsceneId = null;
+        this.results.reset();
         this.runCutsceneIds.clear();
         this.recordPopups.clear();
         this.battleFocus.reset();
@@ -818,7 +820,7 @@ export class TutorialScene extends BaseScene {
         this.cutscenes.close();
         this.cutsceneTriggers.reset();
         this.pendingCutscenes = [];
-        this.pendingEndingCutsceneId = null;
+        this.results.reset();
         this.runCutsceneIds.clear();
         this.recordPopups.clear();
         this.cutsceneReturnMode = nextMode;
@@ -826,8 +828,6 @@ export class TutorialScene extends BaseScene {
         this.floorView = null;
         this.floorActorView = null;
         this.mode = nextMode;
-        this.resultData = null;
-        this.resultRecorded = false;
         this.pauseIndex = 0;
         this.changelogPage = 0;
         this.loraTurns.reset();
@@ -864,10 +864,8 @@ export class TutorialScene extends BaseScene {
         this.model.reset({ starterItemId });
         const initialSnapshot = this.#getSnapshot();
         this.mode = MODES.BATTLE;
-        this.resultData = null;
-        this.resultRecorded = false;
         this.pendingCutscenes = [];
-        this.pendingEndingCutsceneId = null;
+        this.results.reset();
         this.runCutsceneIds = new Set();
         this.recordPopups.clear();
         const openingCutsceneIds = this.cutsceneTriggers.beginRun(this.meta);
@@ -1108,8 +1106,8 @@ export class TutorialScene extends BaseScene {
             .filter((event) => event?.type === 'record-picked')
             .map((event) => event.recordId));
         for (const cutsceneId of this.cutsceneTriggers.consume(result?.events)) {
-            if (this.#isEndingCutsceneId(cutsceneId)) {
-                this.pendingEndingCutsceneId = cutsceneId;
+            if (this.results.isEndingCutsceneId(cutsceneId)) {
+                this.results.queueEndingCutscene(cutsceneId);
             } else {
                 this.#openCutscene(cutsceneId, MODES.BATTLE, false);
             }
@@ -1128,65 +1126,26 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #enterResultIfNeeded() {
-        if (!this.model || this.resultRecorded || this.recordPopups.hasWork()) {
-            return;
-        }
         const snapshot = this.#getSnapshot();
-        const rawResult = this.model.result || snapshot?.result;
-        if (!rawResult) {
-            return;
-        }
-        if (this.cutscenes.isOpen()
+        const transition = this.results.tryEnter({
+            model: this.model,
+            snapshot,
+            hasRecordWork: this.recordPopups.hasWork(),
+            blocked: this.cutscenes.isOpen()
             || this.pendingCutscenes.length > 0
-            || this.spriteCueRouter.isBusy()) {
+            || this.spriteCueRouter.isBusy()
+        });
+        if (!transition.entered) {
             return;
         }
-        const endingSource = rawResult.endingId
-            || rawResult.ending?.id
-            || rawResult.ending
-            || rawResult.id;
-        const endingId = typeof endingSource === 'string'
-            ? endingSource
-            : 'failure';
-        const ending = this.#getEndingDefinition(endingId);
-        const instability = clampNumber(
-            rawResult.instability ?? this.model.lora?.instability,
-            0,
-            100
-        );
-        this.resultData = {
-            ...rawResult,
-            endingId,
-            instability,
-            displayName: ending.displayName,
-            label: rawResult.label || '작전 종료'
-        };
         this.mode = MODES.RESULT;
-        this.resultRecorded = true;
-        this.metaSession.recordResult(endingId);
-        const endingCutsceneId = this.pendingEndingCutsceneId;
-        this.pendingEndingCutsceneId = null;
-        if (endingCutsceneId === ending.cutsceneId) {
-            this.#openCutscene(endingCutsceneId, MODES.RESULT, false);
+        if (transition.endingCutsceneId) {
+            this.#openCutscene(
+                transition.endingCutsceneId,
+                MODES.RESULT,
+                false
+            );
         }
-    }
-
-    /** @param {string} endingId @returns {object} 표시명과 컷씬이 분리된 엔딩 정의입니다. @private */
-    #getEndingDefinition(endingId) {
-        return this.content.ENDINGS.find((ending) => ending.id === endingId)
-            || this.content.ENDINGS.find((ending) => ending.id === 'failure')
-            || {
-                id: 'failure',
-                displayName: 'happily ever after..?',
-                cutsceneId: null
-            };
-    }
-
-    /** @param {string} cutsceneId @returns {boolean} 엔딩 뒤 재생할 컷씬인지 여부입니다. @private */
-    #isEndingCutsceneId(cutsceneId) {
-        return this.content.ENDINGS.some(
-            (ending) => ending.cutsceneId === cutsceneId
-        );
     }
 
     /**
@@ -1237,11 +1196,12 @@ export class TutorialScene extends BaseScene {
     /** @returns {Readonly<object>} 오디오 디렉터가 소비할 작은 장면 상태입니다. @private */
     #createAudioState() {
         const snapshot = this.#getSnapshot();
+        const resultData = this.results.getData();
         return Object.freeze({
             mode: this.mode,
             cutsceneOpen: this.cutscenes.isOpen(),
             floorIndex: Number(snapshot?.floorIndex ?? this.model?.floorIndex) || 0,
-            result: this.resultData ? Object.freeze({ ...this.resultData }) : null,
+            result: resultData ? Object.freeze(resultData) : null,
             lora: Object.freeze({
                 hp: Number(snapshot?.lora?.hp ?? this.model?.lora?.hp) || 0,
                 instability: Number(
@@ -1482,7 +1442,7 @@ export class TutorialScene extends BaseScene {
         return this.nonbattleViewModels.createResult(
             this.#createNonbattleViewFrame(),
             {
-                result: this.resultData,
+                result: this.results.getData(),
                 presentationLocked: this.presentationTimeline.isLocked()
             }
         );
