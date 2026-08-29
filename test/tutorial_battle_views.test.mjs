@@ -4,6 +4,7 @@ import test from 'node:test';
 
 import { TUTORIAL_GAME_DATA } from '../project/engine/script/data/game/tutorial_game_data.js';
 import { TUTORIAL_ASSET_MANIFEST } from '../project/engine/script/data/game/tutorial_asset_manifest.js';
+import { EFFECT_RENDER_CONSTANTS } from '../project/engine/script/data/display/effect_render_constants.js';
 import { DarkTheme } from '../project/engine/script/data/theme/dark_theme.js';
 import { LightTheme } from '../project/engine/script/data/theme/light_theme.js';
 import { TutorialBattleHudView } from '../project/engine/script/scene/tutorial/view/_tutorial_battle_hud_view.js';
@@ -141,10 +142,152 @@ test('맵은 실제 격자 좌우 폭을 월드 뷰포트에 맞추고 카메라
     );
 });
 
+test('촛대 화염은 원본 심지 10곳을 카메라와 함께 투영해 하나의 WebGL 명령으로 그린다', () => {
+    const layoutController = createLayout();
+    layoutController.resize(VIEWPORTS[0]);
+    const sourceFloor = TUTORIAL_GAME_DATA.FLOORS[0];
+    const centered = layoutController.createFrame({
+        floor: sourceFloor,
+        camera: { x: 4, y: 4, floorIndex: 0, initialized: true }
+    });
+    const moved = layoutController.createFrame({
+        floor: sourceFloor,
+        camera: { x: 5, y: 4, floorIndex: 0, initialized: true }
+    });
+    const profile = TUTORIAL_ASSET_MANIFEST.MAPS['first-floor'];
+    const sourceEmitters = profile.ambientFire.emitters;
+    const scaleX = centered.mapImageRect.w / profile.sourceDimensions.width;
+    const scaleY = centered.mapImageRect.h / profile.sourceDimensions.height;
+
+    assert.equal(centered.ambientFire.emitters.length, 10);
+    centered.ambientFire.emitters.forEach((emitter, index) => {
+        assert.equal(
+            emitter.x,
+            Math.round(centered.mapImageRect.x + (sourceEmitters[index].x * scaleX))
+        );
+        assert.equal(
+            emitter.y,
+            Math.round(centered.mapImageRect.y + (sourceEmitters[index].y * scaleY))
+        );
+        assert.ok(emitter.size > 1);
+        assert.equal(Number.isInteger(emitter.x), true);
+        assert.equal(Number.isInteger(emitter.y), true);
+        assert.equal(
+            moved.ambientFire.emitters[index].x - emitter.x,
+            moved.mapImageRect.x - centered.mapImageRect.x
+        );
+    });
+    const basement = layoutController.createFrame({
+        floor: TUTORIAL_GAME_DATA.FLOORS[1]
+    });
+    assert.equal(basement.ambientFire, null);
+
+    const floor = {
+        ...sourceFloor,
+        walls: [], items: [], records: [], eventTiles: [], teleports: [], mobs: []
+    };
+    const commands = [];
+    const view = new TutorialBattleWorldView({
+        render() {},
+        renderGL(layer, command) {
+            commands.push({ layer, ...command });
+        },
+        measureText(text) {
+            return String(text).length * 8;
+        }
+    }, {
+        getMapArtwork() {
+            return { layers: [] };
+        }
+    });
+    view.draw({
+        snapshot: { phase: 'action', floorIndex: 0, player: null, lora: null },
+        floor,
+        layout: centered,
+        fonts: { SMALL: '12px sans-serif', HEADING: '18px sans-serif' },
+        colors: {
+            BoardFrame: '#frame',
+            Tile: {},
+            UI: {},
+            Effects: {
+                FlameOuter: '#outer',
+                FlameCore: '#core',
+                FlameEmber: '#ember'
+            }
+        },
+        world: {
+            presentation: { floorIndex: 0, pathProgress: 1 },
+            attackSelected: false,
+            cleanseSelected: false,
+            pathExtensions: [],
+            plannedPath: [],
+            hoveredTile: null,
+            readability: { loraIntent: { ok: false } },
+            floorActors: {},
+            itemMetadata: {},
+            elapsedSeconds: 3.25,
+            config: {}
+        }
+    });
+    const flame = commands.find((command) => (
+        command.effectType === EFFECT_RENDER_CONSTANTS.TYPES.FLAME_PARTICLES
+    ));
+    assert.ok(flame);
+    assert.equal(flame.layer, 'effect');
+    assert.equal(flame.emitters, centered.ambientFire.emitters);
+    assert.equal(flame.time, 3.25);
+    assert.equal(flame.alpha, profile.ambientFire.alpha);
+    assert.deepEqual(
+        [flame.outerColor, flame.coreColor, flame.emberColor],
+        ['#outer', '#core', '#ember']
+    );
+
+    const fallbackCommands = [];
+    const fallbackView = new TutorialBattleWorldView({
+        render() {},
+        renderGL(layer, command) {
+            fallbackCommands.push({ layer, ...command });
+        },
+        measureText() {
+            return 0;
+        }
+    }, {
+        getMapArtwork() {
+            return null;
+        }
+    });
+    fallbackView.draw({
+        snapshot: { phase: 'action', floorIndex: 0, player: null, lora: null },
+        floor,
+        layout: centered,
+        fonts: { SMALL: '12px sans-serif', HEADING: '18px sans-serif' },
+        colors: { BoardFrame: '#frame', Tile: {}, UI: {}, Effects: {} },
+        world: {
+            presentation: { floorIndex: 0, pathProgress: 1 },
+            attackSelected: false,
+            cleanseSelected: false,
+            pathExtensions: [],
+            plannedPath: [],
+            hoveredTile: null,
+            readability: { loraIntent: { ok: false } },
+            floorActors: {},
+            itemMetadata: {},
+            elapsedSeconds: 3.25,
+            config: {}
+        }
+    });
+    assert.equal(fallbackCommands.some((command) => (
+        command.effectType === EFFECT_RENDER_CONSTANTS.TYPES.FLAME_PARTICLES
+    )), false);
+});
+
 test('두 테마의 월드와 디스플레이 바깥 배경은 단일 #101010 색상을 사용한다', () => {
     for (const theme of [LightTheme, DarkTheme]) {
         assert.equal(theme.Background, '#101010');
         assert.equal(theme.Tactics.WorldBackdrop, '#101010');
+        assert.match(theme.Tactics.Effects.FlameOuter, /^#/);
+        assert.match(theme.Tactics.Effects.FlameCore, /^#/);
+        assert.match(theme.Tactics.Effects.FlameEmber, /^#/);
     }
 });
 

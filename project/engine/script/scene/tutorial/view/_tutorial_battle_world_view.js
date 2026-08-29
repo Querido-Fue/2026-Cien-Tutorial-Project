@@ -1,3 +1,4 @@
+import { EFFECT_RENDER_CONSTANTS } from '../../../data/display/effect_render_constants.js';
 import { TutorialBattleLayout } from './_tutorial_battle_layout.js';
 import {
     drawBattleViewText,
@@ -7,6 +8,7 @@ import { TutorialBattleActorView } from './_tutorial_battle_actor_view.js';
 
 const WALL_FOOTPRINT_SCALE = 1;
 const WALL_HEIGHT_TILE_RATIO = 0.34;
+const EFFECT_TYPES = EFFECT_RENDER_CONSTANTS.TYPES;
 
 /**
  * @class TutorialBattleWorldView
@@ -51,6 +53,7 @@ export class TutorialBattleWorldView {
                 alpha: 0.9
             });
             this.#drawMapArtwork(mapArtwork);
+            this.#drawAmbientFire(Boolean(mapArtwork));
             this.#drawQuarterViewBoard(Boolean(mapArtwork));
             this.#drawWorldObjects();
         } finally {
@@ -74,6 +77,24 @@ export class TutorialBattleWorldView {
                 smoothing: false
             });
         }
+    }
+
+    /** 원본 맵 촛대 좌표에 맞춘 WebGL 난류 화염 명령을 그립니다. @param {boolean} hasMapArtwork @private */
+    #drawAmbientFire(hasMapArtwork) {
+        const { colors, layout, world } = this.#frame;
+        const ambientFire = layout.ambientFire;
+        if (!hasMapArtwork || !ambientFire || ambientFire.emitters.length === 0) {
+            return;
+        }
+        this.#renderPort.renderGL('effect', {
+            effectType: EFFECT_TYPES.FLAME_PARTICLES,
+            emitters: ambientFire.emitters,
+            time: Number(world.elapsedSeconds) || 0,
+            alpha: ambientFire.alpha,
+            outerColor: colors.Effects?.FlameOuter,
+            coreColor: colors.Effects?.FlameCore,
+            emberColor: colors.Effects?.FlameEmber
+        });
     }
 
     /** 층 타일과 입력 표식을 그립니다. @param {boolean} hasMapArtwork @private */

@@ -377,6 +377,12 @@ export class TutorialBattleLayout {
         const gapRatio = Math.max(0, Number(this.#config.board.TILE_GAP_RATIO) || 0);
         return Object.freeze({
             mapImageRect,
+            ambientFire: this.#createAmbientFireProjection(
+                profile.ambientFire,
+                mapImageRect,
+                scaleX,
+                scaleY
+            ),
             gridAxisX,
             gridAxisY,
             tileWidth,
@@ -386,6 +392,52 @@ export class TutorialBattleLayout {
             tileGap: tileWidth * gapRatio,
             isoOriginX: mapImageRect.x + (originSource.x * scaleX),
             isoOriginY: mapImageRect.y + (originSource.y * scaleY)
+        });
+    }
+
+    /**
+     * 원본 맵에 실측한 촛불 심지 좌표를 현재 카메라가 적용된 화면 좌표로 변환합니다.
+     * @param {object|null|undefined} config - 맵별 화염 설정입니다.
+     * @param {{x:number,y:number,w:number,h:number}} mapImageRect - 화면의 맵 이미지 사각형입니다.
+     * @param {number} scaleX - 원본 이미지 대비 화면 X 배율입니다.
+     * @param {number} scaleY - 원본 이미지 대비 화면 Y 배율입니다.
+     * @returns {Readonly<object>|null} 화면 좌표 화염 설정입니다.
+     * @private
+     */
+    #createAmbientFireProjection(config, mapImageRect, scaleX, scaleY) {
+        const sourceEmitters = Array.isArray(config?.emitters)
+            ? config.emitters
+            : [];
+        const sourceSize = Number(config?.sourceSize);
+        if (sourceEmitters.length === 0 || !(sourceSize > 0)) {
+            return null;
+        }
+        const screenScale = (Math.abs(scaleX) + Math.abs(scaleY)) * 0.5;
+        const emitters = sourceEmitters.map((emitter) => {
+            const sourceX = Number(emitter?.x);
+            const sourceY = Number(emitter?.y);
+            if (!Number.isFinite(sourceX) || !Number.isFinite(sourceY)) {
+                return null;
+            }
+            return Object.freeze({
+                x: Math.round(mapImageRect.x + (sourceX * scaleX)),
+                y: Math.round(mapImageRect.y + (sourceY * scaleY)),
+                size: Math.max(1, sourceSize * screenScale),
+                phase: Number.isFinite(Number(emitter?.phase))
+                    ? Number(emitter.phase)
+                    : 0
+            });
+        }).filter(Boolean);
+        if (emitters.length === 0) {
+            return null;
+        }
+        const configuredAlpha = Number(config?.alpha);
+        return Object.freeze({
+            alpha: Math.max(
+                0,
+                Math.min(1, Number.isFinite(configuredAlpha) ? configuredAlpha : 1)
+            ),
+            emitters: Object.freeze(emitters)
         });
     }
 

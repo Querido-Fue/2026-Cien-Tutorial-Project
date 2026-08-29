@@ -138,7 +138,10 @@ const DARK_TACTICS_THEME = Object.freeze({
         Move: '#5ce5ff',
         Hit: '#ff8b78',
         Debris: '#d19a67',
-        Stabilize: '#ffd875'
+        Stabilize: '#ffd875',
+        FlameOuter: '#ff6524',
+        FlameCore: '#ffd05c',
+        FlameEmber: '#fff3b0'
     })
 });
 

@@ -342,6 +342,125 @@ export const PANEL_TEXTURE_FRAGMENT_SHADER = `
 `;
 
 /**
+ * 촛불 심지 위에서 난류로 흔들리는 화염, 코어, 외곽광과 상승 불씨를 합성하는 셰이더입니다.
+ */
+export const FLAME_PARTICLE_FRAGMENT_SHADER = `
+    precision highp float;
+
+    varying vec2 v_uv;
+
+    uniform vec2 u_resolution;
+    uniform vec2 u_center;
+    uniform float u_size;
+    uniform float u_time;
+    uniform float u_phase;
+    uniform float u_alpha;
+    uniform vec3 u_outerColor;
+    uniform vec3 u_coreColor;
+    uniform vec3 u_emberColor;
+
+    float hashValue(float value) {
+        return fract(sin(value * 91.3458) * 47453.5453);
+    }
+
+    float flameTurbulence(vec2 point, float time, float phase) {
+        float low = sin((point.y * 4.1) - (time * 3.2) + phase);
+        float mid = sin((point.y * 8.7) + (point.x * 3.3) - (time * 5.4) + (phase * 1.7));
+        float high = sin((point.y * 15.3) - (point.x * 5.8) - (time * 7.1) + (phase * 2.3));
+        return (low * 0.54) + (mid * 0.31) + (high * 0.15);
+    }
+
+    void main() {
+        vec2 screenPoint = vec2(
+            v_uv.x * u_resolution.x,
+            (1.0 - v_uv.y) * u_resolution.y
+        );
+        vec2 pixelPoint = floor(screenPoint) + 0.5;
+        vec2 point = vec2(
+            (pixelPoint.x - u_center.x) / max(1.0, u_size),
+            (u_center.y - pixelPoint.y) / max(1.0, u_size)
+        );
+        float phase = u_phase * 6.28318530718;
+        float turbulence = flameTurbulence(point, u_time, phase);
+        float normalizedHeight = clamp(point.y / 2.62, 0.0, 1.0);
+        float sway = (
+            sin((u_time * 3.35) + phase + (point.y * 2.15)) * 0.12
+            + (turbulence * 0.075)
+        ) * smoothstep(-0.05, 2.55, point.y);
+        float centeredX = point.x - sway;
+        float width = mix(0.66, 0.035, pow(normalizedHeight, 0.78));
+        width *= 0.91 + (0.09 * sin((u_time * 6.7) + phase + (point.y * 5.2)));
+        float horizontalMask = 1.0 - smoothstep(
+            max(0.0, width - 0.07),
+            width + 0.09,
+            abs(centeredX)
+        );
+        float bottomMask = smoothstep(-0.18, 0.06, point.y);
+        float topMask = 1.0 - smoothstep(
+            2.04,
+            2.70,
+            point.y + (turbulence * 0.17)
+        );
+        float outer = horizontalMask * bottomMask * topMask;
+        outer *= 0.84 + (0.16 * turbulence);
+
+        float coreHeight = clamp(point.y / 1.68, 0.0, 1.0);
+        float coreWidth = mix(0.36, 0.025, pow(coreHeight, 0.72));
+        float core = 1.0 - smoothstep(
+            max(0.0, coreWidth - 0.05),
+            coreWidth + 0.07,
+            abs(centeredX + (turbulence * 0.025))
+        );
+        core *= smoothstep(-0.11, 0.07, point.y)
+            * (1.0 - smoothstep(1.16, 1.72, point.y + (turbulence * 0.08)));
+
+        vec2 haloPoint = vec2(point.x * 0.72, (point.y - 0.58) * 0.5);
+        float halo = exp(-dot(haloPoint, haloPoint) * 1.7);
+        halo *= smoothstep(-0.72, -0.12, point.y)
+            * (1.0 - smoothstep(2.45, 3.35, point.y));
+
+        float ember = 0.0;
+        for (int emberIndex = 0; emberIndex < 4; emberIndex++) {
+            float id = float(emberIndex);
+            float seed = id + (u_phase * 13.7);
+            float speed = 0.24 + (hashValue(seed + 2.1) * 0.18);
+            float progress = fract((u_time * speed) + hashValue(seed + 7.4));
+            float emberX = ((hashValue(seed + 11.3) - 0.5) * 1.18)
+                + (sin((u_time * 2.2) + phase + (id * 2.4)) * progress * 0.16);
+            float emberY = 0.68 + (progress * 3.05);
+            vec2 emberDelta = (point - vec2(emberX, emberY)) * vec2(9.0, 7.0);
+            float emberShape = exp(-dot(emberDelta, emberDelta) * 1.8);
+            float emberLife = smoothstep(0.0, 0.08, progress)
+                * (1.0 - smoothstep(0.62, 1.0, progress));
+            ember = max(ember, emberShape * emberLife * (1.0 - (progress * 0.55)));
+        }
+
+        float flicker = 0.89 + (0.11 * sin(
+            (u_time * 7.4) + phase + sin((u_time * 3.1) + (phase * 1.9))
+        ));
+        outer = clamp(outer * flicker, 0.0, 1.0);
+        core = clamp(core * mix(0.96, 1.04, flicker), 0.0, 1.0);
+        float solid = max(outer, core);
+        float coreMix = clamp(core / max(0.001, solid), 0.0, 1.0);
+        vec3 flameColor = mix(u_outerColor, u_coreColor, coreMix);
+        flameColor = mix(flameColor, u_emberColor, core * 0.38);
+        vec3 color = (flameColor * solid)
+            + (u_outerColor * halo * 0.16)
+            + (u_emberColor * ember * 0.92);
+        float alpha = clamp(
+            (solid * 0.94) + (halo * 0.13) + (ember * 0.82),
+            0.0,
+            1.0
+        ) * u_alpha;
+        if (alpha <= 0.002) {
+            discard;
+        }
+        vec3 premultipliedColor = min(color * u_alpha, vec3(alpha));
+        gl_FragColor = vec4(premultipliedColor, alpha);
+    }
+`;
+
+/**
  * 마그네틱 실드 셰이더가 동시에 처리할 최대 충돌 수입니다.
  */
 export const MAGNETIC_SHIELD_MAX_IMPACTS = 12;
