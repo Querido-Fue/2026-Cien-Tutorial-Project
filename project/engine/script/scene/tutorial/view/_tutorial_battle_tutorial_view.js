@@ -11,6 +11,14 @@ import {
 } from './_tutorial_design_space.js';
 import { TUTORIAL_UI_LAYOUT_TOKENS } from './_tutorial_ui_layout_tokens.js';
 
+/** @param {string} font @param {number} scale @returns {string} */
+function scaleTutorialCalloutFont(font, scale) {
+    return String(font).replace(
+        /(\d+(?:\.\d+)?)px/,
+        (_, size) => `${Number(size) * scale}px`
+    );
+}
+
 /**
  * @class TutorialBattleTutorialView
  * @description 전투 안내 오버레이와 다시 열기 버튼 표시만 담당합니다.
@@ -45,79 +53,68 @@ export class TutorialBattleTutorialView {
         });
         rects.forEach((rect, index) => {
             const sentence = copy.sentences[index] || '';
-            const pad = clampBattleViewNumber(rect.w * 0.075, 7, 14);
-            const lineH = clampBattleViewNumber(rect.h * 0.22, 14, 20);
-            this.#renderPort.render('ui', {
-                shape: 'roundRect',
-                x: rect.x + 2,
-                y: rect.y + 3,
-                w: rect.w,
-                h: rect.h,
-                radius: Math.max(5, space.scale * 6),
-                fill: colors.UI.CardShadow
-            });
-            this.#renderPort.render('ui', {
-                shape: 'roundRect',
-                x: rect.x,
-                y: rect.y,
-                w: rect.w,
-                h: rect.h,
-                radius: Math.max(5, space.scale * 6),
-                fill: colors.UI.Card,
-                stroke: colors.UI.Border,
-                lineWidth: 1
-            });
-            drawTutorialPixelAsset(this.#renderPort, {
-                layer: 'ui',
-                image: this.#assetPort.getUiAsset?.('tutorialPaper'),
-                rect,
-                alpha: 0.48,
-                mode: 'exact'
-            });
-            const rodH = Math.max(4, rect.h * 0.09);
-            drawTutorialPixelAsset(this.#renderPort, {
-                layer: 'ui',
-                image: this.#assetPort.getUiAsset?.('tutorialRodTop'),
-                rect: { x: rect.x, y: rect.y, w: rect.w, h: rodH },
-                alpha: 0.92,
-                mode: 'exact'
-            });
-            drawTutorialPixelAsset(this.#renderPort, {
-                layer: 'ui',
-                image: this.#assetPort.getUiAsset?.('tutorialRodBottom'),
-                rect: { x: rect.x, y: rect.y + rect.h - rodH, w: rect.w, h: rodH },
-                alpha: 0.92,
-                mode: 'exact'
-            });
-            this.#drawText(
-                String(index + 1).padStart(2, '0'),
-                rect.x + pad,
-                rect.y + pad + (lineH * 0.1),
+            const pad = clampBattleViewNumber(rect.w * 0.17, 10, 28);
+            const calloutFont = scaleTutorialCalloutFont(
                 fonts.SMALL,
-                colors.UI.Primary
+                index === 0 ? 0.86 : 0.68
             );
+            const lineH = clampBattleViewNumber(rect.h * 0.16, 12, 19);
+            const popupDrawn = drawTutorialPixelAsset(this.#renderPort, {
+                layer: 'ui',
+                image: this.#assetPort.getUiAsset?.('tutorialPopupFull'),
+                rect,
+                alpha: 1,
+                mode: 'exact'
+            });
+            if (!popupDrawn) {
+                this.#renderPort.render('ui', {
+                    shape: 'roundRect',
+                    x: rect.x,
+                    y: rect.y,
+                    w: rect.w,
+                    h: rect.h,
+                    radius: Math.max(5, space.scale * 6),
+                    fill: colors.UI.Card,
+                    stroke: colors.UI.Border,
+                    lineWidth: 1
+                });
+            }
             const lines = wrapBattleViewText(
                 this.#renderPort,
                 sentence,
-                fonts.SMALL,
+                calloutFont,
                 rect.w - (pad * 2),
-                3
+                index === 0 ? 6 : 5
             );
+            const firstLineY = rect.y + (rect.h * 0.5)
+                - (((lines.length - 1) * lineH) * 0.5);
             lines.forEach((line, lineIndex) => this.#drawText(
                 line,
-                rect.x + pad,
-                rect.y + pad + (lineH * (1.1 + lineIndex)),
-                fonts.SMALL,
-                colors.UI.Text
+                rect.x + (rect.w * 0.5),
+                firstLineY + (lineH * lineIndex),
+                calloutFont,
+                colors.UI.PanelStrong,
+                'center'
             ));
         });
-        const replayRect = rects[1];
+        const skipRect = projectTutorialDesignRect(
+            space,
+            TUTORIAL_UI_LAYOUT_TOKENS.TUTORIAL.SKIP
+        );
+        drawTutorialPixelAsset(this.#renderPort, {
+            layer: 'ui',
+            image: this.#assetPort.getUiAsset?.('tutorialPopupFull'),
+            rect: skipRect,
+            alpha: 1,
+            mode: 'exact'
+        });
         this.#drawText(
-            copy.replay,
-            replayRect.x,
-            replayRect.y + replayRect.h + Math.max(12, space.scale * 10),
-            fonts.SMALL,
-            colors.UI.Muted
+            '건너뛰기 [Space]',
+            skipRect.x + (skipRect.w * 0.5),
+            skipRect.y + (skipRect.h * 0.5),
+            scaleTutorialCalloutFont(fonts.SMALL, 0.82),
+            colors.UI.PanelStrong || colors.UI.Text,
+            'center'
         );
     }
 
@@ -131,22 +128,7 @@ export class TutorialBattleTutorialView {
             return [];
         }
         if (!viewModel.open) {
-            const space = viewModel.layout.designSpace
-                || createTutorialDesignSpace(viewModel.viewport);
-            return [{
-                key: 'battle-guide-open',
-                x: space.x + (space.w * 0.31),
-                y: space.y + (space.h * 0.06),
-                w: space.w * 0.035,
-                h: space.h * 0.045,
-                label: '?',
-                backgroundAssetKey: 'mainButton',
-                backgroundImageAlpha: 0.82,
-                fitHitToBackground: true,
-                idleColor: viewModel.colors.UI.CardHeader,
-                hoverColor: viewModel.colors.UI.ButtonHover,
-                command: { type: TUTORIAL_COMMANDS.GUIDE_SHOW }
-            }];
+            return [];
         }
         const space = viewModel.layout.designSpace
             || createTutorialDesignSpace(viewModel.viewport);
@@ -157,10 +139,9 @@ export class TutorialBattleTutorialView {
         return [{
             key: 'battle-guide-dismiss',
             ...rect,
-            label: '확인 / 건너뛰기',
-            backgroundAssetKey: 'mainButton',
-            backgroundImageAlpha: 0.9,
-            fitHitToBackground: true,
+            label: '',
+            tooltip: 'Space로 건너뛰기',
+            drawBackground: false,
             idleColor: viewModel.colors.UI.Primary,
             hoverColor: viewModel.colors.UI.PrimaryHover,
             textColor: viewModel.colors.UI.OnPrimary,
@@ -176,9 +157,9 @@ export class TutorialBattleTutorialView {
     }
 
     /** @private */
-    #drawText(text, x, y, font, fill) {
+    #drawText(text, x, y, font, fill, align = 'left') {
         drawBattleViewText(this.#renderPort, {
-            layer: 'ui', text, x, y, font, fill
+            layer: 'ui', text, x, y, font, fill, align
         });
     }
 }

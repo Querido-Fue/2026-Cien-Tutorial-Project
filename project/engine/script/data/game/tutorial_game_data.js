@@ -634,10 +634,9 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         HUD: {
             STAGE_HEADER: { X_UIWW: 4.8, Y_WH: 6, WIDTH_UIWW: 17, HEIGHT_WH: 4.5 },
             MENU: { X_UIWW: 22.5, Y_WH: 6, WIDTH_UIWW: 8, HEIGHT_WH: 4.5 },
-            LORA_CARD: { X_UIWW: 71, Y_WH: 6, WIDTH_UIWW: 24, HEIGHT_WH: 15 },
-            MISSION_CARD: { X_UIWW: 4.5, Y_WH: 12, WIDTH_UIWW: 16, HEIGHT_WH: 22 },
-            PLAYER_STATUS: { X_UIWW: 4.8, Y_WH: 81.5, WIDTH_UIWW: 22, HEIGHT_WH: 12 },
-            INVENTORY_CARD: { X_UIWW: 4.7, Y_WH: 58, WIDTH_UIWW: 10, HEIGHT_WH: 23 },
+            LORA_CARD: { X_UIWW: 70.85, Y_WH: 5.8, WIDTH_UIWW: 23.92, HEIGHT_WH: 14.71 },
+            PLAYER_STATUS: { X_UIWW: 4.7, Y_WH: 81.29, WIDTH_UIWW: 22.47, HEIGHT_WH: 12.75 },
+            INVENTORY_CARD: { X_UIWW: 4.5, Y_WH: 59.49, WIDTH_UIWW: 8.6, HEIGHT_WH: 21.21 },
             SECONDARY_ACTIONS: { X_UIWW: 72, Y_WH: 69, WIDTH_UIWW: 23, HEIGHT_WH: 7.5 },
             PRIMARY_ACTION: { X_UIWW: 82, Y_WH: 77, WIDTH_UIWW: 13, HEIGHT_WH: 17 }
         },
@@ -700,12 +699,11 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
             TITLE: '전투 안내',
             SENTENCES: [
                 '턴 순서와 현재 진행 단계를 확인하세요.',
-                '다음 로라 행동과 선택 결과를 미리 볼 수 있습니다.',
-                '업적을 달성하면 화면 위쪽에 표시됩니다.',
-                '로라의 체력과 불안정 수치를 확인하세요.',
-                '근접·원거리·회복·대기 중 행동을 선택하세요.',
-                '내 체력과 보유 아이템은 왼쪽 아래에 있습니다.',
-                '매턴 최대 4칸 이동한 뒤 행동을 확정하세요.'
+                '내 체력과 아이템을 확인하세요.',
+                '업적을 달성하면 이곳에 표시됩니다.',
+                '로라의 체력과 불안정 수치를 확인할 수 있습니다.',
+                '사용할 행동을 선택하세요.',
+                '매턴 최대 4칸 이동할 수 있습니다.'
             ],
             REPLAY: 'H로 언제든 다시 열 수 있습니다.'
         },

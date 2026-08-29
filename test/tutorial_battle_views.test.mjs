@@ -131,7 +131,6 @@ test('1280×720 전투 레이아웃은 Figma 정규화 앵커를 그대로 투�
         PLAYER_STATUS: TUTORIAL_UI_LAYOUT_TOKENS.BATTLE.PLAYER,
         PRIMARY_ACTION: TUTORIAL_UI_LAYOUT_TOKENS.BATTLE.ACTION,
         SECONDARY_ACTIONS: TUTORIAL_UI_LAYOUT_TOKENS.BATTLE.SECONDARY,
-        MISSION_CARD: TUTORIAL_UI_LAYOUT_TOKENS.BATTLE.CONTEXT,
         INVENTORY_CARD: TUTORIAL_UI_LAYOUT_TOKENS.BATTLE.ITEM_FOCUS
     };
     for (const [key, token] of Object.entries(mappings)) {
@@ -225,7 +224,7 @@ test('첫 플레이 안내는 자동으로 열리고 확인 뒤 재플레이에�
     assert.equal(guidance.isOpen(), true);
 });
 
-test('전투 안내는 7개 콜아웃과 Figma 하단 확인 영역을 사용한다', () => {
+test('전투 안내는 6개 원본 팝업 위치와 Figma 하단 건너뛰기 영역을 사용한다', () => {
     const commands = [];
     const renderPort = {
         render(layer, command) {
@@ -253,13 +252,13 @@ test('전투 안내는 7개 콜아웃과 Figma 하단 확인 영역을 사용한
             }
         },
         copy: {
-            sentences: Array.from({ length: 7 }, (_, index) => `안내 ${index + 1}`),
+            sentences: Array.from({ length: 6 }, (_, index) => `안내 ${index + 1}`),
             replay: 'H로 다시 열기'
         }
     };
     view.draw(viewModel);
     const paperCards = commands.filter((command) => command.shape === 'roundRect');
-    assert.equal(paperCards.length, 14);
+    assert.equal(paperCards.length, 6);
     const [dismiss] = view.getButtonSpecs(viewModel);
     const skip = TUTORIAL_UI_LAYOUT_TOKENS.TUTORIAL.SKIP;
     assert.deepEqual(
@@ -271,6 +270,8 @@ test('전투 안내는 7개 콜아웃과 Figma 하단 확인 영역을 사용한
             h: Math.round(skip.h * 720)
         }
     );
+    assert.equal(dismiss.drawBackground, false);
+    assert.equal(dismiss.label, '');
 });
 
 test('가독성 프레젠터는 모델 수치를 재계산하지 않고 현재→예상 표시값을 보존한다', () => {

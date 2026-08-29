@@ -62,7 +62,6 @@ export class TutorialBattleHudView {
         try {
             this.#drawBattleStageHeader();
             this.#drawLoraStatusCard();
-            this.#drawMissionCard();
             this.#drawPlayerStatus();
             this.#drawInventoryCard();
         } finally {
@@ -169,18 +168,13 @@ export class TutorialBattleHudView {
             const primaryEnabled = controls.ready && (primaryIsMove
                 ? hud.movePreview?.ok === true
                 : snapshot.phase === 'action' && !snapshot.actionUsed);
-            const primaryLabel = primaryIsMove
-                ? '이동 확정'
-                : snapshot.phase === 'action'
-                    ? '행동 종료'
-                    : '로라와 몹 행동 중';
             specs.push({
                 key: 'battle-end',
                 x: primaryRect.x,
                 y: primaryRect.y + ((primaryRect.h - primaryH) * 0.5),
                 w: primaryRect.w,
                 h: primaryH,
-                label: primaryLabel,
+                label: '액션',
                 backgroundAssetKey: 'actionButton',
                 backgroundImageAlpha: 0.82,
                 fitHitToBackground: true,
@@ -195,30 +189,6 @@ export class TutorialBattleHudView {
                         ? TUTORIAL_COMMANDS.COMMIT_PATH
                         : TUTORIAL_COMMANDS.IDLE
                 }
-            });
-
-            const menuRect = layout.hudRects.MENU;
-            const menuH = Math.min(
-                menuRect.h,
-                clampBattleViewNumber(this.#uwh(4.2), 32, 48)
-            );
-            specs.push({
-                key: 'battle-menu',
-                x: menuRect.x,
-                y: menuRect.y + ((menuRect.h - menuH) * 0.5),
-                w: menuRect.w,
-                h: menuH,
-                label: 'Esc',
-                backgroundAssetKey: 'mainButton',
-                backgroundImageAlpha: 0.86,
-                fitHitToBackground: true,
-                enabled: !hud.presentationLocked,
-                idleColor: colors.UI.Card,
-                hoverColor: colors.UI.ButtonHover,
-                textColor: colors.UI.Text,
-                radius: this.#uwh(1),
-                shadow: { blur: 8, color: colors.UI.CardShadow },
-                command: { type: TUTORIAL_COMMANDS.PAUSE }
             });
 
             const inventoryRect = layout.hudRects.PLAYER_STATUS;
@@ -325,7 +295,7 @@ export class TutorialBattleHudView {
 
     /** 스테이지 제목과 턴 진행 핍을 그립니다. @private */
     #drawBattleStageHeader() {
-        const { colors, floor, fonts, hud, layout, snapshot, world } = this.#frame;
+        const { colors, hud, layout, snapshot } = this.#frame;
         const rect = layout.hudRects.STAGE_HEADER;
         drawTutorialPixelAsset(this.#renderPort, {
             layer: 'ui',
@@ -333,40 +303,15 @@ export class TutorialBattleHudView {
             rect,
             alpha: 0.82
         });
-        const padX = rect.w * 0.055;
-        const rawStageTitle = Number(world.presentation.floorIndex) === 0
-            ? (floor?.label || '1층')
-            : (floor?.label || '지하층');
-        const stageTitle = truncateBattleViewText(
-            this.#renderPort, rawStageTitle, fonts.SMALL, rect.w * 0.32
-        );
-        this.#drawText(
-            'ui', stageTitle, rect.x + padX, rect.y + (rect.h * 0.34),
-            fonts.SMALL, colors.UI.Text
-        );
         const completed = clampBattleViewNumber(
             Number(snapshot.loraActionsCompleted) || 0,
             0,
             Number(snapshot.maxTurns) || 12
         );
-        const phaseLabel = snapshot.phase === 'move'
-            ? '이동'
-            : snapshot.phase === 'action'
-                ? '행동'
-                : snapshot.phase === 'lora'
-                    ? '로라'
-                    : '종료';
-        this.#drawText(
-            'ui', phaseLabel,
-            rect.x + padX, rect.y + (rect.h * 0.72), fonts.SMALL,
-            snapshot.phase === 'move' || snapshot.phase === 'action'
-                ? colors.UI.Primary
-                : colors.UI.Muted
-        );
         const maxTurns = Number(snapshot.maxTurns) || 12;
         const transitionAfter = Number(hud.config.floorTransitionAfterTurn) || 6;
-        const pipsX = rect.x + (rect.w * 0.29);
-        const pipsW = rect.w * 0.66;
+        const pipsX = rect.x + (rect.w * 0.08);
+        const pipsW = rect.w * 0.84;
         const dividerGap = Math.max(3, rect.w * 0.012);
         const pipGap = Math.max(1, rect.w * 0.004);
         const pipSize = Math.min(
@@ -495,132 +440,6 @@ export class TutorialBattleHudView {
             contentX, rect.y + (rect.h * 0.82), contentW, gaugeH,
             instability / 100, colors.UI.GaugeInstability,
             expectedInstability / 100, 'loraGaugeBar'
-        );
-    }
-
-    /** 다음 로라 행동, 선택 행동 미리보기와 조사 아이템을 그립니다. @private */
-    #drawMissionCard() {
-        const { colors, fonts, hud, layout, snapshot } = this.#frame;
-        const rect = layout.hudRects.MISSION_CARD;
-        const pad = clampBattleViewNumber(rect.w * 0.065, 10, 18);
-        const lineH = clampBattleViewNumber(this.#uwh(2.3), 18, 22);
-        const maxW = rect.w - (pad * 2);
-        const intent = hud.readability?.loraIntent || {};
-        const preview = hud.readability?.playerPreview || {};
-        this.#drawHudCard(rect, 'itemPanel', 0.58);
-        let y = rect.y + pad;
-        this.#drawText(
-            'ui', 'NEXT LORA' + (intent.forecast ? ' · 현재 기준' : ''),
-            rect.x + pad, y, fonts.SMALL, colors.UI.Primary
-        );
-        y += lineH * 1.15;
-        this.#drawText(
-            'ui',
-            truncateBattleViewText(
-                this.#renderPort,
-                intent.actionLabel + ' · ' + intent.stateLabel,
-                fonts.SMALL,
-                maxW
-            ),
-            rect.x + pad,
-            y,
-            fonts.SMALL,
-            colors.UI.Text
-        );
-        y += lineH * 1.05;
-        this.#drawText(
-            'ui',
-            '예상 피해 ' + String(Math.round(Number(intent.finalDamage) || 0))
-                + ' · 범위 ' + String(intent.rangeLabel || '없음'),
-            rect.x + pad,
-            y,
-            fonts.SMALL,
-            Number(intent.finalDamage) > 0 ? colors.UI.Danger : colors.UI.Success
-        );
-        y += lineH * 0.72;
-        this.#renderPort.render('ui', {
-            shape: 'rect',
-            x: rect.x + pad,
-            y,
-            w: rect.w - (pad * 2),
-            h: 1,
-            fill: colors.UI.Border
-        });
-        y += lineH * 0.78;
-        this.#drawText(
-            'ui',
-            'ACTION PREVIEW · ' + String(preview.title || '선택 없음'),
-            rect.x + pad,
-            y,
-            fonts.SMALL,
-            colors.UI.Primary
-        );
-        y += lineH * 1.05;
-        const hpLine = '로라 '
-            + this.#formatTransition(preview.before?.loraHp, preview.expected?.loraHp)
-            + ' · 나 '
-            + this.#formatTransition(preview.before?.playerHp, preview.expected?.playerHp);
-        this.#drawText(
-            'ui',
-            truncateBattleViewText(this.#renderPort, hpLine, fonts.SMALL, maxW),
-            rect.x + pad,
-            y,
-            fonts.SMALL,
-            colors.UI.Text
-        );
-        y += lineH;
-        this.#drawText(
-            'ui',
-            '불안정 '
-                + this.#formatTransition(
-                    preview.before?.instability,
-                    preview.expected?.instability
-                ),
-            rect.x + pad,
-            y,
-            fonts.SMALL,
-            colors.UI.Text
-        );
-        y += lineH;
-        this.#drawText(
-            'ui',
-            truncateBattleViewText(
-                this.#renderPort,
-                String(preview.reasonLabel || intent.reasonLabel || ''),
-                fonts.SMALL,
-                maxW
-            ),
-            rect.x + pad,
-            y,
-            fonts.SMALL,
-            preview.ok === false && preview.available
-                ? colors.UI.Warning
-                : colors.UI.Muted
-        );
-        const statusLine = snapshot.phase === 'move'
-            ? '이동 ' + String(hud.movePreview?.stepsUsed || 0)
-                + '/' + String(hud.movePreview?.moveRange || hud.config.playerMoveRange)
-                + ' · 남음 ' + String(hud.movePreview?.remainingMoves ?? 0)
-                + '  →  행동 0/' + String(snapshot.actionsPerTurn || 1)
-            : snapshot.phase === 'action'
-                ? '이동 완료  →  행동 ' + String(snapshot.actionsUsed || 0)
-                    + '/' + String(snapshot.actionsPerTurn || 1)
-                : snapshot.phase === 'lora'
-                    ? '로라 행동  →  몹 행동'
-                    : '작전 종료';
-        this.#drawText(
-            'ui',
-            truncateBattleViewText(
-                this.#renderPort,
-                statusLine,
-                fonts.SMALL,
-                rect.w - (pad * 2)
-            ),
-            rect.x + rect.w - pad,
-            rect.y + rect.h - pad,
-            fonts.SMALL,
-            colors.UI.Accent,
-            'right'
         );
     }
 

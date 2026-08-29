@@ -2,7 +2,9 @@ import { TUTORIAL_COMMANDS } from '../_tutorial_scene_constants.js';
 import { drawTutorialPixelAsset, fitTutorialAssetRect } from './_tutorial_asset_view_helpers.js';
 import {
     createTutorialTextAnchor,
-    drawTutorialBackgroundPanel
+    drawTutorialBackgroundPanel,
+    drawTutorialText,
+    wrapTutorialText
 } from './_tutorial_nonbattle_view_helpers.js';
 import {
     createTutorialDesignSpace,
@@ -137,6 +139,26 @@ export class TutorialResultView {
                 h: layout.leftPage.h * 0.36
             }
         });
+        const endingName = viewModel.result?.displayName
+            || 'happily ever after..?';
+        const nameLines = wrapTutorialText(
+            this.#renderPort,
+            endingName,
+            viewModel.fonts.HEADING,
+            layout.rightPage.w * 0.78,
+            2
+        );
+        const lineHeight = Math.max(18, layout.rightPage.h * 0.065);
+        const firstLineY = layout.rightPage.y + (layout.rightPage.h * 0.28)
+            - (((nameLines.length - 1) * lineHeight) * 0.5);
+        nameLines.forEach((line, index) => drawTutorialText(this.#renderPort, {
+            text: line,
+            x: layout.rightPage.x + (layout.rightPage.w * 0.5),
+            y: firstLineY + (index * lineHeight),
+            font: viewModel.fonts.HEADING,
+            fill: colors.UI.PanelStrong,
+            align: 'center'
+        }));
 
     }
 
@@ -158,7 +180,7 @@ export class TutorialResultView {
             {
                 key: 'result-retry',
                 ...layout.buttons[0],
-                label: '재시작하기  [R]',
+                label: '재시작하기',
                 backgroundAssetKey: 'mainButton',
                 backgroundImageAlpha: 0.9,
                 fitHitToBackground: true,
@@ -169,7 +191,7 @@ export class TutorialResultView {
             {
                 key: 'result-menu',
                 ...layout.buttons[1],
-                label: '나가기  [Esc]',
+                label: '나가기',
                 backgroundAssetKey: 'mainButton',
                 backgroundImageAlpha: 0.9,
                 fitHitToBackground: true,

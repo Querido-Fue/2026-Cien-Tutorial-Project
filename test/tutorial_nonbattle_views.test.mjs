@@ -398,9 +398,14 @@ test('갤러리 책갈피와 결과 버튼은 Figma 관찰 좌표와 책 내부 
             renderCommands.push({ layer, command });
         }
     });
-    const galleryLayout = galleryWithCapture.getLayout(galleryModel);
-    galleryWithCapture.draw(galleryModel);
-    const pageText = renderCommands.find(({ command }) => command.text === '1 / 6').command;
+    const mediaModel = {
+        ...galleryModel,
+        selectedSectionId: 'cutscenes',
+        selectedSectionTitle: '컷씬'
+    };
+    const galleryLayout = galleryWithCapture.getLayout(mediaModel);
+    galleryWithCapture.draw(mediaModel);
+    const pageText = renderCommands.find(({ command }) => command.text === '1/6').command;
     assert.equal(pageText.font, FONTS.SMALL);
     assert.equal(pageText.x, galleryLayout.pageIndicator.x + (galleryLayout.pageIndicator.w * 0.5));
     assert.equal(pageText.y, galleryLayout.pageIndicator.y + (galleryLayout.pageIndicator.h * 0.5));

@@ -137,7 +137,8 @@ export class TutorialButtonHost {
             backgroundImage,
             backgroundImageFlipX: spec.backgroundImageFlipX === true,
             drawBackground: spec.drawBackground !== false,
-            drawSolidBackground: spec.drawSolidBackground !== false,
+            drawSolidBackground: spec.drawSolidBackground
+                ?? !backgroundImage,
             backgroundImageAlpha: enabled
                 ? (spec.backgroundImageAlpha ?? 1)
                 : (spec.backgroundImageAlpha ?? 1) * 0.32,

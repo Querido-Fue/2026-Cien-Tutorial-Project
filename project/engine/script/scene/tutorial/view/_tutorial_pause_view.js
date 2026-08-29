@@ -62,7 +62,7 @@ export class TutorialPauseView {
             alpha: 1
         });
         drawTutorialText(this.#renderPort, {
-            text: '일시정지',
+            text: '정지',
             x: layout.panel.x + (layout.panel.w * 0.5),
             y: layout.panel.y + (layout.panel.h * 0.18),
             font: viewModel.fonts.HEADING,
@@ -76,17 +76,15 @@ export class TutorialPauseView {
         const layout = this.getLayout(viewModel);
         const entries = [
             ['pause-resume', '계속하기', TUTORIAL_COMMANDS.RESUME],
-            ['pause-restart', '재시작하기', TUTORIAL_COMMANDS.RESTART],
-            ['pause-exit', '나가기', TUTORIAL_COMMANDS.RETURN_MENU]
+            ['pause-restart', '새로 시작하기', TUTORIAL_COMMANDS.RESTART],
+            ['pause-exit', '그만하기', TUTORIAL_COMMANDS.RETURN_MENU]
         ];
         return entries.map(([key, label, type], index) => ({
             key,
             ...layout.buttons[index],
             label,
             active: index === viewModel.selectedIndex,
-            backgroundAssetKey: 'mainButton',
-            backgroundImageAlpha: 0.94,
-            fitHitToBackground: true,
+            drawBackground: false,
             command: { type }
         }));
     }

@@ -103,15 +103,16 @@ export class TutorialStarterView {
         }
         drawTutorialPixelAsset(this.#renderPort, {
             layer: 'ui',
-            image: this.#assetPort.getUiAsset?.('turnFrame'),
+            image: this.#assetPort.getUiAsset?.('tutorialPopupFull'),
             rect: layout.title,
-            alpha: 0.98
+            alpha: 1,
+            mode: 'exact'
         });
         drawTutorialText(this.#renderPort, {
-            text: '아이템 선택',
+            text: '아이템 선택하기',
             x: layout.title.x + (layout.title.w * 0.5),
             y: layout.title.y + (layout.title.h * 0.5),
-            font: fonts.HEADING,
+            font: fonts.SMALL,
             fill: colors.UI.Text,
             align: 'center'
         });
@@ -163,7 +164,7 @@ export class TutorialStarterView {
                 alpha: 1
             });
             drawTutorialText(this.#renderPort, {
-                text: (selected ? '◆ ' : '') + choice.label,
+                text: choice.label,
                 x: frameRect.x + (frameRect.w * 0.5),
                 y: frameRect.y + (
                     frameRect.h
