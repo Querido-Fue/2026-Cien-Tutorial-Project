@@ -253,7 +253,7 @@ test('체인지로그는 Git 기반 한글 기록을 책 양쪽 페이지에 나
         }
     });
     const viewModel = createViewModel(VIEWPORTS[0], {
-        version: '0830_0500',
+        version: '0830_0614',
         entries: CHANGELOG_ENTRIES,
         page: 0
     });
@@ -264,7 +264,9 @@ test('체인지로그는 Git 기반 한글 기록을 책 양쪽 페이지에 나
         .filter(({ command }) => command.shape === 'text')
         .map(({ command }) => command.text);
     assert.ok(texts.includes('변경 내역'));
-    assert.ok(texts.includes('현재 ver 0830_0500'));
+    assert.ok(texts.includes('현재 ver 8/30 06:14'));
+    assert.ok(texts.includes('ver 8/30 00:00 · 0000000'));
+    assert.equal(texts.some((text) => text.includes('0830_')), false);
     assert.ok(texts.some((text) => text.includes('게임 화면과 전투 시스템 개선')));
     assert.deepEqual(
         view.getButtonSpecs(viewModel).map((button) => button.key),

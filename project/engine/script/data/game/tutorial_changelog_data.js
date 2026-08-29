@@ -5,6 +5,10 @@
  */
 export const TUTORIAL_CHANGELOG_CATALOG = Object.freeze([
     Object.freeze({
+        subject: 'feat: polish changelog dates and lora portrait',
+        summary: '체인지로그 날짜를 읽기 쉽게 바꾸고 로라 HUD 얼굴을 정면 도트 초상화로 교체했습니다.'
+    }),
+    Object.freeze({
         subject: 'refactor: extract tutorial battle outcome flow',
         summary: '모델 결과를 연출·업적·진행도·기록·컷씬으로 배포하는 책임을 장면에서 분리했습니다.'
     }),

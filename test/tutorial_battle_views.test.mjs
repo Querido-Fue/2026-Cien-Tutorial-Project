@@ -870,7 +870,7 @@ test('로라·플레이어 상태와 아이템 설명은 원본 패널 내부에
         turnDuring: { naturalWidth: 15, naturalHeight: 15 },
         turnPassed: { naturalWidth: 15, naturalHeight: 15 },
         loraPanelFull: { naturalWidth: 247, naturalHeight: 90 },
-        loraPortraitIcon: { naturalWidth: 125, naturalHeight: 125 },
+        loraPortraitIcon: { naturalWidth: 1254, naturalHeight: 1254 },
         loraHpBar: { naturalWidth: 80, naturalHeight: 4 },
         loraGaugeBar: { naturalWidth: 80, naturalHeight: 4 },
         playerPanel: { naturalWidth: 232, naturalHeight: 78 },
@@ -1027,11 +1027,11 @@ test('로라·플레이어 상태와 아이템 설명은 원본 패널 내부에
         },
         {
             x: 900,
-            y: 20,
+            y: 27,
             w: 85,
             h: 86,
             clipVertices: [944, 42, 980, 74, 944, 108, 915, 74],
-            smoothing: true
+            smoothing: false
         }
     );
     assert.equal(loraPanelLayers.length, 5);

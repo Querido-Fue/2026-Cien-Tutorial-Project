@@ -15,7 +15,7 @@ const LORA_STATUS_PANEL_LAYOUT = Object.freeze({
     SOURCE: Object.freeze({ WIDTH: 247, HEIGHT: 90 }),
     PORTRAIT_VIEWPORT: Object.freeze({ X: 0, Y: 0, WIDTH: 55, HEIGHT: 56 }),
     PORTRAIT_SCALE: 1.3,
-    PORTRAIT_VISUAL_CENTER: Object.freeze({ X: 0.56, Y: 0.64 }),
+    PORTRAIT_VISUAL_CENTER: Object.freeze({ X: 0.56, Y: 0.56 }),
     PORTRAIT_CLIP: Object.freeze([
         Object.freeze({ X: 25, Y: 0 }),
         Object.freeze({ X: 55, Y: 27 }),
@@ -307,7 +307,7 @@ export class TutorialBattleHudView {
                     LORA_STATUS_PANEL_LAYOUT.PORTRAIT_CLIP,
                     LORA_STATUS_PANEL_LAYOUT.SOURCE
                 ),
-                smoothing: true
+                smoothing: false
             });
         } else if (portraitViewport) {
             this.#renderPort.render('ui', {

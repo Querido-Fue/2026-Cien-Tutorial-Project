@@ -19,6 +19,17 @@ function clamp(value, minimum, maximum) {
     return Math.max(minimum, Math.min(maximum, Number(value) || 0));
 }
 
+/** @param {unknown} value @param {string} fallback @returns {string} */
+function formatChangelogVersion(value, fallback) {
+    const version = String(value || '').trim();
+    const match = /^(\d{2})(\d{2})_(\d{2})(\d{2})$/.exec(version);
+    if (!match) {
+        return version || fallback;
+    }
+    const [, month, day, hour, minute] = match;
+    return `${Number(month)}/${Number(day)} ${hour}:${minute}`;
+}
+
 /**
  * @class TutorialChangelogView
  * @description 빌드 매니페스트의 한글 Git 변경 기록을 책 형태로 표시합니다.
@@ -124,7 +135,10 @@ export class TutorialChangelogView {
             );
         }
 
-        const titles = ['변경 내역', `현재 ver ${viewModel.version || 'dev'}`];
+        const titles = [
+            '변경 내역',
+            `현재 ver ${formatChangelogVersion(viewModel.version, 'dev')}`
+        ];
         layout.pages.forEach((pageRect, index) => drawTutorialText(this.#renderPort, {
             text: titles[index],
             x: pageRect.x + (pageRect.w * 0.5),
@@ -149,7 +163,7 @@ export class TutorialChangelogView {
             const rowIndex = index % PAGE_SIDE_ENTRY_COUNT;
             const row = layout.rows[sideIndex][rowIndex];
             drawTutorialText(this.#renderPort, {
-                text: `ver ${entry.version || '기록'} · ${entry.commit || '-------'}`,
+                text: `ver ${formatChangelogVersion(entry.version, '기록')} · ${entry.commit || '-------'}`,
                 x: row.x,
                 y: row.y + (row.h * 0.18),
                 font: viewModel.fonts.MONO,
