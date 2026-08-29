@@ -33,6 +33,11 @@ export class TutorialMenuView {
         const space = createTutorialDesignSpace(viewport);
         const tokens = TUTORIAL_UI_LAYOUT_TOKENS.MAIN;
         const logo = projectTutorialDesignRect(space, tokens.LOGO);
+        const versionLabel = projectTutorialDesignRect(space, tokens.VERSION_LABEL);
+        const changelogButton = projectTutorialDesignRect(
+            space,
+            tokens.CHANGELOG_BUTTON
+        );
         const baseGroup = projectTutorialDesignRect(space, tokens.BUTTON_GROUP);
         const group = {
             x: Math.round(baseGroup.x - (baseGroup.w * (tokens.BUTTON_SCALE - 1) * 0.5)),
@@ -54,8 +59,10 @@ export class TutorialMenuView {
         return {
             space,
             logo,
-            contentRects: [logo],
-            buttons
+            versionLabel,
+            contentRects: [logo, versionLabel],
+            buttons,
+            changelogButton
         };
     }
 
@@ -81,6 +88,14 @@ export class TutorialMenuView {
                 align: 'center'
             });
         }
+        drawTutorialText(this.#renderPort, {
+            text: `ver ${viewModel.releaseVersion || 'dev'}`,
+            x: layout.versionLabel.x,
+            y: layout.versionLabel.y + (layout.versionLabel.h * 0.5),
+            font: fonts.SMALL,
+            fill: colors.UI.Muted,
+            align: 'left'
+        });
     }
 
     /**
@@ -89,7 +104,8 @@ export class TutorialMenuView {
      * @returns {object[]} 직렬화 가능한 버튼 사양입니다.
      */
     getButtonSpecs(viewModel) {
-        const [continueRect, startRect, galleryRect] = this.getLayout(viewModel).buttons;
+        const layout = this.getLayout(viewModel);
+        const [continueRect, startRect, galleryRect] = layout.buttons;
         return [
             {
                 key: 'menu-continue',
@@ -124,6 +140,17 @@ export class TutorialMenuView {
                 drawSolidBackground: false,
                 fitHitToBackground: true,
                 command: { type: TUTORIAL_COMMANDS.OPEN_GALLERY }
+            },
+            {
+                key: 'menu-changelog',
+                ...layout.changelogButton,
+                label: '체인지로그',
+                fontScale: 0.72,
+                backgroundAssetKey: 'mainButton',
+                backgroundImageAlpha: 0.82,
+                drawSolidBackground: false,
+                fitHitToBackground: true,
+                command: { type: TUTORIAL_COMMANDS.OPEN_CHANGELOG }
             }
         ];
     }

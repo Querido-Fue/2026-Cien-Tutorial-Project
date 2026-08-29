@@ -92,6 +92,7 @@ import { TutorialBattleTutorialView } from './view/_tutorial_battle_tutorial_vie
 import { TutorialBattleWorldView } from './view/_tutorial_battle_world_view.js';
 import { TutorialAchievementView } from './view/_tutorial_achievement_view.js';
 import { TutorialButtonHost } from './view/_tutorial_button_host.js';
+import { TutorialChangelogView } from './view/_tutorial_changelog_view.js';
 import { TutorialCutsceneView } from './view/_tutorial_cutscene_view.js';
 import { TutorialGalleryView } from './view/_tutorial_gallery_view.js';
 import { TutorialLoadingView } from './view/_tutorial_loading_view.js';
@@ -130,8 +131,9 @@ function createResponsiveFont(spec, uiWidth) {
 export class TutorialScene extends BaseScene {
     /**
      * @param {object} sceneSystem - 현재 장면을 소유한 SceneSystem입니다.
+     * @param {object} [options={}] - 웹 릴리스 표시 정보입니다.
      */
-    constructor(sceneSystem) {
+    constructor(sceneSystem, options = {}) {
         super(sceneSystem);
         this.data = TUTORIAL_GAME_DATA;
         this.content = TUTORIAL_CONTENT_DATA;
@@ -178,6 +180,19 @@ export class TutorialScene extends BaseScene {
         this.timelineRevision = 0;
         this.lastPresentationSnapshot = null;
         this.hoveredTileKey = '';
+        const releaseInfo = options.releaseInfo || {};
+        this.releaseInfo = Object.freeze({
+            id: String(releaseInfo.id || 'development'),
+            version: String(releaseInfo.version || 'dev'),
+            changelog: Object.freeze(toList(releaseInfo.changelog).map((entry) => (
+                Object.freeze({
+                    version: String(entry?.version || '기록'),
+                    commit: String(entry?.commit || ''),
+                    summary: String(entry?.summary || '')
+                })
+            )))
+        });
+        this.changelogPage = 0;
 
         const tutorialRenderPort = Object.freeze({
             render,
@@ -198,6 +213,10 @@ export class TutorialScene extends BaseScene {
         );
         this.loadingView = new TutorialLoadingView(tutorialRenderPort);
         this.menuView = new TutorialMenuView(tutorialRenderPort, this.assetPort);
+        this.changelogView = new TutorialChangelogView(
+            tutorialRenderPort,
+            this.assetPort
+        );
         this.starterView = new TutorialStarterView(tutorialRenderPort, this.assetPort);
         this.pauseView = new TutorialPauseView(tutorialRenderPort, this.assetPort);
         this.galleryView = new TutorialGalleryView(tutorialRenderPort, this.assetPort);
@@ -401,6 +420,8 @@ export class TutorialScene extends BaseScene {
             this.starterView.draw(this.#createStarterViewModel());
         } else if (view === 'gallery') {
             this.galleryView.draw(this.#createGalleryViewModel());
+        } else if (view === 'changelog') {
+            this.changelogView.draw(this.#createChangelogViewModel());
         } else if (view === 'battle' || view === 'pause') {
             const battleViewModel = this.#createBattleViewModel();
             this.battleWorldView.draw(battleViewModel);
@@ -446,6 +467,12 @@ export class TutorialScene extends BaseScene {
                     break;
                 case COMMANDS.OPEN_GALLERY:
                     this.#applyOpenGallery();
+                    break;
+                case COMMANDS.OPEN_CHANGELOG:
+                    this.#applyOpenChangelog();
+                    break;
+                case COMMANDS.CHANGELOG_SHIFT:
+                    this.#applyChangelogShift(command.payload);
                     break;
                 case COMMANDS.RETURN_MENU:
                     this.#applyReturnMenu();
@@ -643,6 +670,32 @@ export class TutorialScene extends BaseScene {
         this.mode = MODES.GALLERY;
     }
 
+    /** 타이틀 화면에서 현재 배포의 한글 변경 기록을 엽니다. @private */
+    #applyOpenChangelog() {
+        if (this.mode !== MODES.MENU) {
+            return;
+        }
+        this.changelogPage = 0;
+        this.mode = MODES.CHANGELOG;
+    }
+
+    /** @param {object} payload 체인지로그 페이지 이동량입니다. @private */
+    #applyChangelogShift(payload) {
+        if (this.mode !== MODES.CHANGELOG) {
+            return;
+        }
+        const viewModel = this.#createChangelogViewModel();
+        const pageCount = this.changelogView.getPageCount(viewModel);
+        const delta = Math.sign(Number(payload?.delta) || 0);
+        if (delta === 0 || pageCount <= 1) {
+            return;
+        }
+        this.changelogPage = (
+            this.changelogPage + delta + pageCount
+        ) % pageCount;
+        this.presentationTimeline.startSelection('menu-selection');
+    }
+
     /**
      * 현재 화면에서 메뉴로 돌아갑니다.
      * @private
@@ -767,6 +820,7 @@ export class TutorialScene extends BaseScene {
         this.resultData = null;
         this.resultRecorded = false;
         this.pauseIndex = 0;
+        this.changelogPage = 0;
         this.loraTurnState = null;
         this.attackSelected = false;
         this.attackWeapon = 'melee';
@@ -1869,6 +1923,23 @@ export class TutorialScene extends BaseScene {
             return;
         }
 
+        if (this.mode === MODES.CHANGELOG) {
+            if (this.#wasAnyKeyPressed(SELECTION_KEY_CODES.PREVIOUS)) {
+                enqueueSimulationCommand({
+                    type: COMMANDS.CHANGELOG_SHIFT,
+                    payload: { delta: -1 }
+                });
+            } else if (this.#wasAnyKeyPressed(SELECTION_KEY_CODES.NEXT)) {
+                enqueueSimulationCommand({
+                    type: COMMANDS.CHANGELOG_SHIFT,
+                    payload: { delta: 1 }
+                });
+            } else if (this.#wasKeyPressed(KEY_CODES.CANCEL)) {
+                enqueueSimulationCommand({ type: COMMANDS.RETURN_MENU });
+            }
+            return;
+        }
+
         if (this.mode === MODES.STARTER) {
             if (this.#wasAnyKeyPressed(SELECTION_KEY_CODES.PREVIOUS)) {
                 enqueueSimulationCommand({
@@ -2257,7 +2328,18 @@ export class TutorialScene extends BaseScene {
             title: this.data.TEXT.TITLE,
             subtitle: this.data.TEXT.SUBTITLE,
             playCount: Number(this.meta?.playCount) || 0,
-            canContinue: false
+            canContinue: false,
+            releaseVersion: this.releaseInfo.version
+        });
+    }
+
+    /** @returns {object} 현재 배포와 Git 변경 기록 뷰 모델입니다. @private */
+    #createChangelogViewModel() {
+        return Object.freeze({
+            ...this.#createNonbattleViewFrame(),
+            version: this.releaseInfo.version,
+            entries: this.releaseInfo.changelog,
+            page: this.changelogPage
         });
     }
 
@@ -2660,6 +2742,8 @@ export class TutorialScene extends BaseScene {
             String(cutsceneState.cardIndex),
             String(this.starterIndex),
             String(this.pauseIndex),
+            String(this.changelogPage),
+            this.releaseInfo.id,
             galleryState.selectedSectionId,
             String(galleryState.selectedIndex),
             String(this.model?.turn),
@@ -2701,6 +2785,11 @@ export class TutorialScene extends BaseScene {
         }
         if (buttonGroup === 'menu') {
             return this.menuView.getButtonSpecs(this.#createMenuViewModel());
+        }
+        if (buttonGroup === 'changelog') {
+            return this.changelogView.getButtonSpecs(
+                this.#createChangelogViewModel()
+            );
         }
         if (buttonGroup === 'starter') {
             return this.starterView.getButtonSpecs(this.#createStarterViewModel());

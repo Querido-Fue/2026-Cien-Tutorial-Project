@@ -11,6 +11,8 @@ export const TUTORIAL_UI_LAYOUT_TOKENS = Object.freeze({
     MAIN: Object.freeze({
         LOGO: rect(0.365, 0.215, 0.27, 0.22),
         BUTTON_GROUP: rect(0.425, 0.55, 0.15, 0.18),
+        VERSION_LABEL: rect(0.025, 0.905, 0.14, 0.03),
+        CHANGELOG_BUTTON: rect(0.025, 0.94, 0.105, 0.042),
         BUTTON_GAP: 0.012,
         BUTTON_SCALE: 1.2
     }),
@@ -66,6 +68,13 @@ export const TUTORIAL_UI_LAYOUT_TOKENS = Object.freeze({
             rect(0.73, 0.39, 0.10, 0.07),
             rect(0.73, 0.50, 0.10, 0.07)
         ])
+    }),
+    CHANGELOG: Object.freeze({
+        BOOK: rect(0.22, 0.11, 0.56, 0.76),
+        CLOSE: rect(0.90, 0.08, 0.035, 0.062),
+        PREVIOUS: rect(0.465, 0.885, 0.03, 0.055),
+        NEXT: rect(0.505, 0.885, 0.03, 0.055),
+        ENTRIES_PER_PAGE: 8
     }),
     RESULT: Object.freeze({
         BOOK: rect(0.19, 0.15, 0.58, 0.71),

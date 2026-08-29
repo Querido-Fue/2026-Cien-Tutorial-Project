@@ -33,10 +33,32 @@ const LANDING_PAGE_HTML = `<!DOCTYPE html>
 const ALLOWED_REQUEST_HEADERS = Object.freeze([
     'accept',
     'accept-encoding',
+    'cache-control',
     'if-modified-since',
     'if-none-match',
     'range',
 ]);
+
+/**
+ * 공개 파일 성격에 맞는 브라우저 캐시 정책을 반환합니다.
+ * @param {URL} publicUrl - jukchang.com 요청 URL입니다.
+ * @returns {string} 응답 Cache-Control 값입니다.
+ */
+export const resolvePublicCacheControl = (publicUrl) => {
+    if (publicUrl.pathname.endsWith('/release.json')
+        || publicUrl.pathname.endsWith('/')
+        || publicUrl.pathname.endsWith('.html')) {
+        return 'no-store, max-age=0';
+    }
+    if (publicUrl.pathname.includes('/releases/')
+        || publicUrl.searchParams.has('v')) {
+        return 'public, max-age=31536000, immutable';
+    }
+    if (/\.(?:js|css|json)$/i.test(publicUrl.pathname)) {
+        return 'no-cache, max-age=0, must-revalidate';
+    }
+    return 'public, max-age=3600';
+};
 
 /**
  * 공개 URL을 GitHub Pages 프로젝트 URL로 변환합니다.
@@ -131,6 +153,7 @@ export default {
         }
         responseHeaders.set('x-content-type-options', 'nosniff');
         responseHeaders.set('referrer-policy', 'strict-origin-when-cross-origin');
+        responseHeaders.set('cache-control', resolvePublicCacheControl(publicUrl));
 
         return new Response(upstreamResponse.body, {
             status: upstreamResponse.status,

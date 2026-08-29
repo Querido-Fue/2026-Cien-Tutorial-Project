@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import { TutorialCutsceneView } from '../project/engine/script/scene/tutorial/view/_tutorial_cutscene_view.js';
+import { TutorialChangelogView } from '../project/engine/script/scene/tutorial/view/_tutorial_changelog_view.js';
 import { TutorialGalleryView } from '../project/engine/script/scene/tutorial/view/_tutorial_gallery_view.js';
 import { TutorialLoadingView } from '../project/engine/script/scene/tutorial/view/_tutorial_loading_view.js';
 import { TutorialMenuView } from '../project/engine/script/scene/tutorial/view/_tutorial_menu_view.js';
@@ -84,6 +85,12 @@ const GALLERY_ENTRIES = Object.freeze(Array.from({ length: 6 }, (_, index) => Ob
     replayCutsceneId: null
 })));
 
+const CHANGELOG_ENTRIES = Object.freeze(Array.from({ length: 10 }, (_, index) => Object.freeze({
+    version: `0830_0${String(index).padStart(3, '0')}`,
+    commit: String(index).padStart(7, '0'),
+    summary: `게임 화면과 전투 시스템 개선 ${index + 1}`
+})));
+
 /**
  * 공통 표시값을 포함한 뷰 모델을 만듭니다.
  * @param {object} viewport - 검사할 뷰포트입니다.
@@ -102,6 +109,7 @@ function createViewModel(viewport, values = {}) {
 test('비전투 화면의 핵심 콘텐츠와 버튼은 세 기준 화면의 UI 영역 안에 있다', () => {
     const loadingView = new TutorialLoadingView(NOOP_RENDER_PORT);
     const menuView = new TutorialMenuView(NOOP_RENDER_PORT);
+    const changelogView = new TutorialChangelogView(NOOP_RENDER_PORT);
     const starterView = new TutorialStarterView(NOOP_RENDER_PORT);
     const pauseView = new TutorialPauseView(NOOP_RENDER_PORT);
     const galleryView = new TutorialGalleryView(NOOP_RENDER_PORT);
@@ -114,7 +122,13 @@ test('비전투 화면의 핵심 콘텐츠와 버튼은 세 기준 화면의 UI 
             [menuView, createViewModel(viewport, {
                 title: 'N번째 플레이어',
                 subtitle: '프로토타입',
-                playCount: 1
+                playCount: 1,
+                releaseVersion: '0830_0500'
+            })],
+            [changelogView, createViewModel(viewport, {
+                version: '0830_0500',
+                entries: CHANGELOG_ENTRIES,
+                page: 0
             })],
             [starterView, createViewModel(viewport, {
                 choices: CHOICES,
@@ -193,25 +207,27 @@ test('메인 메뉴는 타이틀과 버튼 외 안내 문구·카메라 오버�
     view.draw(createViewModel(VIEWPORTS[0], {
         title: 'N번째 플레이어',
         subtitle: '프로토타입',
-        playCount: 5
+        playCount: 5,
+        releaseVersion: '0830_0500'
     }));
 
     assert.deepEqual(requestedAssetKeys, ['mainTitle']);
-    assert.deepEqual(
-        renderCommands.filter(({ command }) => command.shape === 'text'),
-        []
-    );
+    assert.deepEqual(renderCommands
+        .filter(({ command }) => command.shape === 'text')
+        .map(({ command }) => command.text), ['ver 0830_0500']);
     const buttons = view.getButtonSpecs(createViewModel(VIEWPORTS[0], {
         canContinue: false
     }));
     assert.deepEqual(buttons.map((button) => button.key), [
         'menu-continue',
         'menu-start',
-        'menu-gallery'
+        'menu-gallery',
+        'menu-changelog'
     ]);
     assert.equal(buttons[0].enabled, false);
     assert.equal(buttons.every((button) => button.fitHitToBackground === true), true);
     assert.equal(buttons.every((button) => button.drawSolidBackground === false), true);
+    assert.equal(buttons[3].fontScale, 0.72);
 
     const layout = view.getLayout(createViewModel(VIEWPORTS[0]));
     const logoCenterX = layout.logo.x + (layout.logo.w * 0.5);
@@ -226,6 +242,34 @@ test('메인 메뉴는 타이틀과 버튼 외 안내 문구·카메라 오버�
             - TUTORIAL_UI_LAYOUT_TOKENS.MAIN.BUTTON_SCALE
         ) <= 0.01);
     }
+});
+
+test('체인지로그는 Git 기반 한글 기록을 책 양쪽 페이지에 나누어 표시한다', () => {
+    const renderCommands = [];
+    const view = new TutorialChangelogView({
+        ...NOOP_RENDER_PORT,
+        render(layer, command) {
+            renderCommands.push({ layer, command });
+        }
+    });
+    const viewModel = createViewModel(VIEWPORTS[0], {
+        version: '0830_0500',
+        entries: CHANGELOG_ENTRIES,
+        page: 0
+    });
+
+    assert.equal(view.getPageCount(viewModel), 2);
+    view.draw(viewModel);
+    const texts = renderCommands
+        .filter(({ command }) => command.shape === 'text')
+        .map(({ command }) => command.text);
+    assert.ok(texts.includes('변경 내역'));
+    assert.ok(texts.includes('현재 ver 0830_0500'));
+    assert.ok(texts.some((text) => text.includes('게임 화면과 전투 시스템 개선')));
+    assert.deepEqual(
+        view.getButtonSpecs(viewModel).map((button) => button.key),
+        ['changelog-prev', 'changelog-next', 'changelog-back']
+    );
 });
 
 test('스타터 카드와 Pause 메뉴는 보이는 영역 자체를 클릭 계약으로 사용한다', () => {
@@ -425,6 +469,7 @@ test('비전투 뷰는 장면·모델·저장·명령 큐를 직접 import하지
     const names = [
         '_tutorial_loading_view.js',
         '_tutorial_menu_view.js',
+        '_tutorial_changelog_view.js',
         '_tutorial_pause_view.js',
         '_tutorial_starter_view.js',
         '_tutorial_gallery_view.js',

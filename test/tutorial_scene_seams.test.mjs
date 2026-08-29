@@ -40,6 +40,7 @@ const EXPECTED_MODES = Object.freeze({
     PAUSE: 'pause',
     RESULT: 'result',
     GALLERY: 'gallery',
+    CHANGELOG: 'changelog',
     RECORD: 'record'
 });
 
@@ -47,6 +48,8 @@ const EXPECTED_COMMANDS = Object.freeze({
     META_READY: 'tutorial/meta-ready',
     START: 'tutorial/start',
     OPEN_GALLERY: 'tutorial/open-gallery',
+    OPEN_CHANGELOG: 'tutorial/open-changelog',
+    CHANGELOG_SHIFT: 'tutorial/changelog-shift',
     RETURN_MENU: 'tutorial/return-menu',
     STARTER_SHIFT: 'tutorial/starter-shift',
     CHOOSE_STARTER: 'tutorial/choose-starter',
@@ -184,6 +187,7 @@ test('모드 정책 표는 기존 표시·복귀·재시작·전투 입력 경�
         [TUTORIAL_MODES.PAUSE, 'pause', 'pause', true, true, false],
         [TUTORIAL_MODES.RESULT, 'result', 'result', true, true, false],
         [TUTORIAL_MODES.GALLERY, 'gallery', 'gallery', true, false, false],
+        [TUTORIAL_MODES.CHANGELOG, 'changelog', 'changelog', true, false, false],
         [TUTORIAL_MODES.RECORD, 'gallery', 'gallery', false, false, false]
     ];
 

@@ -113,6 +113,10 @@ export class TutorialButtonHost {
             ? fitTutorialAssetRect(backgroundImage, spec)
             : null;
         const interactiveRect = visualRect || spec;
+        const requestedFontScale = Number(spec.fontScale);
+        const fontScale = Number.isFinite(requestedFontScale)
+            ? Math.max(0.5, Math.min(2, requestedFontScale))
+            : 1;
         const textElement = UIPool.text_element.get();
         textElement.init({
             parent: this.#parent,
@@ -120,7 +124,7 @@ export class TutorialButtonHost {
             text: spec.label,
             font: style.font.family,
             fontWeight: style.font.weight,
-            size: style.font.size,
+            size: style.font.size * fontScale,
             color: enabled
                 ? (spec.textColor || style.colors.text)
                 : style.colors.muted,

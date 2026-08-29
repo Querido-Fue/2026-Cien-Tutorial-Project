@@ -15,7 +15,23 @@ import {
 import { buildWeb } from '../scripts/build-web.mjs';
 import nthplayerWorker, {
     createUpstreamUrl,
+    resolvePublicCacheControl,
 } from '../scripts/cloudflare/nthplayer-worker.js';
+
+const RELEASE_FIXTURE = Object.freeze({
+    schemaVersion: 1,
+    id: '0830_0520-abcdef1',
+    version: '0830_0520',
+    commit: 'abcdef1234567890abcdef1234567890abcdef12',
+    builtAtKst: '2026-08-30T05:20:00+09:00',
+    changelog: Object.freeze([
+        Object.freeze({
+            version: '0830_0500',
+            commit: '2b73ac5',
+            summary: '마우스 휠 카메라 확대·축소를 추가했습니다.'
+        })
+    ])
+});
 
 class TestStorage {
     constructor() {
@@ -62,7 +78,7 @@ test('웹 빌드는 Pages 하위 경로에서 동작하는 정적 번들을 만�
     t.after(async () => rm(temporaryRoot, { recursive: true, force: true }));
     const outputRoot = path.join(temporaryRoot, 'web');
 
-    await buildWeb({ outputRoot });
+    await buildWeb({ outputRoot, releaseManifest: RELEASE_FIXTURE });
 
     const indexHtml = await readFile(path.join(outputRoot, 'index.html'), 'utf-8');
     const styleSheet = await readFile(path.join(outputRoot, 'style.css'), 'utf-8');
@@ -70,15 +86,44 @@ test('웹 빌드는 Pages 하위 경로에서 동작하는 정적 번들을 만�
         path.join(outputRoot, 'script', 'data', 'game', 'tutorial_assets', '_tutorial_map_asset_entries.js'),
         'utf-8',
     );
+    const audioManifest = await readFile(
+        path.join(outputRoot, 'script', 'data', 'sound', '_tutorial_sfx_entries.js'),
+        'utf-8',
+    );
+    const releaseManifest = JSON.parse(await readFile(
+        path.join(outputRoot, 'release.json'),
+        'utf-8',
+    ));
 
     assert.match(indexHtml, /<title>Nth Player<\/title>/);
-    assert.match(indexHtml, /href="\.\/asset\/old\/icon\/logo\.ico"/);
+    assert.match(indexHtml, /href="\.\/asset\/old\/icon\/logo\.ico\?v=0830_0520-abcdef1"/);
+    assert.match(indexHtml, /content="0830_0520-abcdef1"/);
+    assert.match(
+        indexHtml,
+        /src="\.\/releases\/0830_0520-abcdef1\/script\/main\.js"/
+    );
     assert.doesNotMatch(indexHtml, /\.\.\/asset\//);
-    assert.match(styleSheet, /url\('\.\/asset\/font\/LanaPixel\.ttf'\)/);
+    assert.match(styleSheet, /url\('\.\/asset\/font\/LanaPixel\.ttf\?v=0830_0520-abcdef1'\)/);
     assert.doesNotMatch(assetManifest, /\.\.\/asset\//);
-    assert.match(assetManifest, /runtimePath: '\.\/asset\/tutorial\/maps\/first-floor-background\.png'/);
+    assert.match(
+        assetManifest,
+        /runtimePath: '\.\/asset\/tutorial\/maps\/first-floor-background\.png\?v=0830_0520-abcdef1'/
+    );
+    assert.match(
+        audioManifest,
+        /runtimePath: `\.\/asset\/tutorial\/audio\/sfx\/\$\{runtimeName\}\.mp3`/
+    );
+    assert.doesNotMatch(audioManifest, /\.mp3`,\?v=/);
+    assert.deepEqual(releaseManifest, RELEASE_FIXTURE);
 
     await stat(path.join(outputRoot, '.nojekyll'));
+    await stat(path.join(
+        outputRoot,
+        'releases',
+        RELEASE_FIXTURE.id,
+        'script',
+        'main.js'
+    ));
     await stat(path.join(outputRoot, 'asset', 'font', 'LanaPixel.ttf'));
     await stat(path.join(outputRoot, 'asset', 'tutorial', 'maps', 'first-floor-background.png'));
 });
@@ -88,6 +133,25 @@ test('Cloudflare 경로 프록시는 공개 경로와 쿼리를 Pages 업스트�
     assert.equal(
         upstreamUrl.href,
         'https://querido-fue.github.io/2026-Cien-Tutorial-Project/asset/ui.png?v=7',
+    );
+});
+
+test('Cloudflare 경로 프록시는 릴리스 확인과 버전 자산의 캐시 수명을 분리한다', () => {
+    assert.equal(
+        resolvePublicCacheControl(new URL('https://jukchang.com/game/nthplayer/release.json')),
+        'no-store, max-age=0'
+    );
+    assert.equal(
+        resolvePublicCacheControl(new URL(
+            'https://jukchang.com/game/nthplayer/releases/0830_0520-abcdef1/script/main.js'
+        )),
+        'public, max-age=31536000, immutable'
+    );
+    assert.equal(
+        resolvePublicCacheControl(new URL(
+            'https://jukchang.com/game/nthplayer/script/main.js'
+        )),
+        'no-cache, max-age=0, must-revalidate'
     );
 });
 

@@ -5,6 +5,7 @@ import { TimeHandler } from 'engine/time_handler.js';
 import { MathUtil } from 'util/math_util.js';
 import { ColorUtil } from 'util/color_util.js';
 import { RuntimeTool } from 'util/runtime_tool.js';
+import { WebReleaseManager } from 'engine/release/_web_release_manager.js';
 
 let systemHandler;
 let tutorialGame;
@@ -12,14 +13,23 @@ let tutorialGame;
 /**
  * 로라 전술 튜토리얼 프로토타입의 엔진 런타임을 초기화합니다.
  */
-window.onload = async () => {
+const initializeTutorialRuntime = async () => {
     try {
+        const releaseState = await new WebReleaseManager({
+            windowRef: window,
+            documentRef: document
+        }).ensureLatest();
+        if (releaseState.reloadScheduled) {
+            return;
+        }
         new TimeHandler();
         new MathUtil();
         new ColorUtil();
         new RuntimeTool();
 
-        const createTutorialScene = (sceneSystem) => new TutorialScene(sceneSystem);
+        const createTutorialScene = (sceneSystem) => new TutorialScene(sceneSystem, {
+            releaseInfo: releaseState.releaseInfo
+        });
         systemHandler = new SystemHandler({
             sceneSystem: {
                 initialSceneState: 'active',
@@ -37,6 +47,12 @@ window.onload = async () => {
         console.warn('로라 전술 튜토리얼 초기화 중 오류가 발생했습니다.\n', error);
     }
 };
+
+if (document.readyState === 'loading') {
+    window.addEventListener('load', initializeTutorialRuntime, { once: true });
+} else {
+    void initializeTutorialRuntime();
+}
 
 /**
  * 창 크기 변경을 현재 전술 씬과 디스플레이 시스템에 반영합니다.

@@ -2,6 +2,8 @@ import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promi
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { WebReleaseManifestBuilder } from './web/_web_release_manifest_builder.mjs';
+
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(scriptDirectory, '..');
 const engineRoot = path.join(repositoryRoot, 'project', 'engine');
@@ -70,7 +72,7 @@ const collectFiles = async (directoryPath) => {
     return files;
 };
 
-const rewriteAssetPaths = async (outputRoot) => {
+const rewriteAssetPaths = async (outputRoot, releaseId) => {
     const files = await collectFiles(outputRoot);
     for (const filePath of files) {
         if (!textExtensions.has(path.extname(filePath).toLowerCase())) {
@@ -78,11 +80,63 @@ const rewriteAssetPaths = async (outputRoot) => {
         }
 
         const originalText = await readFile(filePath, 'utf-8');
-        const rewrittenText = originalText.replaceAll('../asset/', './asset/');
+        const rewrittenText = originalText
+            .replaceAll('../asset/', './asset/')
+            .replace(
+                /(['"`])(\.\/asset\/[^'"`\s<>]+)\1/g,
+                (literal, quote, assetPath) => (
+                    assetPath.includes('?') || assetPath.includes('${')
+                        ? literal
+                        : `${quote}${assetPath}?v=${releaseId}${quote}`
+                )
+            );
         if (rewrittenText !== originalText) {
             await writeFile(filePath, rewrittenText);
         }
     }
+};
+
+/**
+ * 정적 HTML이 현재 배포 ID와 배포별 모듈 경로를 사용하도록 변환합니다.
+ * @param {string} outputRoot - 웹 출력 루트입니다.
+ * @param {object} releaseManifest - 생성된 릴리스 정보입니다.
+ */
+const rewriteWebIndex = async (outputRoot, releaseManifest) => {
+    const indexPath = path.join(outputRoot, 'index.html');
+    const originalText = await readFile(indexPath, 'utf8');
+    const scriptBase = `./releases/${releaseManifest.id}/script/`;
+    const rewrittenText = originalText
+        .replace(
+            '<meta name="nthplayer-release-id" content="development">',
+            `<meta name="nthplayer-release-id" content="${releaseManifest.id}">`
+        )
+        .replace(
+            '<meta name="nthplayer-release-version" content="dev">',
+            `<meta name="nthplayer-release-version" content="${releaseManifest.version}">`
+        )
+        .replaceAll('./script/', scriptBase)
+        .replace(
+            'href="./style.css"',
+            `href="./style.css?v=${releaseManifest.id}"`
+        );
+    if (rewrittenText === originalText
+        || !rewrittenText.includes(scriptBase)
+        || !rewrittenText.includes(`content="${releaseManifest.id}"`)) {
+        throw new Error('웹 진입점에 릴리스 버전과 모듈 경로를 주입하지 못했습니다.');
+    }
+    await writeFile(indexPath, rewrittenText);
+};
+
+/** @param {object} manifest @returns {object} 안전한 웹 경로에 사용할 릴리스 정보입니다. */
+const validateReleaseManifest = (manifest) => {
+    if (!manifest
+        || manifest.schemaVersion !== 1
+        || !/^\d{4}_\d{4}-(?:[0-9a-f]{7,12}|local)$/.test(manifest.id || '')
+        || !/^\d{4}_\d{4}$/.test(manifest.version || '')
+        || !Array.isArray(manifest.changelog)) {
+        throw new Error('유효하지 않은 웹 릴리스 매니페스트입니다.');
+    }
+    return manifest;
 };
 
 const copyRuntimeAssets = async (outputRoot) => {
@@ -101,10 +155,28 @@ const copyRuntimeAssets = async (outputRoot) => {
  */
 export const buildWeb = async (options = {}) => {
     const outputRoot = path.resolve(options.outputRoot || defaultOutputRoot);
+    const releaseManifest = validateReleaseManifest(
+        options.releaseManifest || await new WebReleaseManifestBuilder({
+            repositoryRoot
+        }).create()
+    );
     await cleanOutputRoot(outputRoot);
     await cp(engineRoot, outputRoot, { recursive: true });
     await copyRuntimeAssets(outputRoot);
-    await rewriteAssetPaths(outputRoot);
+    const versionedScriptRoot = path.join(
+        outputRoot,
+        'releases',
+        releaseManifest.id,
+        'script'
+    );
+    await mkdir(path.dirname(versionedScriptRoot), { recursive: true });
+    await cp(path.join(outputRoot, 'script'), versionedScriptRoot, { recursive: true });
+    await rewriteAssetPaths(outputRoot, releaseManifest.id);
+    await rewriteWebIndex(outputRoot, releaseManifest);
+    await writeFile(
+        path.join(outputRoot, 'release.json'),
+        JSON.stringify(releaseManifest, null, 2) + '\n'
+    );
     await writeFile(path.join(outputRoot, '.nojekyll'), '');
     return outputRoot;
 };

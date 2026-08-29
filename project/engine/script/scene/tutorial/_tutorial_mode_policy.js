@@ -54,6 +54,13 @@ export const TUTORIAL_MODE_POLICIES = Object.freeze({
         canRestartRun: false,
         acceptsBattleInput: false
     }),
+    [TUTORIAL_MODES.CHANGELOG]: Object.freeze({
+        view: 'changelog',
+        buttons: 'changelog',
+        canReturnMenu: true,
+        canRestartRun: false,
+        acceptsBattleInput: false
+    }),
     [TUTORIAL_MODES.RECORD]: Object.freeze({
         view: 'gallery',
         buttons: 'gallery',

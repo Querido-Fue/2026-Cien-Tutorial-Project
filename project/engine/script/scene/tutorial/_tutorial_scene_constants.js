@@ -10,6 +10,7 @@ export const TUTORIAL_MODES = Object.freeze({
     PAUSE: 'pause',
     RESULT: 'result',
     GALLERY: 'gallery',
+    CHANGELOG: 'changelog',
     RECORD: 'record'
 });
 
@@ -21,6 +22,8 @@ export const TUTORIAL_COMMANDS = Object.freeze({
     META_READY: 'tutorial/meta-ready',
     START: 'tutorial/start',
     OPEN_GALLERY: 'tutorial/open-gallery',
+    OPEN_CHANGELOG: 'tutorial/open-changelog',
+    CHANGELOG_SHIFT: 'tutorial/changelog-shift',
     RETURN_MENU: 'tutorial/return-menu',
     STARTER_SHIFT: 'tutorial/starter-shift',
     CHOOSE_STARTER: 'tutorial/choose-starter',

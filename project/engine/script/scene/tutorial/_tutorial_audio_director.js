@@ -8,6 +8,7 @@ import { TUTORIAL_COMMANDS as COMMANDS } from './_tutorial_scene_constants.js';
 const CLICK_COMMANDS = new Set([
     COMMANDS.START,
     COMMANDS.OPEN_GALLERY,
+    COMMANDS.OPEN_CHANGELOG,
     COMMANDS.STARTER_SHIFT,
     COMMANDS.PAUSE,
     COMMANDS.RESUME,
@@ -91,6 +92,7 @@ export class TutorialAudioDirector {
         }
         let cueId = '';
         if (commandType === COMMANDS.GALLERY_SHIFT
+            || commandType === COMMANDS.CHANGELOG_SHIFT
             || commandType === COMMANDS.GALLERY_SECTION_SHIFT
             || commandType === COMMANDS.CUTSCENE_NEXT) {
             cueId = TUTORIAL_UI_AUDIO_IDS.BOOK_TURN;
