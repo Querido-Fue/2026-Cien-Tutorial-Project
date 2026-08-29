@@ -13,6 +13,7 @@ export class TutorialButtonHost {
     #renderPort;
     #buttons;
     #signature;
+    #presentation;
 
     /**
      * @param {object} options - 버튼 호스트 의존성입니다.
@@ -36,6 +37,7 @@ export class TutorialButtonHost {
         this.#renderPort = renderPort;
         this.#buttons = {};
         this.#signature = null;
+        this.#presentation = Object.freeze({ alpha: 1, interactive: true });
     }
 
     /**
@@ -69,9 +71,27 @@ export class TutorialButtonHost {
         }
     }
 
+    /**
+     * 현재 버튼 묶음의 전환 투명도와 입력 허용 여부를 갱신합니다.
+     * @param {{alpha?:number,interactive?:boolean}} presentation - 표시 상태입니다.
+     */
+    setPresentation(presentation = {}) {
+        const requestedAlpha = Number(presentation.alpha);
+        this.#presentation = Object.freeze({
+            alpha: Number.isFinite(requestedAlpha)
+                ? Math.max(0, Math.min(1, requestedAlpha))
+                : 1,
+            interactive: presentation.interactive !== false
+        });
+        for (const button of Object.values(this.#buttons)) {
+            this.#applyPresentation(button);
+        }
+    }
+
     /** 모든 버튼의 포인터 상호작용을 갱신합니다. */
     update() {
         for (const button of Object.values(this.#buttons)) {
+            this.#applyPresentation(button);
             button.item.update();
         }
     }
@@ -79,6 +99,7 @@ export class TutorialButtonHost {
     /** 모든 버튼을 UI 레이어에 그립니다. */
     draw() {
         for (const button of Object.values(this.#buttons)) {
+            this.#applyPresentation(button);
             button.item.draw();
         }
     }
@@ -174,7 +195,22 @@ export class TutorialButtonHost {
         button.clickAble = inspectable;
         button.hoverScaleMultiplier = style.hoverScale;
         button.pressScaleMultiplier = style.pressScale;
-        this.#buttons[spec.key] = { item: button, text: textElement };
+        this.#buttons[spec.key] = {
+            item: button,
+            text: textElement,
+            baseAlpha: Number.isFinite(Number(spec.alpha)) ? Number(spec.alpha) : 1,
+            inspectable
+        };
+        this.#applyPresentation(this.#buttons[spec.key]);
+    }
+
+    /** @param {object} button - 호스트가 소유한 버튼 레코드입니다. @private */
+    #applyPresentation(button) {
+        if (!button?.item) {
+            return;
+        }
+        button.item.alpha = button.baseAlpha * this.#presentation.alpha;
+        button.item.clickAble = button.inspectable && this.#presentation.interactive;
     }
 
     /**

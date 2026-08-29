@@ -17,10 +17,10 @@ export const TUTORIAL_UI_LAYOUT_TOKENS = Object.freeze({
         BUTTON_SCALE: 1.2
     }),
     STARTER: Object.freeze({
-        MAP: rect(0.027, 0.025, 0.946, 0.95),
-        TITLE: rect(0.435, 0.19, 0.13, 0.09),
-        LEFT_CARD: rect(0.3433, 0.3967, 0.145, 0.3433),
-        RIGHT_CARD: rect(0.5117, 0.3967, 0.145, 0.3433),
+        LEFT_CARD: rect(0.3433, 0.4667, 0.145, 0.3433),
+        RIGHT_CARD: rect(0.5117, 0.4667, 0.145, 0.3433),
+        ENTRY_OFFSET_Y: 0.045,
+        ENTRY_MIN_SCALE: 0.84,
         CARD_TITLE_CENTER_Y: 0.11,
         CARD_ICON_BACKGROUND: rect(0.217, 0.184, 0.566, 0.451),
         CARD_DESCRIPTION: rect(0.11, 0.685, 0.78, 0.255),

@@ -5,6 +5,10 @@
  */
 export const TUTORIAL_CHANGELOG_CATALOG = Object.freeze([
     Object.freeze({
+        subject: 'feat: add loading progress and seamless starter transition',
+        summary: '실제 로딩 진행률을 표시하고 타이틀에서 무기 선택과 인게임으로 자연스럽게 이어지도록 개선했습니다.'
+    }),
+    Object.freeze({
         subject: 'feat: polish changelog dates and lora portrait',
         summary: '체인지로그 날짜를 읽기 쉽게 바꾸고 로라 HUD 얼굴을 정면 도트 초상화로 교체했습니다.'
     }),

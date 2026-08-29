@@ -73,10 +73,15 @@ export class TutorialMenuView {
     draw(viewModel) {
         const layout = this.getLayout(viewModel);
         const { colors, fonts } = viewModel;
+        const transition = viewModel.titleTransition || {};
+        const titleAlpha = transition.phase === 'starter-morph'
+            ? 1 - Math.max(0, Math.min(1, Number(transition.progress) || 0))
+            : 1;
         const titleDrawn = drawTutorialPixelAsset(this.#renderPort, {
             layer: 'ui',
             image: this.#assetPort.getUiAsset?.('mainTitle'),
-            rect: layout.logo
+            rect: layout.logo,
+            alpha: titleAlpha
         });
         if (!titleDrawn) {
             drawTutorialText(this.#renderPort, {
@@ -85,7 +90,8 @@ export class TutorialMenuView {
                 y: layout.logo.y + (layout.logo.h * 0.5),
                 font: fonts.TITLE,
                 fill: colors.UI.Text,
-                align: 'center'
+                align: 'center',
+                alpha: titleAlpha
             });
         }
         drawTutorialText(this.#renderPort, {
@@ -94,7 +100,8 @@ export class TutorialMenuView {
             y: layout.versionLabel.y + (layout.versionLabel.h * 0.5),
             font: fonts.SMALL,
             fill: colors.UI.Muted,
-            align: 'left'
+            align: 'left',
+            alpha: titleAlpha
         });
     }
 

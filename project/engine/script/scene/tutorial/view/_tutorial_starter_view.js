@@ -64,8 +64,6 @@ export class TutorialStarterView {
         const { viewport, choices } = viewModel;
         const space = createTutorialDesignSpace(viewport);
         const tokens = TUTORIAL_UI_LAYOUT_TOKENS.STARTER;
-        const map = projectTutorialDesignRect(space, tokens.MAP);
-        const title = projectTutorialDesignRect(space, tokens.TITLE);
         const cardTokens = [tokens.LEFT_CARD, tokens.RIGHT_CARD];
         const cards = choices.map((choice, index) => ({
             id: choice.id,
@@ -73,10 +71,8 @@ export class TutorialStarterView {
         }));
         return {
             space,
-            map,
-            title,
             cards,
-            contentRects: [map, title, ...cards],
+            contentRects: [...cards],
             buttons: [...cards]
         };
     }
@@ -88,47 +84,9 @@ export class TutorialStarterView {
     draw(viewModel) {
         const layout = this.getLayout(viewModel);
         const { colors, fonts } = viewModel;
-        const artwork = this.#assetPort.getMapArtwork?.('first-floor');
-        const mapRect = fitTutorialAssetRect(artwork?.layers?.[0], layout.map)
-            || layout.map;
-        for (const image of artwork?.layers || []) {
-            this.#renderPort.renderGL('background', {
-                image,
-                x: mapRect.x,
-                y: mapRect.y,
-                w: mapRect.w,
-                h: mapRect.h,
-                smoothing: false
-            });
-        }
-        drawTutorialPixelAsset(this.#renderPort, {
-            layer: 'ui',
-            image: this.#assetPort.getUiAsset?.('tutorialPopupFull'),
-            rect: layout.title,
-            alpha: 1,
-            mode: 'exact'
-        });
-        drawTutorialText(this.#renderPort, {
-            text: '아이템 선택하기',
-            x: layout.title.x + (layout.title.w * 0.5),
-            y: layout.title.y + (layout.title.h * 0.5),
-            font: fonts.SMALL,
-            fill: colors.UI.Text,
-            align: 'center'
-        });
         viewModel.choices.forEach((choice, index) => {
-            const card = layout.cards[index];
-            const selected = index === viewModel.selectedIndex;
-            const selectedScale = selected
-                ? viewModel.selectionMinScale
-                    + ((1 - viewModel.selectionMinScale) * viewModel.selectionProgress)
-                : 1;
-            const scaledRect = {
-                x: card.x + ((card.w - (card.w * selectedScale)) * 0.5),
-                y: card.y + ((card.h - (card.h * selectedScale)) * 0.5),
-                w: card.w * selectedScale,
-                h: card.h * selectedScale
-            };
+            const presentation = this.#resolveCardPresentation(viewModel, layout, index);
+            const { alpha, rect: scaledRect } = presentation;
             const cardImage = this.#assetPort.getUiAsset?.('starterCard');
             const frameRect = fitTutorialAssetRect(cardImage, scaledRect)
                 || scaledRect;
@@ -143,26 +101,24 @@ export class TutorialStarterView {
                 w: iconBackground.w,
                 h: iconBackground.h,
                 fill: colors.UI.CardIconBackground,
-                alpha: 1
+                alpha
             });
             drawTutorialPixelAsset(this.#renderPort, {
                 layer: 'ui',
                 image: cardImage,
                 rect: scaledRect,
-                alpha: 1
+                alpha
             });
-            const iconSize = Math.min(frameRect.w * 0.42, frameRect.h * 0.24);
-            drawTutorialPixelAsset(this.#renderPort, {
-                layer: 'ui',
-                image: this.#assetPort.getItemIcon?.(choice.id),
-                rect: {
-                    x: iconBackground.x + ((iconBackground.w - iconSize) * 0.5),
-                    y: iconBackground.y + ((iconBackground.h - iconSize) * 0.5),
-                    w: iconSize,
-                    h: iconSize
-                },
-                alpha: 1
-            });
+            if (!(viewModel.titleTransition?.phase === 'starter-morph'
+                && viewModel.titleTransition?.selectedItemId === choice.id)) {
+                drawTutorialPixelAsset(this.#renderPort, {
+                    layer: 'ui',
+                    image: this.#assetPort.getItemIcon?.(choice.id),
+                    rect: this.#resolveChoiceIconRect(frameRect, choice.id),
+                    mode: 'exact',
+                    alpha
+                });
+            }
             drawTutorialText(this.#renderPort, {
                 text: choice.label,
                 x: frameRect.x + (frameRect.w * 0.5),
@@ -172,7 +128,8 @@ export class TutorialStarterView {
                 ),
                 font: fonts.BODY,
                 fill: colors.UI.PanelStrong,
-                align: 'center'
+                align: 'center',
+                alpha
             });
             const descriptionRect = projectStarterCardRegion(
                 frameRect,
@@ -204,10 +161,30 @@ export class TutorialStarterView {
                     y: firstLineY + (lineIndex * lineHeight),
                     font: descriptionFont,
                     fill: colors.UI.PanelStrong,
-                    align: 'center'
+                    align: 'center',
+                    alpha
                 });
             });
         });
+    }
+
+    /**
+     * 지정 스타터 카드 안에서 실제로 그려지는 아이콘 사각형을 반환합니다.
+     * @param {object} viewModel - 스타터 뷰 모델입니다.
+     * @param {string} itemId - 스타터 아이템 ID입니다.
+     * @returns {object|null} 아이콘 렌더 사각형입니다.
+     */
+    getChoiceIconRect(viewModel, itemId) {
+        const index = viewModel?.choices?.findIndex((choice) => choice.id === itemId) ?? -1;
+        if (index < 0) {
+            return null;
+        }
+        const layout = this.getLayout(viewModel);
+        const presentation = this.#resolveCardPresentation(viewModel, layout, index);
+        const cardImage = this.#assetPort.getUiAsset?.('starterCard');
+        const frameRect = fitTutorialAssetRect(cardImage, presentation.rect)
+            || presentation.rect;
+        return this.#resolveChoiceIconRect(frameRect, itemId);
     }
 
     /**
@@ -230,5 +207,55 @@ export class TutorialStarterView {
             }
         }));
         return choiceSpecs;
+    }
+
+    /** @param {object} viewModel @param {object} layout @param {number} index @returns {object} @private */
+    #resolveCardPresentation(viewModel, layout, index) {
+        const transition = viewModel.titleTransition || {};
+        const progress = Math.max(0, Math.min(1, Number(transition.progress) || 0));
+        const entryProgress = transition.phase === 'starter-enter' ? progress : 1;
+        const morphProgress = transition.phase === 'starter-morph' ? progress : 0;
+        const selected = index === viewModel.selectedIndex;
+        const selectionProgress = Math.max(
+            0,
+            Math.min(1, Number(viewModel.selectionProgress) || 0)
+        );
+        const selectionScale = selected
+            ? viewModel.selectionMinScale
+                + ((1 - viewModel.selectionMinScale) * selectionProgress)
+            : 1;
+        const entryScale = TUTORIAL_UI_LAYOUT_TOKENS.STARTER.ENTRY_MIN_SCALE
+            + ((1 - TUTORIAL_UI_LAYOUT_TOKENS.STARTER.ENTRY_MIN_SCALE) * entryProgress);
+        const scale = selectionScale * entryScale;
+        const card = layout.cards[index];
+        const offsetY = layout.space.h
+            * TUTORIAL_UI_LAYOUT_TOKENS.STARTER.ENTRY_OFFSET_Y
+            * (1 - entryProgress);
+        return Object.freeze({
+            alpha: entryProgress * (1 - morphProgress),
+            rect: Object.freeze({
+                x: card.x + ((card.w - (card.w * scale)) * 0.5),
+                y: card.y + ((card.h - (card.h * scale)) * 0.5) + offsetY,
+                w: card.w * scale,
+                h: card.h * scale
+            })
+        });
+    }
+
+    /** @param {object} frameRect @param {string} itemId @returns {object} @private */
+    #resolveChoiceIconRect(frameRect, itemId) {
+        const iconBackground = projectStarterCardRegion(
+            frameRect,
+            TUTORIAL_UI_LAYOUT_TOKENS.STARTER.CARD_ICON_BACKGROUND
+        );
+        const iconSize = Math.min(frameRect.w * 0.42, frameRect.h * 0.24);
+        const container = {
+            x: iconBackground.x + ((iconBackground.w - iconSize) * 0.5),
+            y: iconBackground.y + ((iconBackground.h - iconSize) * 0.5),
+            w: iconSize,
+            h: iconSize
+        };
+        return fitTutorialAssetRect(this.#assetPort.getItemIcon?.(itemId), container)
+            || container;
     }
 }

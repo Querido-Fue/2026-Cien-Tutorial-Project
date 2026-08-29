@@ -5,6 +5,7 @@
 - 작업을 시작하면 먼저 `guide/navigation.md`를 읽고, 작업 유형에 맞는 세부 가이드를 선택합니다.
 - 프로젝트 구조를 추측하지 말고 현재 `project/engine` 트리를 기준으로 확인합니다.
 - 수정 대상 파일은 변경 전에 항상 전체 내용을 읽습니다. 큰 파일은 핵심 메서드와 export가 하단에 있을 수 있습니다.
+- 복잡한 작업도 별도의 사전 계획 공유나 승인 대기로 멈추지 않습니다. 안전하고 되돌릴 수 있는 범위에서 동작하는 초안을 먼저 구현·검증한 뒤 결과와 판단을 보고하며, 파괴적 변경·새 권한·결과를 크게 바꾸는 불명확성만 사용자 확인을 요청합니다.
 
 ## 프로젝트 기준선
 
@@ -31,6 +32,7 @@
 - `TutorialBattleOutcomeCoordinator`는 모델 결과를 presenter→sprite cue→feedback/timeline→업적/메타→기록→컷씬 트리거 순서로 배포하고 이전 표현 snapshot을 소유합니다. 화면 전환·층 교체는 장면에 남기며, 조정자는 장면 전체가 아닌 명시적 구독자와 투영 포트만 받습니다.
 - `TUTORIAL_CONTENT_DATA`가 확정 업적명·설명·해금 조건, 일기 순서와 안정 기록 ID, 엔딩 표시명과 남은 미확정 상태를 소유합니다. `TutorialAchievementEvaluator`는 안정된 모델 사건으로 확정 조건을 판정하고 배너는 알림 수명만, `TutorialGalleryController`는 섹션·항목 선택과 메타 기반 열람 상태만 맡습니다. `TutorialRecordPopupQueue`는 한 경로에서 여러 기록을 획득한 경우의 팝업 순서만 소유합니다. 곡괭이 업적은 획득이 아닌 실제 `wall-traversed`, 최초 사망 업적은 `battle-finished.defeatedBy === 'lora'`, 2페이즈 업적은 `floor-transition.floorIndex === 1`을 사용합니다.
 - 로딩·메뉴·스타터·책 기반 갤러리·책 기반 체인지로그·책 기반 결과·컷씬 화면은 `scene/tutorial/view/`의 파일당 한 클래스가 그립니다. 메인 메뉴 왼쪽 아래는 현재 KST 버전을 표시하고 작은 체인지로그 버튼은 `release.json`에서 검증한 실제 Git 기반 한글 항목을 엽니다. 뷰는 직렬화 가능한 읽기 전용 view model과 작은 render/asset port만 받고 모델·저장·명령 큐·씬을 import하지 않습니다. 결과는 내부 엔딩 ID와 표시명을 분리하며 점수 UI를 만들지 않습니다.
+- `TutorialTitleFlowController`는 메인 버튼 퇴장→같은 타이틀 무대의 스타터 카드 진입→선택 아이콘의 첫 인벤토리 슬롯 모핑→전투 공개 순서를 `easeOutExpo` 타임라인과 세대 취소로 소유합니다. `TutorialStarterView`는 카드만 그리고 `TutorialTitleTransitionView`는 모핑·공개 오버레이만 그리며, 오프닝 컷씬은 전투 공개가 끝난 뒤 엽니다.
 - 전투 화면도 `TutorialBattleWorldView`, `TutorialBattleActorView`, `TutorialBattleHudView`, `TutorialBattleFeedbackView`, `TutorialAchievementView`, `TutorialBattleTutorialView`의 파일당 한 클래스로 나뉩니다. 월드 뷰는 오브젝트 정렬을, 배우 뷰는 플레이어·로라·슬라임의 스프라이트와 도형 폴백을 소유합니다. `TutorialScene`이 한 프레임의 `BattleViewModel`을 조립하고, 이미지 객체는 `TutorialAssetPort`로 별도 주입합니다. 모델 미리보기의 표시 변환은 `TutorialCombatReadabilityPresenter`, 공통 조사 포커스와 안내 표시 상태는 각각 `TutorialBattleFocusController`, `TutorialGuidanceController`가 맡습니다.
 - `TutorialBattleLayout`이 보드·HUD 기하와 타일 투영·히트테스트를 함께 소유합니다. 맵 아트가 있으면 매니페스트의 원본 970×580 격자 네 꼭짓점으로 9×8 축을 만들고 실제 격자의 좌우 폭을 월드 뷰포트에 맞춥니다. 맵 프로필의 `ambientFire` 심지 좌표도 같은 `mapImageRect`로 화면에 투영하며, `FlameParticleEffectPass`가 작은 scissor 영역별 난류 화염·코어·불씨를 effect 레이어에 합성합니다. `TutorialBattleCameraController`는 가상 게임 커서의 화면 가장자리 침투량 역투영, 휠 클릭 중앙 복귀와 누적 휠 목표 줌을 소유합니다. `TutorialBattleCamera`는 추적점을 0.3초 감쇠로 따라가고, 진행 중 목표를 현재 배율에서 재지정하는 0.4초 `easeOutExpo` 줌을 적용합니다. 최소 줌은 맵 이미지 좌우가 뷰포트에 닿는 동적 배율이고 최대 줌은 기본의 1.2배이며, 렌더와 입력 판정은 같은 카메라 snapshot이 적용된 layout frame을 사용합니다.
 - 정적 `world-postprocess` WebGL surface는 `effect`와 `texteffect` 사이에 위치합니다. `WorldPostProcessPipeline`이 `background`·`object`·`effect` 명령을 레이어 순서대로 하나의 nearest-filtered FBO에 지연 합성하고, 1/4 해상도 Bloom·색보정·디더/그레인·비네팅을 적용합니다. `texteffect`·`ui`·오버레이는 입력에서 제외하며, WebGL 초기화·프레임 오류나 context loss에서는 같은 프레임 명령을 기존 세 surface에 재생합니다. 절차적 화염과 마그네틱 실드는 화면 좌표를 2픽셀 격자에 스냅하고 Bloom만 선형 샘플링합니다.

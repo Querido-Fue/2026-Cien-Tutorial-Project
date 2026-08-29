@@ -474,6 +474,7 @@ test('비전투 뷰는 장면·모델·저장·명령 큐를 직접 import하지
         '_tutorial_changelog_view.js',
         '_tutorial_pause_view.js',
         '_tutorial_starter_view.js',
+        '_tutorial_title_transition_view.js',
         '_tutorial_gallery_view.js',
         '_tutorial_result_view.js',
         '_tutorial_cutscene_view.js'

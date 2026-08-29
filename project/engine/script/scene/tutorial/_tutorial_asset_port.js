@@ -79,4 +79,9 @@ export class TutorialAssetPort {
     getSnapshot() {
         return this.#loader.getSnapshot();
     }
+
+    /** @returns {{completed:number,total:number,pending:number,ratio:number,percent:number}} 에셋 로드 진행도입니다. */
+    getLoadProgress() {
+        return this.#loader.getProgress();
+    }
 }

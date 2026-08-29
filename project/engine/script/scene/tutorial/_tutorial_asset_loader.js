@@ -14,6 +14,13 @@ function toFiniteNumber(value) {
     return Number.isFinite(number) ? number : 0;
 }
 
+/** @param {string} status @returns {boolean} 더 이상 대기하지 않는 로드 상태인지 여부입니다. */
+function isSettledAssetStatus(status) {
+    return status === 'ready'
+        || status === 'failed'
+        || status === 'unavailable';
+}
+
 /**
  * @class TutorialAssetLoader
  * @description 매니페스트 이미지의 로드, 크기 검증, 픽셀 크롭, 폴백과 캐시 수명을 소유합니다.
@@ -151,6 +158,30 @@ export class TutorialAssetLoader {
                 sourceRect: entry.sourceRect
             })]
         )));
+    }
+
+    /**
+     * 등록된 매니페스트 에셋의 실제 처리 진행도를 반환합니다.
+     * 실패와 생성형 폴백도 처리가 끝난 항목이므로 완료 수에 포함합니다.
+     * @returns {{completed:number,total:number,pending:number,ratio:number,percent:number}} 진행도입니다.
+     */
+    getProgress() {
+        const total = this.#manifestEntries.size;
+        let completed = 0;
+        for (const id of this.#manifestEntries.keys()) {
+            if (isSettledAssetStatus(this.#entries.get(id)?.status)) {
+                completed += 1;
+            }
+        }
+        const pending = Math.max(0, total - completed);
+        const ratio = total > 0 ? completed / total : 1;
+        return Object.freeze({
+            completed,
+            total,
+            pending,
+            ratio,
+            percent: Math.round(ratio * 100)
+        });
     }
 
     /** 모든 이미지 콜백과 캐시를 제거합니다. */

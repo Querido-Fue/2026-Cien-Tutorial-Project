@@ -63,8 +63,10 @@ import {
 } from './_tutorial_value_utils.js';
 import { TutorialKeyboardEdgeTracker } from './_tutorial_keyboard_edge_tracker.js';
 import { TutorialKeyboardCommandMapper } from './_tutorial_keyboard_command_mapper.js';
+import { TutorialLoadingCoordinator } from './_tutorial_loading_coordinator.js';
 import { TutorialMetaSession } from './_tutorial_meta_session.js';
 import { TutorialNonbattleViewModelFactory } from './_tutorial_nonbattle_view_model_factory.js';
+import { TutorialTitleFlowController } from './_tutorial_title_flow_controller.js';
 import { TutorialAnimationTimeline } from './_tutorial_animation_timeline.js';
 import { TutorialAchievementBanner } from './_tutorial_achievement_banner.js';
 import { TutorialAssetLoader } from './_tutorial_asset_loader.js';
@@ -99,6 +101,7 @@ import { TutorialMenuView } from './view/_tutorial_menu_view.js';
 import { TutorialPauseView } from './view/_tutorial_pause_view.js';
 import { TutorialResultView } from './view/_tutorial_result_view.js';
 import { TutorialStarterView } from './view/_tutorial_starter_view.js';
+import { TutorialTitleTransitionView } from './view/_tutorial_title_transition_view.js';
 
 const TUTORIAL_GAME_DATA = getData('TUTORIAL_GAME_DATA');
 const TUTORIAL_CONTENT_DATA = getData('TUTORIAL_CONTENT_DATA');
@@ -166,11 +169,6 @@ export class TutorialScene extends BaseScene {
         this.battleFocus = new TutorialBattleFocusController();
         this.battleSelection = new TutorialBattleSelectionController();
         this.guidance = new TutorialGuidanceController();
-        this.starterIndex = Math.max(
-            0,
-            this.data.STARTER_CHOICES.findIndex((choice) => choice.id === 'mascot-costume')
-        );
-        this.starterItemId = this.data.STARTER_CHOICES[this.starterIndex]?.id || 'mascot-costume';
         this.pauseIndex = 0;
         this.destroyed = false;
         this.timelineRevision = 0;
@@ -199,12 +197,16 @@ export class TutorialScene extends BaseScene {
             })
         });
         this.assetLoader = new TutorialAssetLoader({
-            onChange: () => this.buttonHost?.invalidate()
+            onChange: () => { this.buttonHost?.invalidate(); this.loadingCoordinator?.refresh(); }
         });
-        this.assetPort = new TutorialAssetPort(
-            this.assetLoader,
-            TUTORIAL_ASSET_MANIFEST
-        );
+        this.assetPort = new TutorialAssetPort(this.assetLoader, TUTORIAL_ASSET_MANIFEST);
+        this.loadingCoordinator = new TutorialLoadingCoordinator({
+            assetPort: this.assetPort,
+            onReady: (meta) => enqueueSimulationCommand({
+                type: COMMANDS.META_READY,
+                payload: { meta }
+            })
+        });
         this.loadingView = new TutorialLoadingView(tutorialRenderPort);
         this.menuView = new TutorialMenuView(tutorialRenderPort, this.assetPort);
         this.changelogView = new TutorialChangelogView(
@@ -212,6 +214,9 @@ export class TutorialScene extends BaseScene {
             this.assetPort
         );
         this.starterView = new TutorialStarterView(tutorialRenderPort, this.assetPort);
+        this.titleTransitionView = new TutorialTitleTransitionView(
+            tutorialRenderPort, this.assetPort
+        );
         this.pauseView = new TutorialPauseView(tutorialRenderPort, this.assetPort);
         this.galleryView = new TutorialGalleryView(tutorialRenderPort, this.assetPort);
         this.resultView = new TutorialResultView(tutorialRenderPort, this.assetPort);
@@ -311,6 +316,16 @@ export class TutorialScene extends BaseScene {
             config: this.data.ANIMATION,
             onLockChange: () => this.buttonHost.invalidate()
         });
+        this.titleFlow = new TutorialTitleFlowController({
+            animationPort: Object.freeze({ animate, remove }),
+            choices: this.data.STARTER_CHOICES,
+            config: this.data.ANIMATION,
+            initialItemId: 'mascot-costume',
+            onChange: () => this.buttonHost.invalidate(),
+            onSelectionChange: () => this.presentationTimeline.startSelection(
+                'menu-selection'
+            )
+        });
         this.battleOutcomes = new TutorialBattleOutcomeCoordinator({
             presenter: this.battlePresenter,
             spriteCueRouter: this.spriteCueRouter,
@@ -351,7 +366,7 @@ export class TutorialScene extends BaseScene {
             canApply: () => this.mode === MODES.BATTLE && !this.cutscenes.isOpen(),
             canSchedule: () => this.mode === MODES.BATTLE
                 && !this.cutscenes.isOpen()
-                && !this.presentationTimeline.isLocked(),
+                && !this.#isPresentationLocked(),
             enqueueCommand: (command) => enqueueSimulationCommand(command),
             onModelChange: (result) => this.#afterModelChange(result),
             selection: this.battleSelection,
@@ -373,10 +388,7 @@ export class TutorialScene extends BaseScene {
         loadTutorialMeta()
             .then((meta) => {
                 if (!this.destroyed) {
-                    enqueueSimulationCommand({
-                        type: COMMANDS.META_READY,
-                        payload: { meta }
-                    });
+                    this.loadingCoordinator.resolveMeta(meta);
                 }
             })
             .catch((error) => {
@@ -387,10 +399,7 @@ export class TutorialScene extends BaseScene {
                     console.warn('더 최신 버전의 진행도를 보호하기 위해 이번 실행의 메타 저장을 중지합니다.');
                 }
                 if (!this.destroyed) {
-                    enqueueSimulationCommand({
-                        type: COMMANDS.META_READY,
-                        payload: { meta: createDefaultTutorialMeta() }
-                    });
+                    this.loadingCoordinator.resolveMeta(createDefaultTutorialMeta());
                 }
             });
     }
@@ -410,6 +419,7 @@ export class TutorialScene extends BaseScene {
         this.uiActionHandled = false;
 
         this.#ensureButtons();
+        this.buttonHost.setPresentation(this.titleFlow.getButtonPresentation());
         this.buttonHost.update();
         if (this.#openNextRecordPopup()) {
             this.#ensureButtons();
@@ -447,6 +457,7 @@ export class TutorialScene extends BaseScene {
      */
     draw() {
         this.#ensureButtons();
+        this.buttonHost.setPresentation(this.titleFlow.getButtonPresentation());
         this.#drawBackdrop();
         const view = getTutorialModePolicy(this.mode)?.view;
 
@@ -455,6 +466,7 @@ export class TutorialScene extends BaseScene {
         } else if (view === 'menu') {
             this.menuView.draw(this.#createMenuViewModel());
         } else if (view === 'starter') {
+            this.menuView.draw(this.#createMenuViewModel());
             this.starterView.draw(this.#createStarterViewModel());
         } else if (view === 'gallery') {
             this.galleryView.draw(this.#createGalleryViewModel());
@@ -481,6 +493,7 @@ export class TutorialScene extends BaseScene {
             this.cutsceneView.draw(this.#createCutsceneViewModel());
         }
         this.buttonHost.draw();
+        this.titleTransitionView.draw(this.#createTitleTransitionViewModel());
     }
 
     /**
@@ -647,10 +660,12 @@ export class TutorialScene extends BaseScene {
         this.destroyed = true;
         this.timelineRevision += 1;
         this.presentationTimeline.destroy();
+        this.titleFlow.destroy();
         this.battleCamera.destroy();
         this.battleCameraController.destroy();
         setPointerLockEnabled(false);
         this.spriteCueRouter.destroy();
+        this.loadingCoordinator.destroy();
         this.assetLoader.destroy();
         this.feedbackQueue.destroy();
         this.achievementBanner.destroy();
@@ -685,15 +700,12 @@ export class TutorialScene extends BaseScene {
         this.#appendEvent('진행도를 불러왔습니다.');
     }
 
-    /**
-     * 메뉴에서 새 플레이 흐름을 시작합니다.
-     * @private
-     */
+    /** 메뉴 버튼 퇴장 뒤 같은 타이틀 무대의 스타터 선택을 엽니다. @private */
     #applyStart() {
         if (this.mode !== MODES.MENU) {
             return;
         }
-        this.mode = MODES.STARTER;
+        this.titleFlow.openStarter({ onSwap: () => { this.mode = MODES.STARTER; } });
     }
 
     /**
@@ -744,43 +756,28 @@ export class TutorialScene extends BaseScene {
         this.#leaveRun(MODES.MENU);
     }
 
-    /**
-     * 스타터 선택 커서를 이동합니다.
-     * @param {object} payload - 이동량입니다.
-     * @private
-     */
+    /** 스타터 선택 커서를 이동합니다. @param {object} payload - 이동량입니다. @private */
     #applyStarterShift(payload) {
         if (this.mode !== MODES.STARTER || this.cutscenes.isOpen()) {
             return;
         }
-        const count = this.data.STARTER_CHOICES.length;
-        if (count <= 0) {
-            return;
-        }
-        const delta = Number(payload?.delta) || 0;
-        this.starterIndex = (this.starterIndex + delta + count) % count;
-        this.presentationTimeline.startSelection('menu-selection');
+        this.titleFlow.shift(payload?.delta);
     }
 
-    /**
-     * 선택한 스타터로 새 전투를 시작합니다.
-     * @param {object} payload - 선택 아이템 ID입니다.
-     * @private
-     */
+    /** 선택 아이콘 모핑 뒤 새 전투를 엽니다. @param {object} payload - 선택 아이템 ID입니다. @private */
     #applyChooseStarter(payload) {
         if (this.mode !== MODES.STARTER || this.cutscenes.isOpen()) {
             return;
         }
-        const requestedId = payload?.itemId
-            || this.data.STARTER_CHOICES[this.starterIndex]?.id;
-        const choiceIndex = this.data.STARTER_CHOICES.findIndex(
-            (choice) => choice.id === requestedId
-        );
-        if (choiceIndex < 0) {
-            return;
-        }
-        this.starterIndex = choiceIndex;
-        this.#beginRun(this.data.STARTER_CHOICES[choiceIndex].id);
+        this.presentationTimeline.cancel();
+        this.titleFlow.choose(payload?.itemId, {
+            onBattleReady: (itemId) => this.#beginRun(itemId),
+            onRevealComplete: (cutsceneIds) => {
+                for (const id of cutsceneIds || []) {
+                    this.#openCutscene(id, MODES.BATTLE, false);
+                }
+            }
+        });
     }
 
     /** 안정된 전투 프레임을 파괴하지 않고 Pause 모드로 전환합니다. @private */
@@ -789,7 +786,7 @@ export class TutorialScene extends BaseScene {
             || !this.model
             || this.cutscenes.isOpen()
             || this.guidance.isOpen()
-            || this.presentationTimeline.isLocked()) {
+            || this.#isPresentationLocked()) {
             return;
         }
         this.pauseIndex = 0;
@@ -837,6 +834,7 @@ export class TutorialScene extends BaseScene {
     #leaveRun(nextMode) {
         this.metaSession.commitStaged();
         this.timelineRevision += 1;
+        this.titleFlow.cancel();
         this.presentationTimeline.cancel();
         this.battleCamera.clear();
         this.battleCameraController.clear();
@@ -866,18 +864,13 @@ export class TutorialScene extends BaseScene {
         this.buttonHost.invalidate();
     }
 
-    /**
-     * 새 모델과 뷰 상태로 전투를 시작합니다.
-     * @param {string} starterItemId - 스타터 아이템 ID입니다.
-     * @private
-     */
+    /** 새 전투를 준비합니다. @param {string} starterItemId @returns {string[]} 공개 뒤 열 컷씬 ID입니다. @private */
     #beginRun(starterItemId) {
         this.timelineRevision += 1;
         this.presentationTimeline.cancel();
         this.spriteCueRouter.reset();
         this.audioDirector.resetTransient();
         this.metaSession.beginStaging();
-        this.starterItemId = starterItemId;
         const knowledge = {
             discoveredItemIds: [...this.meta.identifiedItemIds],
             identifiedItemIds: [...this.meta.identifiedItemIds],
@@ -931,9 +924,7 @@ export class TutorialScene extends BaseScene {
         this.#refreshBattleCache();
         this.#syncSpriteRoster();
         this.#appendEvent('전투 시작 · 이동 경로를 지정하고 확정한 뒤 행동하세요.');
-        for (const cutsceneId of openingCutsceneIds) {
-            this.#openCutscene(cutsceneId, MODES.BATTLE, false);
-        }
+        return openingCutsceneIds;
     }
 
     /** 갤러리 섹션을 키보드 또는 섹션 ID로 전환합니다. @param {object} payload @private */
@@ -1005,7 +996,7 @@ export class TutorialScene extends BaseScene {
     #openNextRecordPopup() {
         if (this.mode !== MODES.BATTLE
             || this.cutscenes.isOpen()
-            || this.presentationTimeline.isLocked()
+            || this.#isPresentationLocked()
             || !this.model) {
             return false;
         }
@@ -1247,9 +1238,14 @@ export class TutorialScene extends BaseScene {
         return isTutorialBattleMode(this.mode)
             && !this.cutscenes.isOpen()
             && !this.guidance.isOpen()
-            && !this.presentationTimeline.isLocked()
+            && !this.#isPresentationLocked()
             && this.model?.turn === 'player'
             && !this.model?.result;
+    }
+
+    /** @returns {boolean} 전투 또는 타이틀 표현 전환의 통합 입력 잠금입니다. @private */
+    #isPresentationLocked() {
+        return this.presentationTimeline.isLocked() || this.titleFlow.isLocked();
     }
 
     /**
@@ -1259,7 +1255,7 @@ export class TutorialScene extends BaseScene {
     #handleKeyboardInput() {
         const command = this.keyboardCommandMapper.map({
             mode: this.mode,
-            presentationLocked: this.presentationTimeline.isLocked(),
+            presentationLocked: this.#isPresentationLocked(),
             cutsceneOpen: this.cutscenes.isOpen(),
             guidanceOpen: this.guidance.isOpen(),
             pauseIndex: this.pauseIndex,
@@ -1344,11 +1340,7 @@ export class TutorialScene extends BaseScene {
     }
 
 
-    /**
-     * 비전투 뷰가 공유하는 직렬화 가능 표시 프레임을 만듭니다.
-     * @returns {object} 뷰포트·글꼴·색상 스냅샷입니다.
-     * @private
-     */
+    /** @returns {object} 비전투 뷰가 공유하는 직렬화 가능 표시 프레임입니다. @private */
     #createNonbattleViewFrame() {
         return Object.freeze({
             viewport: Object.freeze({
@@ -1359,6 +1351,7 @@ export class TutorialScene extends BaseScene {
             }),
             fonts: Object.freeze({ ...this.fonts }),
             colors: Object.freeze({
+                WorldBackdrop: ColorSchemes.Tactics.WorldBackdrop,
                 UI: Object.freeze({ ...ColorSchemes.Tactics.UI })
             })
         });
@@ -1367,7 +1360,7 @@ export class TutorialScene extends BaseScene {
     /** @returns {object} 로딩 뷰 모델입니다. @private */
     #createLoadingViewModel() {
         return this.nonbattleViewModels.createLoading(
-            this.#createNonbattleViewFrame()
+            this.#createNonbattleViewFrame(), this.loadingCoordinator.getSnapshot()
         );
     }
 
@@ -1377,7 +1370,8 @@ export class TutorialScene extends BaseScene {
             this.#createNonbattleViewFrame(),
             {
                 meta: this.meta,
-                releaseVersion: this.releaseInfo.version
+                releaseVersion: this.releaseInfo.version,
+                titleTransition: this.titleFlow.getSnapshot()
             }
         );
     }
@@ -1395,9 +1389,30 @@ export class TutorialScene extends BaseScene {
         return this.nonbattleViewModels.createStarter(
             this.#createNonbattleViewFrame(),
             {
-                selectedIndex: this.starterIndex,
+                selectedIndex: this.titleFlow.getSelectedIndex(),
                 selectionProgress:
-                    this.presentationTimeline.getState().menuSelectionProgress
+                    this.presentationTimeline.getState().menuSelectionProgress,
+                titleTransition: this.titleFlow.getSnapshot()
+            }
+        );
+    }
+    /** @returns {object|null} 카드에서 HUD로 이동하는 아이콘 전환 뷰 모델입니다. @private */
+    #createTitleTransitionViewModel() {
+        const transition = this.titleFlow.getSnapshot();
+        if (transition.phase !== 'starter-morph'
+            && transition.phase !== 'battle-reveal') {
+            return null;
+        }
+        const starterViewModel = this.#createStarterViewModel();
+        return this.nonbattleViewModels.createTitleTransition(
+            this.#createNonbattleViewFrame(),
+            {
+                transition,
+                sourceRect: this.starterView.getChoiceIconRect(
+                    starterViewModel,
+                    transition.selectedItemId
+                ),
+                playerStatusRect: this.#createBattleLayoutFrame().hudRects.PLAYER_STATUS
             }
         );
     }
@@ -1429,7 +1444,7 @@ export class TutorialScene extends BaseScene {
             this.#createNonbattleViewFrame(),
             {
                 result: this.results.getData(),
-                presentationLocked: this.presentationTimeline.isLocked()
+                presentationLocked: this.#isPresentationLocked()
             }
         );
     }
@@ -1441,7 +1456,7 @@ export class TutorialScene extends BaseScene {
             {
                 state: this.cutscenes.getState(),
                 card: this.cutscenes.getCurrentCard(),
-                presentationLocked: this.presentationTimeline.isLocked()
+                presentationLocked: this.#isPresentationLocked()
             }
         );
     }
@@ -1479,7 +1494,7 @@ export class TutorialScene extends BaseScene {
             colors: ColorSchemes.Tactics,
             elapsedSeconds: this.elapsedSeconds,
             presentation: this.presentationTimeline.getState(),
-            presentationLocked: this.presentationTimeline.isLocked(),
+            presentationLocked: this.#isPresentationLocked(),
             feedback: this.feedbackQueue.getSnapshot(),
             spriteAnimations: this.spriteAnimator.getSnapshot(),
             floorActors: this.floorActorView,
@@ -1518,11 +1533,7 @@ export class TutorialScene extends BaseScene {
         );
     }
 
-    /**
-     * 버튼 구성에 영향을 주는 상태를 문자열로 직렬화합니다.
-     * @returns {string} 구성 서명입니다.
-     * @private
-     */
+    /** @returns {string} 버튼 구성에 영향을 주는 상태 서명입니다. @private */
     #getButtonSignature() {
         const cutsceneState = this.cutscenes.getState();
         const galleryState = this.galleryController.getSnapshot(this.meta);
@@ -1534,7 +1545,8 @@ export class TutorialScene extends BaseScene {
             this.mode,
             cutsceneState.open ? cutsceneState.cutsceneId : '-',
             String(cutsceneState.cardIndex),
-            String(this.starterIndex),
+            String(this.titleFlow.getSelectedIndex()),
+            String(this.titleFlow.getSnapshot().revision),
             String(this.pauseIndex),
             String(this.changelogPage),
             this.releaseInfo.id,
@@ -1551,7 +1563,7 @@ export class TutorialScene extends BaseScene {
             String(this.inventoryPresenter.getPage()),
             String(this.battleFocus.getFocusedKey()),
             String(this.guidance.isOpen()),
-            String(this.presentationTimeline.isLocked()),
+            String(this.#isPresentationLocked()),
             String(pointerLock.initialActivationPending),
             inventory
         ].join('/');
@@ -1699,11 +1711,7 @@ export class TutorialScene extends BaseScene {
         this.buttonHost.invalidate();
     }
 
-    /**
-     * 포인터가 진입한 전투 버튼을 키보드와 같은 조사 포커스로 맞춥니다.
-     * @param {string} key - 버튼 키입니다.
-     * @private
-     */
+    /** 포인터 진입 버튼을 조사 포커스로 맞춥니다. @param {string} key @private */
     #focusBattleControl(key) {
         if (this.mode === MODES.PAUSE && key?.startsWith('pause-')) {
             const index = ['pause-resume', 'pause-restart', 'pause-exit'].indexOf(key);
@@ -1714,15 +1722,7 @@ export class TutorialScene extends BaseScene {
             return;
         }
         if (this.mode === MODES.STARTER && key?.startsWith('starter-')) {
-            const itemId = key.slice('starter-'.length);
-            const index = this.data.STARTER_CHOICES.findIndex(
-                (choice) => choice.id === itemId
-            );
-            if (index >= 0 && index !== this.starterIndex) {
-                this.starterIndex = index;
-                this.presentationTimeline.startSelection('menu-selection');
-                this.buttonHost.invalidate();
-            }
+            this.titleFlow.focus(key.slice('starter-'.length));
             return;
         }
         if (this.mode === MODES.BATTLE
@@ -1873,7 +1873,7 @@ export class TutorialScene extends BaseScene {
         const cameraInputEnabled = pointerLock.locked === true
             && !this.cutscenes.isOpen()
             && !this.guidance.isOpen()
-            && !this.presentationTimeline.isLocked();
+            && !this.#isPresentationLocked();
         const layout = this.#createBattleLayoutFrame();
         const target = this.battleCameraController.update({
             player: {
