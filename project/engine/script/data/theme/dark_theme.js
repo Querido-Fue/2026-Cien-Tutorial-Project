@@ -116,6 +116,7 @@ const DARK_TACTICS_THEME = Object.freeze({
         PrimaryHover: '#F17A7A',
         OnPrimary: '#ffffff',
         Card: '#0d2136',
+        CardIconBackground: '#ffffff',
         CardHeader: '#183047',
         GaugeTrack: '#3a4a58',
         GaugeHp: '#EC6565',

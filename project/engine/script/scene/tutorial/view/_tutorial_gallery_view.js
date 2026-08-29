@@ -76,6 +76,12 @@ export class TutorialGalleryView {
             w: leftPage.w * 0.92,
             h: rowH * 0.82
         }));
+        const pageIndicator = {
+            x: rightPage.x + (rightPage.w * 0.33),
+            y: rightPage.y + (rightPage.h * 0.89),
+            w: rightPage.w * 0.34,
+            h: rightPage.h * 0.08
+        };
         const buttons = {
             previous: projectTutorialDesignRect(
                 space,
@@ -90,10 +96,10 @@ export class TutorialGalleryView {
                 TUTORIAL_UI_LAYOUT_TOKENS.GALLERY.CLOSE
             ),
             play: {
-                x: rightPage.x + (rightPage.w * 0.27),
-                y: rightPage.y + (rightPage.h * 0.78),
-                w: rightPage.w * 0.46,
-                h: rightPage.h * 0.095
+                x: rightPage.x + (rightPage.w * 0.23),
+                y: rightPage.y + (rightPage.h * 0.7725),
+                w: rightPage.w * 0.54,
+                h: rightPage.h * 0.11
             }
         };
         return {
@@ -104,12 +110,14 @@ export class TutorialGalleryView {
             rightPage,
             tabs,
             rows,
+            pageIndicator,
             contentRects: [
                 book,
                 leftPage,
                 rightPage,
                 ...tabs,
                 ...rows,
+                pageIndicator,
                 createTutorialTextAnchor(
                     rightPage.x + (rightPage.w * 0.5),
                     rightPage.y + (rightPage.h * 0.12)
@@ -227,20 +235,15 @@ export class TutorialGalleryView {
 
         drawTutorialPixelAsset(this.#renderPort, {
             image: this.#assetPort.getUiAsset?.('galleryTitleOff'),
-            rect: {
-                x: layout.rightPage.x + (layout.rightPage.w * 0.33),
-                y: layout.rightPage.y + (layout.rightPage.h * 0.89),
-                w: layout.rightPage.w * 0.34,
-                h: layout.rightPage.h * 0.08
-            },
+            rect: layout.pageIndicator,
             alpha: 0.72
         });
         drawTutorialText(this.#renderPort, {
             text: String(viewModel.selectedIndex + 1)
                 + ' / ' + String(Math.max(1, viewModel.entries.length)),
-            x: layout.rightPage.x + (layout.rightPage.w * 0.5),
-            y: layout.rightPage.y + (layout.rightPage.h * 0.94),
-            font: fonts.MONO,
+            x: layout.pageIndicator.x + (layout.pageIndicator.w * 0.5),
+            y: layout.pageIndicator.y + (layout.pageIndicator.h * 0.5),
+            font: fonts.SMALL,
             fill: colors.UI.Muted,
             align: 'center'
         });
@@ -272,7 +275,7 @@ export class TutorialGalleryView {
             {
                 key: 'gallery-prev',
                 ...layout.buttons.previous,
-                label: '‹',
+                label: '',
                 backgroundAssetKey: 'galleryTurnButton',
                 backgroundImageAlpha: 0.9,
                 backgroundImageFlipX: true,
@@ -284,7 +287,7 @@ export class TutorialGalleryView {
             {
                 key: 'gallery-next',
                 ...layout.buttons.next,
-                label: '›',
+                label: '',
                 backgroundAssetKey: 'galleryTurnButton',
                 backgroundImageAlpha: 0.9,
                 command: {
@@ -295,7 +298,7 @@ export class TutorialGalleryView {
             {
                 key: 'gallery-back',
                 ...layout.buttons.close,
-                label: '×',
+                label: '',
                 backgroundAssetKey: 'galleryExitButton',
                 backgroundImageAlpha: 1,
                 fitHitToBackground: true,

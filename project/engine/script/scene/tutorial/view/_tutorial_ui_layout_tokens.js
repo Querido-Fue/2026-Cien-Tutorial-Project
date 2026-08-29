@@ -9,7 +9,7 @@ function rect(x, y, w, h) {
  */
 export const TUTORIAL_UI_LAYOUT_TOKENS = Object.freeze({
     MAIN: Object.freeze({
-        LOGO: rect(0.385, 0.215, 0.27, 0.22),
+        LOGO: rect(0.365, 0.215, 0.27, 0.22),
         BUTTON_GROUP: rect(0.425, 0.55, 0.15, 0.18),
         BUTTON_GAP: 0.012
     }),
@@ -17,7 +17,13 @@ export const TUTORIAL_UI_LAYOUT_TOKENS = Object.freeze({
         MAP: rect(0.027, 0.025, 0.946, 0.95),
         TITLE: rect(0.435, 0.185, 0.13, 0.09),
         LEFT_CARD: rect(0.342, 0.38, 0.15, 0.37),
-        RIGHT_CARD: rect(0.508, 0.38, 0.15, 0.37)
+        RIGHT_CARD: rect(0.508, 0.38, 0.15, 0.37),
+        CARD_TITLE_CENTER_Y: 0.11,
+        CARD_ICON_BACKGROUND: rect(0.217, 0.184, 0.566, 0.451),
+        CARD_DESCRIPTION: rect(0.12, 0.75, 0.76, 0.19),
+        CARD_DESCRIPTION_FONT_SCALE: 0.8,
+        CARD_DESCRIPTION_LINE_HEIGHT: 0.06,
+        CARD_DESCRIPTION_MAX_LINES: 3
     }),
     PAUSE: Object.freeze({
         DIM: rect(0, 0, 1, 1),
@@ -69,4 +75,3 @@ export const TUTORIAL_UI_LAYOUT_TOKENS = Object.freeze({
         BUTTON_GROUP: rect(0.54, 0.52, 0.15, 0.14)
     })
 });
-

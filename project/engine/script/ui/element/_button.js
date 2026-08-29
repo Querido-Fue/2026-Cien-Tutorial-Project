@@ -21,6 +21,7 @@ import { createFontString } from "util/font_util.js";
  * @param {number} properties.height - 높이
  * @param {string} properties.idleColor - 기본 색상
  * @param {string} properties.hoverColor - 호버 색상
+ * @param {boolean} [properties.drawSolidBackground=true] - 배경 이미지 아래의 단색 면 표시 여부
  * @param {Array<object>} [properties.left=[]] - 왼쪽 영역 UI 요소들
  * @param {Array<object>} [properties.center=[]] - 중앙 영역 UI 요소들
  * @param {Array<object>} [properties.right=[]] - 오른쪽 영역 UI 요소들
@@ -62,6 +63,7 @@ export class ButtonElement extends BaseUIElement {
         this.backgroundImageAlpha = properties.backgroundImageAlpha ?? 1;
         this.backgroundImageFlipX = properties.backgroundImageFlipX === true;
         this.drawBackground = properties.drawBackground !== false;
+        this.drawSolidBackground = properties.drawSolidBackground !== false;
 
         if (properties.color) this.color = properties.color;
 
@@ -84,6 +86,7 @@ export class ButtonElement extends BaseUIElement {
         this.backgroundImageAlpha = 1;
         this.backgroundImageFlipX = false;
         this.drawBackground = true;
+        this.drawSolidBackground = true;
     }
 
     /**
@@ -150,14 +153,14 @@ export class ButtonElement extends BaseUIElement {
         const scaledX = cx - scaledW / 2;
         const scaledY = cy - scaledH / 2;
 
-        if (this.shadow && this.drawBackground) {
+        if (this.shadow && this.drawBackground && this.drawSolidBackground) {
             shadowOn(this.layer, this.shadow.blur, this.shadow.color);
         }
 
         const bounds = { x: scaledX, y: scaledY, w: scaledW, h: scaledH };
         this.currentColor = colorUtil().lerpColor(this.idleColor, this.hoverColor, this.hoverValue, bounds);
 
-        if (this.drawBackground) {
+        if (this.drawBackground && this.drawSolidBackground) {
             render(this.layer, {
                 shape: 'roundRect',
                 x: scaledX,
@@ -245,7 +248,7 @@ export class ButtonElement extends BaseUIElement {
             }
         }
 
-        if (this.shadow && this.drawBackground) {
+        if (this.shadow && this.drawBackground && this.drawSolidBackground) {
             shadowOff(this.layer);
         }
     }

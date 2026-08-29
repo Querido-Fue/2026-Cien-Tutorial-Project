@@ -117,6 +117,7 @@ const LIGHT_TACTICS_THEME = Object.freeze({
         PrimaryHover: '#F17A7A',
         OnPrimary: '#ffffff',
         Card: '#ffffff',
+        CardIconBackground: '#ffffff',
         CardHeader: '#d9d9d9',
         GaugeTrack: '#d9d9d9',
         GaugeHp: '#EC6565',

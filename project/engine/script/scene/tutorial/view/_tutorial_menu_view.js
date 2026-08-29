@@ -93,6 +93,7 @@ export class TutorialMenuView {
                     : '저장된 전투가 없습니다.',
                 backgroundAssetKey: 'mainButton',
                 backgroundImageAlpha: 0.95,
+                drawSolidBackground: false,
                 fitHitToBackground: true
             },
             {
@@ -101,6 +102,7 @@ export class TutorialMenuView {
                 label: '새 게임',
                 backgroundAssetKey: 'mainButton',
                 backgroundImageAlpha: 0.95,
+                drawSolidBackground: false,
                 fitHitToBackground: true,
                 command: { type: TUTORIAL_COMMANDS.START }
             },
@@ -110,6 +112,7 @@ export class TutorialMenuView {
                 label: '갤러리',
                 backgroundAssetKey: 'mainButton',
                 backgroundImageAlpha: 0.95,
+                drawSolidBackground: false,
                 fitHitToBackground: true,
                 command: { type: TUTORIAL_COMMANDS.OPEN_GALLERY }
             }

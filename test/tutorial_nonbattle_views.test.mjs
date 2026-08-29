@@ -35,6 +35,7 @@ const COLORS = Object.freeze({
         Muted: '#aaa',
         Panel: '#222',
         PanelStrong: '#111',
+        CardIconBackground: '#fff',
         Accent: '#0ff',
         Success: '#0f0',
         Danger: '#f00',
@@ -210,6 +211,14 @@ test('메인 메뉴는 타이틀과 버튼 외 안내 문구·카메라 오버�
     ]);
     assert.equal(buttons[0].enabled, false);
     assert.equal(buttons.every((button) => button.fitHitToBackground === true), true);
+    assert.equal(buttons.every((button) => button.drawSolidBackground === false), true);
+
+    const layout = view.getLayout(createViewModel(VIEWPORTS[0]));
+    const logoCenterX = layout.logo.x + (layout.logo.w * 0.5);
+    for (const button of layout.buttons) {
+        const buttonCenterX = button.x + (button.w * 0.5);
+        assert.ok(Math.abs(buttonCenterX - logoCenterX) <= 1);
+    }
 });
 
 test('스타터 카드와 Pause 메뉴는 보이는 영역 자체를 클릭 계약으로 사용한다', () => {
@@ -228,6 +237,7 @@ test('스타터 카드와 Pause 메뉴는 보이는 영역 자체를 클릭 계�
         starterLayout.cards.map(({ x, y, w, h }) => ({ x, y, w, h }))
     );
     assert.equal(starterButtons.every((button) => button.drawBackground === false), true);
+    assert.equal(starterButtons.every((button) => button.label === ''), true);
 
     const pause = new TutorialPauseView(NOOP_RENDER_PORT);
     const pauseButtons = pause.getButtonSpecs(createViewModel(VIEWPORTS[0], {
@@ -239,6 +249,73 @@ test('스타터 카드와 Pause 메뉴는 보이는 영역 자체를 클릭 계�
         'tutorial/return-menu'
     ]);
     assert.equal(pauseButtons[1].active, true);
+});
+
+test('스타터 카드는 별도 버튼 패널 없이 불투명 프레임과 흰 아이콘 배경을 그린다', () => {
+    const starterCard = { width: 143, height: 206 };
+    const bowIcon = { width: 48, height: 48 };
+    const mascotIcon = { width: 48, height: 48 };
+    const renderCommands = [];
+    const renderGlCommands = [];
+    const renderPort = {
+        render(layer, command) {
+            renderCommands.push({ layer, command });
+        },
+        renderGL(layer, command) {
+            renderGlCommands.push({ layer, command });
+        },
+        wrapText() {
+            return ['첫째 줄', '둘째 줄', '셋째 줄'];
+        }
+    };
+    const assetPort = {
+        getUiAsset(key) {
+            return key === 'starterCard' ? starterCard : null;
+        },
+        getItemIcon(id) {
+            return id === 'bow' ? bowIcon : mascotIcon;
+        }
+    };
+    const view = new TutorialStarterView(renderPort, assetPort);
+    const viewModel = createViewModel(VIEWPORTS[0], {
+        choices: CHOICES,
+        selectedIndex: 0,
+        selectionProgress: 1,
+        selectionMinScale: 0.72
+    });
+
+    view.draw(viewModel);
+
+    assert.deepEqual(renderGlCommands, []);
+    const iconBackgrounds = renderCommands.filter(({ command }) => (
+        command.shape === 'rect'
+        && command.fill === COLORS.UI.CardIconBackground
+    ));
+    assert.equal(iconBackgrounds.length, 2);
+    assert.equal(iconBackgrounds.every(({ command }) => command.alpha === 1), true);
+
+    const frameCommands = renderCommands.filter(({ command }) => (
+        command.image === starterCard
+    ));
+    const iconCommands = renderCommands.filter(({ command }) => (
+        command.image === bowIcon || command.image === mascotIcon
+    ));
+    assert.equal(frameCommands.length, 2);
+    assert.equal(iconCommands.length, 2);
+    assert.equal(frameCommands.every(({ command }) => command.alpha === 1), true);
+    assert.equal(iconCommands.every(({ command }) => command.alpha === 1), true);
+
+    const firstFrame = frameCommands[0].command;
+    const descriptionToken = TUTORIAL_UI_LAYOUT_TOKENS.STARTER.CARD_DESCRIPTION;
+    const descriptionTop = firstFrame.y + (firstFrame.h * descriptionToken.y);
+    const descriptionBottom = descriptionTop + (firstFrame.h * descriptionToken.h);
+    const firstDescriptionLines = renderCommands
+        .filter(({ command }) => ['첫째 줄', '둘째 줄', '셋째 줄'].includes(command.text))
+        .slice(0, 3)
+        .map(({ command }) => command);
+    assert.equal(firstDescriptionLines.length, 3);
+    assert.ok(firstDescriptionLines[0].y >= descriptionTop);
+    assert.ok(firstDescriptionLines[2].y <= descriptionBottom);
 });
 
 test('갤러리 책갈피와 결과 버튼은 Figma 관찰 좌표와 책 내부 흐름을 따른다', () => {
@@ -278,6 +355,48 @@ test('갤러리 책갈피와 결과 버튼은 Figma 관찰 좌표와 책 내부 
         galleryButtons.find((button) => button.key === 'gallery-back').fitHitToBackground,
         true
     );
+    assert.deepEqual(
+        ['gallery-prev', 'gallery-next', 'gallery-back'].map((key) => (
+            galleryButtons.find((button) => button.key === key).label
+        )),
+        ['', '', '']
+    );
+
+    const playableEntry = {
+        ...GALLERY_ENTRIES[0],
+        kind: 'cutscene',
+        playable: true,
+        replayCutsceneId: 'opening'
+    };
+    const playableModel = createViewModel(VIEWPORTS[0], {
+        ...galleryModel,
+        entries: [playableEntry],
+        selectedEntry: playableEntry
+    });
+    const playableLayout = gallery.getLayout(playableModel);
+    const playButton = gallery.getButtonSpecs(playableModel).find(
+        (button) => button.key === 'gallery-play'
+    );
+    assert.ok(playButton.w >= playableLayout.rightPage.w * 0.53);
+    assert.ok(playButton.h >= playableLayout.rightPage.h * 0.1);
+    assert.ok(Math.abs(
+        playButton.x + (playButton.w * 0.5)
+        - (playableLayout.rightPage.x + (playableLayout.rightPage.w * 0.5))
+    ) < 0.001);
+
+    const renderCommands = [];
+    const galleryWithCapture = new TutorialGalleryView({
+        ...NOOP_RENDER_PORT,
+        render(layer, command) {
+            renderCommands.push({ layer, command });
+        }
+    });
+    const galleryLayout = galleryWithCapture.getLayout(galleryModel);
+    galleryWithCapture.draw(galleryModel);
+    const pageText = renderCommands.find(({ command }) => command.text === '1 / 6').command;
+    assert.equal(pageText.font, FONTS.SMALL);
+    assert.equal(pageText.x, galleryLayout.pageIndicator.x + (galleryLayout.pageIndicator.w * 0.5));
+    assert.equal(pageText.y, galleryLayout.pageIndicator.y + (galleryLayout.pageIndicator.h * 0.5));
 
     const result = new TutorialResultView(NOOP_RENDER_PORT);
     const resultButtons = result.getButtonSpecs(createViewModel(VIEWPORTS[0], {
