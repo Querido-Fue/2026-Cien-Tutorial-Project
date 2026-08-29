@@ -60,6 +60,7 @@ const EXPECTED_COMMANDS = Object.freeze({
     CUTSCENE_CLOSE: 'tutorial/cutscene-close',
     PLAN_STEP: 'tutorial/plan-step',
     PLAN_BACK: 'tutorial/plan-back',
+    PLAN_RESET: 'tutorial/plan-reset',
     COMMIT_PATH: 'tutorial/commit-path',
     SELECT_ATTACK: 'tutorial/select-attack',
     ATTACK: 'tutorial/attack',

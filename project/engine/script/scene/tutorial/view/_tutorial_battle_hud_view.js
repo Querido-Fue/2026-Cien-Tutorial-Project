@@ -87,6 +87,8 @@ export class TutorialBattleHudView {
             const actionRect = layout.hudRects.SECONDARY_ACTIONS;
             const columns = Number(hud.config.actions.COLUMNS) || 4;
             const gapX = this.#uww(hud.config.actions.GAP_X_UIWW);
+            const primaryIsMove = snapshot.phase === 'move';
+            const hasPlannedMovement = Number(hud.movePreview?.stepsUsed) > 0;
             const actionColumnW = (
                 actionRect.w - (gapX * (columns - 1))
             ) / columns;
@@ -96,16 +98,23 @@ export class TutorialBattleHudView {
             );
             const actionY = actionRect.y + ((actionRect.h - actionH) * 0.5);
             const actionSpecs = [
-                {
-                    key: 'melee',
-                    label: hud.attackSelected && hud.attackWeapon === 'melee'
-                        ? '근접 취소'
-                        : '근접',
-                    enabled: controls.actionReady && controls.meleeTargetCount > 0,
-                    active: hud.attackSelected && hud.attackWeapon === 'melee',
-                    type: TUTORIAL_COMMANDS.SELECT_ATTACK,
-                    payload: { weapon: 'melee' }
-                },
+                primaryIsMove
+                    ? {
+                        key: 'reset-path',
+                        label: '초기화',
+                        enabled: controls.ready && hasPlannedMovement,
+                        type: TUTORIAL_COMMANDS.PLAN_RESET
+                    }
+                    : {
+                        key: 'melee',
+                        label: hud.attackSelected && hud.attackWeapon === 'melee'
+                            ? '근접 취소'
+                            : '근접',
+                        enabled: controls.actionReady && controls.meleeTargetCount > 0,
+                        active: hud.attackSelected && hud.attackWeapon === 'melee',
+                        type: TUTORIAL_COMMANDS.SELECT_ATTACK,
+                        payload: { weapon: 'melee' }
+                    },
                 {
                     key: 'ranged',
                     label: hud.attackSelected && hud.attackWeapon === 'bow'
@@ -157,7 +166,6 @@ export class TutorialBattleHudView {
                 primaryRect.h,
                 clampBattleViewNumber(this.#uwh(15), 72, 116)
             );
-            const primaryIsMove = snapshot.phase === 'move';
             const primaryEnabled = controls.ready && (primaryIsMove
                 ? hud.movePreview?.ok === true
                 : snapshot.phase === 'action' && !snapshot.actionUsed);

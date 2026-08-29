@@ -455,6 +455,9 @@ export class TutorialScene extends BaseScene {
                 case COMMANDS.PLAN_BACK:
                     this.#applyPlanBack();
                     break;
+                case COMMANDS.PLAN_RESET:
+                    this.#applyPlanReset();
+                    break;
                 case COMMANDS.COMMIT_PATH:
                     this.#applyCommitPath();
                     break;
@@ -962,6 +965,20 @@ export class TutorialScene extends BaseScene {
             this.plannedPath.pop();
         }
         this.cleanseSelected = false;
+        this.presentationTimeline.startSelection('path');
+    }
+
+    /** 선택한 이동 경로 전체를 현재 플레이어 위치로 초기화합니다. @private */
+    #applyPlanReset() {
+        if (!this.#canAcceptBattleInput()
+            || this.model.movementUsed
+            || this.model.phase !== 'move'
+            || this.plannedPath.length <= 1) {
+            return;
+        }
+        this.#resetPlannedPath();
+        this.cleanseSelected = false;
+        this.cleanseTargets = [];
         this.presentationTimeline.startSelection('path');
     }
 

@@ -143,8 +143,8 @@ export class TutorialAudioDirector {
         }
         if (state.mode === 'battle' || state.mode === 'pause') {
             return Number(state.floorIndex) >= 1
-                ? TUTORIAL_BGM_IDS.BASEMENT
-                : TUTORIAL_BGM_IDS.FLOOR_1;
+                ? TUTORIAL_BGM_IDS.FLOOR_1
+                : TUTORIAL_BGM_IDS.OPENING;
         }
         return TUTORIAL_BGM_IDS.MAIN;
     }

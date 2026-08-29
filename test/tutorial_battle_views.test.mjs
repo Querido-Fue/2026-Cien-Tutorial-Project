@@ -11,6 +11,7 @@ import { TUTORIAL_UI_LAYOUT_TOKENS } from '../project/engine/script/scene/tutori
 import { TutorialBattleFocusController } from '../project/engine/script/scene/tutorial/_tutorial_battle_focus_controller.js';
 import { TutorialCombatReadabilityPresenter } from '../project/engine/script/scene/tutorial/_tutorial_combat_readability_presenter.js';
 import { TutorialGuidanceController } from '../project/engine/script/scene/tutorial/_tutorial_guidance_controller.js';
+import { TUTORIAL_COMMANDS } from '../project/engine/script/scene/tutorial/_tutorial_scene_constants.js';
 
 const VIEWPORTS = Object.freeze([
     Object.freeze({ name: '1280×720', WW: 1280, WH: 720, UIWW: 1280, UIOffsetX: 0 }),
@@ -157,6 +158,50 @@ test('인벤토리 페이지는 음수와 초과 요청을 유효 범위로 제�
     assert.equal(first.entries.length, 15);
     assert.equal(last.page, 2);
     assert.equal(last.entries.length, 2);
+});
+
+test('이동 경로 초기화 버튼은 한 칸 이상 선택한 이동 단계에서만 활성화된다', () => {
+    const view = new TutorialBattleHudView(NOOP_RENDER_PORT);
+    const layout = createLayout().resize(VIEWPORTS[0]);
+    const createViewModel = (stepsUsed) => ({
+        snapshot: { phase: 'move', actionUsed: false },
+        layout,
+        colors: {
+            UI: {
+                Primary: '#a00', PrimaryHover: '#b00', OnPrimary: '#fff',
+                Card: '#fff', ButtonHover: '#ddd', Text: '#111',
+                ButtonShadow: '#000', CardShadow: '#000'
+            }
+        },
+        hud: {
+            attackSelected: false,
+            attackWeapon: 'melee',
+            focusedControlKey: null,
+            presentationLocked: false,
+            movePreview: { ok: true, stepsUsed },
+            controls: {
+                ready: true,
+                actionReady: false,
+                meleeTargetCount: 0,
+                bowTargetCount: 0,
+                hasBow: false
+            },
+            inventory: { entries: [], pageCount: 1 },
+            config: {
+                actions: TUTORIAL_GAME_DATA.LAYOUT.ACTIONS,
+                inventory: TUTORIAL_GAME_DATA.LAYOUT.INVENTORY,
+                itemIcon: TUTORIAL_GAME_DATA.SPRITES.ITEM
+            }
+        }
+    });
+    const inactive = view.getButtonSpecs(createViewModel(0))
+        .find((spec) => spec.key === 'battle-reset-path');
+    const active = view.getButtonSpecs(createViewModel(2))
+        .find((spec) => spec.key === 'battle-reset-path');
+
+    assert.equal(inactive.enabled, false);
+    assert.equal(active.enabled, true);
+    assert.deepEqual(active.command, { type: TUTORIAL_COMMANDS.PLAN_RESET, payload: undefined });
 });
 
 test('전투 조사 포커스는 마우스 직접 선택과 키보드 순환에서 같은 키를 사용한다', () => {

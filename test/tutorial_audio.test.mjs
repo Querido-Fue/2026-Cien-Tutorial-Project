@@ -54,6 +54,18 @@ test('오디오 매니페스트는 버스 정책과 지하층 fallback을 완전
         TUTORIAL_BGM_IDS.BASEMENT,
         TUTORIAL_BGM_IDS.FLOOR_1
     ]);
+    const expectedBgmVolumes = new Map([
+        [TUTORIAL_BGM_IDS.MAIN, 0.504],
+        [TUTORIAL_BGM_IDS.OPENING, 0.546],
+        [TUTORIAL_BGM_IDS.FLOOR_1, 0.518],
+        [TUTORIAL_BGM_IDS.BASEMENT, 0.518],
+        [TUTORIAL_BGM_IDS.ENDING_STABILIZED, 0.546],
+        [TUTORIAL_BGM_IDS.ENDING_SUBDUED, 0.546]
+    ]);
+    for (const [id, expectedVolume] of expectedBgmVolumes) {
+        const entry = TUTORIAL_AUDIO_MANIFEST.ENTRIES.find((candidate) => candidate.id === id);
+        assert.ok(Math.abs(entry.defaultVolume - expectedVolume) < 0.0001, id);
+    }
 
     const cyclic = new AudioManifestResolver([
         { id: 'a', available: false, fallback: 'b' },
@@ -85,12 +97,12 @@ test('음악 버스는 같은 곡을 재시작하지 않고 두 채널 crossfade
     assert.equal(bus.getState().fadingCount, 1);
     assert.equal(audios[1].volume, 0);
     bus.update(0.25);
-    assert.ok(Math.abs(audios[0].volume - 0.36) < 0.001);
-    assert.ok(Math.abs(audios[1].volume - 0.39) < 0.001);
+    assert.ok(Math.abs(audios[0].volume - 0.252) < 0.001);
+    assert.ok(Math.abs(audios[1].volume - 0.273) < 0.001);
     bus.update(0.25);
     assert.equal(audios[0].paused, true);
     assert.equal(audios[0].currentTime, 0);
-    assert.ok(Math.abs(audios[1].volume - 0.78) < 0.001);
+    assert.ok(Math.abs(audios[1].volume - 0.546) < 0.001);
     assert.equal(bus.getState().fadingCount, 0);
 
     assert.equal((await bus.play(TUTORIAL_BGM_IDS.FLOOR_1)).ok, true);
@@ -206,6 +218,10 @@ test('튜토리얼 오디오 디렉터는 화면 BGM·호흡 loop·UI 명령과 
     const director = new TutorialAudioDirector({ soundPort, instabilityThreshold: 61 });
     director.sync({ mode: 'menu' });
     director.sync({ mode: 'menu' });
+    director.sync({
+        mode: 'battle', floorIndex: 0, cutsceneOpen: true,
+        lora: { hp: 100, instability: 70 }
+    });
     director.sync({ mode: 'battle', floorIndex: 0, lora: { hp: 100, instability: 70 } });
     director.sync({ mode: 'battle', floorIndex: 1, lora: { hp: 100, instability: 70 } });
     director.sync({ mode: 'battle', floorIndex: 1, lora: { hp: 100, instability: 60 } });
@@ -214,8 +230,8 @@ test('튜토리얼 오디오 디렉터는 화면 BGM·호흡 loop·UI 명령과 
     director.sync({ mode: 'gallery', cutsceneOpen: true });
     assert.deepEqual(calls.filter(([type]) => type === 'bgm'), [
         ['bgm', TUTORIAL_BGM_IDS.MAIN],
+        ['bgm', TUTORIAL_BGM_IDS.OPENING],
         ['bgm', TUTORIAL_BGM_IDS.FLOOR_1],
-        ['bgm', TUTORIAL_BGM_IDS.BASEMENT],
         ['bgm', TUTORIAL_BGM_IDS.ENDING_STABILIZED],
         ['bgm', TUTORIAL_BGM_IDS.ENDING_SUBDUED],
         ['bgm', TUTORIAL_BGM_IDS.OPENING]
