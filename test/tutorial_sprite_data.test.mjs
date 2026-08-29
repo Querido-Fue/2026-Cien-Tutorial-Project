@@ -49,6 +49,18 @@ test('32×32 논리 클립 계약은 필수 배우 동작과 실제 시트 경�
         assert.equal(clip.logicalSize.height, 32);
         assert.equal(clip.anchor.x, 0.5);
         assert.ok(clip.anchor.y >= 0.8 && clip.anchor.y <= 1);
+        assert.ok(clip.visualTopInsetRatio >= 0 && clip.visualTopInsetRatio < 1);
+    }
+
+    const visualTopInsets = { player: 0.125, lora: 0.257, slime: 0.66 };
+    for (const [actorType, inset] of Object.entries(visualTopInsets)) {
+        const actorClips = clips.filter((clip) => clip.actorType === actorType);
+        assert.ok(actorClips.length > 0, actorType);
+        assert.equal(
+            actorClips.every((clip) => clip.visualTopInsetRatio === inset),
+            true,
+            `${actorType} 실제 픽셀 상단 보정`
+        );
     }
 });
 
@@ -74,6 +86,7 @@ test('원본이 없는 Range·Breathing·로라 액션은 순환 없는 명시�
     assert.equal(ranged.resolvedClipId, 'player.item.right');
     assert.equal(ranged.fallbackUsed, true);
     assert.equal(ranged.fallbackEffect, 'ranged');
+    assert.equal(ranged.visualTopInsetRatio, 0.125);
 
     const unstable = resolver.resolve({
         actorType: 'lora', animationId: 'unstable', facing: 'down'
@@ -82,6 +95,12 @@ test('원본이 없는 Range·Breathing·로라 액션은 순환 없는 명시�
     assert.equal(unstable.frames.length, 4);
     assert.equal(unstable.loop, true);
     assert.equal(unstable.fallbackEffect, 'breathing');
+    assert.equal(unstable.visualTopInsetRatio, 0.257);
+
+    const slime = resolver.resolve({
+        actorType: 'slime', animationId: 'idle', variant: 'blue'
+    });
+    assert.equal(slime.visualTopInsetRatio, 0.66);
 });
 
 test('매니페스트는 실제 8개 스프라이트 시트를 픽셀 렌더 자산으로 등록한다', () => {

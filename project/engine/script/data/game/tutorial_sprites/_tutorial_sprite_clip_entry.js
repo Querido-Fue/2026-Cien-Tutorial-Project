@@ -1,5 +1,10 @@
 const LOGICAL_FRAME_SIZE = Object.freeze({ width: 32, height: 32 });
 const DEFAULT_ANCHOR = Object.freeze({ x: 0.5, y: 0.88 });
+const VISUAL_TOP_INSET_RATIO_BY_ACTOR = Object.freeze({
+    player: 0.125,
+    lora: 0.257,
+    slime: 0.66
+});
 
 /** @param {*} value @returns {*} 객체와 배열을 재귀 동결합니다. */
 function deepFreeze(value) {
@@ -8,6 +13,18 @@ function deepFreeze(value) {
     }
     Object.values(value).forEach(deepFreeze);
     return Object.freeze(value);
+}
+
+/**
+ * 원본 프레임의 투명 상단 여백을 배우별 실측 비율로 정규화합니다.
+ * @param {object} entry - 클립 선언입니다.
+ * @returns {number} 프레임 높이 대비 실제 픽셀 상단 비율입니다.
+ */
+function resolveVisualTopInsetRatio(entry) {
+    const explicit = Number(entry.visualTopInsetRatio);
+    const fallback = VISUAL_TOP_INSET_RATIO_BY_ACTOR[String(entry.actorType)] || 0;
+    const ratio = Number.isFinite(explicit) ? explicit : fallback;
+    return Math.max(0, Math.min(0.95, ratio));
 }
 
 /**
@@ -66,6 +83,7 @@ export function createTutorialSpriteClip(entry) {
         logicalSize: entry.logicalSize || LOGICAL_FRAME_SIZE,
         anchor: entry.anchor || DEFAULT_ANCHOR,
         scaleTileRatio: Math.max(0.1, Number(entry.scaleTileRatio) || 0.92),
+        visualTopInsetRatio: resolveVisualTopInsetRatio(entry),
         terminal: entry.terminal === true,
         hideOnComplete: entry.hideOnComplete === true
     });

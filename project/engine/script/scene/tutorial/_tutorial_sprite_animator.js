@@ -350,6 +350,7 @@ export class TutorialSpriteAnimator {
             logicalSize: clip?.logicalSize,
             anchor: clip?.anchor,
             scaleTileRatio: clip?.scaleTileRatio || 0.92,
+            visualTopInsetRatio: Number(clip?.visualTopInsetRatio) || 0,
             facing: track.facing,
             fallbackUsed: clip?.fallbackUsed === true,
             fallbackEffect: clip?.fallbackEffect || null,

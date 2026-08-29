@@ -50,6 +50,14 @@ export class TutorialBattleActorView {
         const actionScale = presentation.playerScale
             * (1 + (presentation.actionPulse * world.config.actionPlayerScale));
         const size = layout.tileSide * 0.56 * actionScale;
+        const hpY = this.#resolveWorldHpY(
+            point,
+            animation,
+            actionScale,
+            point.y - (size * 0.68),
+            size,
+            frame
+        );
         this.#drawShadow(point, size, alpha, frame);
         const spriteDrawn = this.#drawSprite(point, animation, actionScale, alpha, frame);
         if (!spriteDrawn) {
@@ -65,7 +73,7 @@ export class TutorialBattleActorView {
         }
         this.#drawWorldHp(
             point.x,
-            point.y - (size * 0.68),
+            hpY,
             presentation.playerHp,
             player.maxHp || 100,
             size,
@@ -86,9 +94,18 @@ export class TutorialBattleActorView {
             world.presentation.actionPulse * world.config.actionLoraScale
         );
         const size = layout.tileSide * spriteLayout.BASE_SIZE_TILE_RATIO * actionScale;
+        const animation = world.spriteAnimations?.lora || null;
+        const hpWidth = size * 1.08;
+        const hpY = this.#resolveWorldHpY(
+            point,
+            animation,
+            actionScale,
+            point.y - (size * 0.76),
+            hpWidth,
+            frame
+        );
         const alive = lora.alive !== false && Number(lora.hp) > 0;
         const alpha = alive ? 1 : 0.56;
-        const animation = world.spriteAnimations?.lora || null;
         if (animation?.visible === false) {
             return;
         }
@@ -137,10 +154,10 @@ export class TutorialBattleActorView {
         }
         this.#drawWorldHp(
             point.x,
-            point.y - (size * 0.76),
+            hpY,
             world.presentation.loraHp,
             lora.maxHp || 100,
-            size * 1.08,
+            hpWidth,
             1,
             world.readability?.playerPreview?.available
                 ? world.readability.playerPreview.expected?.loraHp
@@ -158,6 +175,14 @@ export class TutorialBattleActorView {
         }
         const point = this.#projectTile(layout, mob.x, mob.y);
         const size = layout.tileSide * 0.5;
+        const hpY = this.#resolveWorldHpY(
+            point,
+            animation,
+            1,
+            point.y - (size * 0.7),
+            size,
+            frame
+        );
         this.#drawShadow(point, size, 1, frame);
         const spriteDrawn = this.#drawSprite(point, animation, 1, 1, frame);
         if (!spriteDrawn) {
@@ -174,7 +199,7 @@ export class TutorialBattleActorView {
         if (Number(mob.hp) > 0) {
             this.#drawWorldHp(
                 point.x,
-                point.y - (size * 0.7),
+                hpY,
                 mob.hp,
                 mob.maxHp || 100,
                 size,
@@ -194,31 +219,82 @@ export class TutorialBattleActorView {
         if (!image) {
             return false;
         }
-        const effectScale = this.#getFallbackEffectScale(animation);
-        const logicalWidth = Math.max(1, Number(animation.logicalSize?.width) || 32);
-        const logicalHeight = Math.max(1, Number(animation.logicalSize?.height) || 32);
-        const width = Math.max(
-            1,
-            Math.round(frame.layout.tileSide * animation.scaleTileRatio * baseScale * effectScale)
-        );
-        const height = Math.max(1, Math.round(width * (logicalHeight / logicalWidth)));
-        const anchorX = clampBattleViewNumber(animation.anchor?.x, 0, 1);
-        const anchorY = clampBattleViewNumber(animation.anchor?.y, 0, 1);
+        const geometry = this.#resolveSpriteGeometry(point, animation, baseScale, frame);
+        if (!geometry) {
+            return false;
+        }
         const effectAlpha = this.#getFallbackEffectAlpha(animation);
         for (const sourceRect of animation.layers) {
             this.#renderPort.renderGL('object', {
                 image,
                 sourceRect,
                 flipX: animation.flipX === true,
-                x: Math.round(point.x - (width * anchorX)),
-                y: Math.round(point.y - (height * anchorY)),
-                w: width,
-                h: height,
+                x: geometry.x,
+                y: geometry.y,
+                w: geometry.width,
+                h: geometry.height,
                 alpha: alpha * effectAlpha,
                 smoothing: false
             });
         }
         return true;
+    }
+
+    /**
+     * 스프라이트의 논리 크기와 발 앵커를 실제 월드 사각형으로 변환합니다.
+     * @param {{x:number,y:number}} point - 타일 위 발 위치입니다.
+     * @param {object|null} animation - 현재 스프라이트 애니메이션입니다.
+     * @param {number} baseScale - 배우 행동 스케일입니다.
+     * @param {object} frame - 같은 프레임의 BattleViewModel입니다.
+     * @returns {{x:number,y:number,width:number,height:number}|null} 스프라이트 사각형입니다.
+     * @private
+     */
+    #resolveSpriteGeometry(point, animation, baseScale, frame) {
+        if (!animation) {
+            return null;
+        }
+        const effectScale = this.#getFallbackEffectScale(animation);
+        const logicalWidth = Math.max(1, Number(animation.logicalSize?.width) || 32);
+        const logicalHeight = Math.max(1, Number(animation.logicalSize?.height) || 32);
+        const scaleTileRatio = Math.max(0.01, Number(animation.scaleTileRatio) || 1);
+        const width = Math.max(
+            1,
+            Math.round(frame.layout.tileSide * scaleTileRatio * baseScale * effectScale)
+        );
+        const height = Math.max(1, Math.round(width * (logicalHeight / logicalWidth)));
+        const anchorX = clampBattleViewNumber(animation.anchor?.x, 0, 1);
+        const anchorY = clampBattleViewNumber(animation.anchor?.y, 0, 1);
+        return {
+            x: Math.round(point.x - (width * anchorX)),
+            y: Math.round(point.y - (height * anchorY)),
+            width,
+            height
+        };
+    }
+
+    /**
+     * 캐릭터별 실제 머리 경계 위에 월드 HP 바 중심을 배치합니다.
+     * @param {{x:number,y:number}} point - 타일 위 발 위치입니다.
+     * @param {object|null} animation - 현재 스프라이트 애니메이션입니다.
+     * @param {number} baseScale - 배우 행동 스케일입니다.
+     * @param {number} fallbackY - 스프라이트가 없을 때 사용할 기존 위치입니다.
+     * @param {number} width - HP 바 너비입니다.
+     * @param {object} frame - 같은 프레임의 BattleViewModel입니다.
+     * @returns {number} HP 바 중심 Y 좌표입니다.
+     * @private
+     */
+    #resolveWorldHpY(point, animation, baseScale, fallbackY, width, frame) {
+        const geometry = this.#resolveSpriteGeometry(point, animation, baseScale, frame);
+        if (!geometry) {
+            return fallbackY;
+        }
+        const visualTopInsetRatio = clampBattleViewNumber(
+            animation.visualTopInsetRatio,
+            0,
+            0.95
+        );
+        const visualTopY = geometry.y + (geometry.height * visualTopInsetRatio);
+        return visualTopY - this.#getWorldHpHeight(width);
     }
 
     /** @param {object} animation @returns {number} 누락 시트의 의미 동작 스케일입니다. @private */
@@ -270,7 +346,7 @@ export class TutorialBattleActorView {
             && Number.isFinite(Number(pendingHp))
             ? clampBattleViewNumber(Number(pendingHp) / Math.max(1, Number(maxHp)), 0, 1)
             : ratio;
-        const height = Math.max(2, width * 0.09);
+        const height = this.#getWorldHpHeight(width);
         this.#renderPort.renderGL('object', {
             shape: 'rect', x, y, w: width, h: height,
             fill: colors.UI.HpEmpty, alpha
@@ -301,6 +377,11 @@ export class TutorialBattleActorView {
                 alpha
             });
         }
+    }
+
+    /** @param {number} width @returns {number} 월드 HP 바 높이입니다. @private */
+    #getWorldHpHeight(width) {
+        return Math.max(2, width * 0.09);
     }
 
     /** @private */

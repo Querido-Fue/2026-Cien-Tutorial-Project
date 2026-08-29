@@ -55,6 +55,7 @@ test('걷기 루프는 델타로 진행하고 지정 프레임에서 발걸음�
     }]);
     assert.equal(animator.getSnapshot().player.animationId, 'walk');
     assert.equal(animator.getSnapshot().player.facing, 'right');
+    assert.equal(animator.getSnapshot().player.visualTopInsetRatio, 0.125);
 
     animator.update(0.13);
     assert.equal(animator.getSnapshot().player.frameIndex, 1);

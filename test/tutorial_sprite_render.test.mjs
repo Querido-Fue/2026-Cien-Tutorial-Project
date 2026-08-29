@@ -83,4 +83,133 @@ test('배우 뷰는 정수 좌표·nearest·발 앵커를 유지하며 다중 �
         [{ x: 80, y: 65, w: 40, h: 40 }, { x: 80, y: 65, w: 40, h: 40 }]
     );
     assert.ok(Math.abs((images[0].y + (images[0].h * animation.anchor.y)) - 100) <= 1);
+    const hpBar = commands.find(
+        (command) => command.shape === 'rect' && command.fill === '#000'
+    );
+    assert.ok(
+        hpBar.y + (hpBar.h * 0.5) < images[0].y,
+        '플레이어 HP 바는 실제 스프라이트 머리 위에 있어야 합니다.'
+    );
+});
+
+test('월드 HP 바는 캐릭터별 스프라이트 크기와 발 앵커에 맞춰 머리 위에 놓인다', () => {
+    const image = { width: 256, height: 256 };
+    const cases = [
+        {
+            type: 'player',
+            actor: { hp: 100, maxHp: 100 },
+            animationKey: 'player',
+            animation: {
+                scaleTileRatio: 1.6,
+                anchor: { x: 0.5, y: 0.92 },
+                visualTopInsetRatio: 0.125
+            }
+        },
+        {
+            type: 'lora',
+            actor: { x: 0, y: 0, hp: 100, maxHp: 100, alive: true },
+            animationKey: 'lora',
+            animation: {
+                scaleTileRatio: 1.2,
+                anchor: { x: 0.5, y: 0.84 },
+                visualTopInsetRatio: 0.257
+            }
+        },
+        {
+            type: 'mob',
+            actor: { id: 'slime', x: 0, y: 0, hp: 100, maxHp: 100 },
+            animationKey: 'slime',
+            animation: {
+                scaleTileRatio: 0.8,
+                anchor: { x: 0.5, y: 0.68 },
+                visualTopInsetRatio: 0.66
+            }
+        }
+    ];
+
+    for (const actorCase of cases) {
+        const commands = [];
+        const animation = {
+            assetId: `sprite.${actorCase.type}`,
+            layers: [{ x: 0, y: 0, w: 32, h: 32 }],
+            logicalSize: { width: 32, height: 32 },
+            progress: 0,
+            visible: true,
+            ...actorCase.animation
+        };
+        const view = new TutorialBattleActorView({
+            renderGL(layer, options) {
+                commands.push({ layer, ...options });
+            },
+            render() {}
+        }, {
+            getImage: () => image
+        });
+        const frame = {
+            fonts: { HEADING: '16px sans-serif' },
+            colors: {
+                Entity: {
+                    Shadow: '#shadow', PlayerDark: '#player-dark',
+                    Player: '#player', PlayerAccent: '#player-accent',
+                    LoraDark: '#lora-dark', Lora: '#lora',
+                    LoraAccent: '#lora-accent', LoraHair: '#lora-hair',
+                    MobDark: '#mob-dark', Mob: '#mob'
+                },
+                Effects: { Stabilize: '#stabilize' },
+                UI: {
+                    HpEmpty: '#hp-empty', HpFull: '#hp-full',
+                    Success: '#success', Danger: '#danger', Text: '#text'
+                }
+            },
+            layout: {
+                isoOriginX: 100,
+                isoOriginY: 100,
+                tileWidth: 64,
+                tileHeight: 32,
+                tileElevation: 0,
+                tileSide: 40,
+                heights: [[0]],
+                shake: { x: 0, y: 0 }
+            },
+            world: {
+                presentation: {
+                    playerX: 0, playerY: 0, playerAlpha: 1,
+                    playerScale: 1, playerHp: 100, loraHp: 100,
+                    actionPulse: 0
+                },
+                spriteAnimations: { [actorCase.animationKey]: animation },
+                feedback: { flashSeconds: 0, stabilizeSeconds: 0 },
+                config: {
+                    actionPlayerScale: 0.04,
+                    actionLoraScale: 0.04,
+                    shadowOffsetRatio: 0.08,
+                    loraSprite: {
+                        BASE_SIZE_TILE_RATIO: 0.8,
+                        FLASH_GLOW_SIZE_RATIO: 1.12,
+                        FLASH_GLOW_ALPHA: 0.2
+                    }
+                },
+                readability: {}
+            }
+        };
+
+        view.draw(actorCase.type, actorCase.actor, frame);
+        const sprite = commands.find((command) => command.image === image);
+        const hpBar = commands.find(
+            (command) => command.shape === 'rect' && command.fill === '#hp-empty'
+        );
+        assert.ok(sprite, `${actorCase.type} 스프라이트가 그려져야 합니다.`);
+        assert.ok(hpBar, `${actorCase.type} HP 바가 그려져야 합니다.`);
+        const visualTopY = sprite.y
+            + (sprite.h * animation.visualTopInsetRatio);
+        const hpBarBottom = hpBar.y + (hpBar.h * 0.5);
+        assert.ok(
+            hpBarBottom < visualTopY,
+            `${actorCase.type} HP 바가 머리와 겹치지 않아야 합니다.`
+        );
+        assert.ok(
+            visualTopY - hpBarBottom <= hpBar.h,
+            `${actorCase.type} HP 바가 머리에서 과도하게 떨어지지 않아야 합니다.`
+        );
+    }
 });

@@ -55,6 +55,9 @@ export class TutorialSpriteClipResolver {
             logicalSize: requested.logicalSize || resolved.logicalSize,
             anchor: requested.anchor || resolved.anchor,
             scaleTileRatio: requested.scaleTileRatio || resolved.scaleTileRatio,
+            visualTopInsetRatio: requested.visualTopInsetRatio
+                ?? resolved.visualTopInsetRatio
+                ?? 0,
             fallbackUsed,
             fallbackEffect: fallbackUsed ? requested.fallbackEffect : null,
             terminal: requested.terminal,
