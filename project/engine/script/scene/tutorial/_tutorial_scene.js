@@ -27,6 +27,7 @@ import {
 import { TutorialBattleModel } from './_tutorial_battle_model.js';
 import { TutorialAchievementEvaluator } from './_tutorial_achievement_evaluator.js';
 import { TutorialBattleFocusController } from './_tutorial_battle_focus_controller.js';
+import { TutorialBattleCamera } from './_tutorial_battle_camera.js';
 import { TutorialCombatReadabilityPresenter } from './_tutorial_combat_readability_presenter.js';
 import { TutorialCutsceneController } from './_tutorial_cutscene_controller.js';
 import { TutorialCutsceneTriggerRouter } from './_tutorial_cutscene_trigger_router.js';
@@ -204,9 +205,13 @@ export class TutorialScene extends BaseScene {
             map: this.data.MAP,
             floors: this.data.FLOORS,
             mapArtwork: TUTORIAL_ASSET_MANIFEST.MAPS,
+            camera: this.data.LAYOUT.CAMERA,
             board: this.data.LAYOUT.BOARD,
             hud: this.data.LAYOUT.HUD,
             shakeTileRatio: this.data.ANIMATION.SHAKE_TILE_RATIO
+        });
+        this.battleCamera = new TutorialBattleCamera({
+            durationSeconds: this.data.ANIMATION.CAMERA_FOLLOW_SECONDS
         });
         this.buttonHost = new TutorialButtonHost({
             parent: this,
@@ -337,6 +342,7 @@ export class TutorialScene extends BaseScene {
             this.#captureKeyboardLatch();
             return;
         }
+        this.#updateBattleCamera(deltaSeconds);
         this.#updatePointerState();
         this.#handlePointerInput();
         this.#updateLoraTurn(deltaSeconds);
@@ -545,6 +551,7 @@ export class TutorialScene extends BaseScene {
         this.destroyed = true;
         this.timelineRevision += 1;
         this.presentationTimeline.destroy();
+        this.battleCamera.destroy();
         this.spriteCueRouter.destroy();
         this.assetLoader.destroy();
         this.feedbackQueue.destroy();
@@ -708,6 +715,7 @@ export class TutorialScene extends BaseScene {
         this.#commitStagedMeta();
         this.timelineRevision += 1;
         this.presentationTimeline.cancel();
+        this.battleCamera.clear();
         this.spriteCueRouter.reset();
         this.audioDirector.resetTransient();
         this.cutscenes.close();
@@ -799,6 +807,11 @@ export class TutorialScene extends BaseScene {
             attackProgress: 1,
             menuSelectionProgress: 1,
             actionPulse: 0
+        });
+        this.battleCamera.reset({
+            x: Number(this.model.player?.x) || 0,
+            y: Number(this.model.player?.y) || 0,
+            floorIndex: Number(this.model.floorIndex) || 0
         });
         this.hoveredTileKey = '';
         this.#resetPlannedPath();
@@ -2205,6 +2218,7 @@ export class TutorialScene extends BaseScene {
     #createBattleLayoutFrame(floor = this.#getCurrentFloor()) {
         return this.battleLayout.createFrame({
             floor,
+            camera: this.battleCamera.getSnapshot(),
             elapsedSeconds: this.elapsedSeconds,
             screenShakeSeconds: this.feedbackQueue.getScreenShakeSeconds()
         });
@@ -2914,17 +2928,41 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
+     * 플레이어의 보간된 표시 좌표를 독립 카메라가 추적하도록 갱신합니다.
+     * @param {number} deltaSeconds - 현재 가변 프레임 델타입니다.
+     * @private
+     */
+    #updateBattleCamera(deltaSeconds) {
+        if (this.mode !== MODES.BATTLE || !this.model) {
+            return;
+        }
+        const presentation = this.presentationTimeline.getState();
+        this.battleCamera.update({
+            target: {
+                x: presentation.playerX,
+                y: presentation.playerY
+            },
+            floorIndex: presentation.floorIndex,
+            deltaSeconds
+        });
+    }
+
+    /**
      * 공통 전체 화면 배경을 그립니다.
      * @private
      */
     #drawBackdrop() {
+        const view = getTutorialModePolicy(this.mode)?.view;
+        const fill = view === 'battle' || view === 'pause'
+            ? ColorSchemes.Tactics.WorldBackdrop
+            : ColorSchemes.Tactics.Backdrop;
         renderGL('background', {
             shape: 'rect',
             x: this.WW * 0.5,
             y: this.WH * 0.5,
             w: this.WW,
             h: this.WH,
-            fill: ColorSchemes.Tactics.Backdrop
+            fill
         });
     }
 

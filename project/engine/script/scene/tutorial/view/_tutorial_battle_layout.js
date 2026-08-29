@@ -38,6 +38,12 @@ export class TutorialBattleLayout {
             w: Math.round(uww(boardLayout.MAX_WIDTH_UIWW)),
             h: Math.round(uwh(boardLayout.MAX_HEIGHT_WH))
         });
+        const worldRect = Object.freeze({
+            x: 0,
+            y: 0,
+            w: Math.max(1, Math.round(safeViewport.WW)),
+            h: Math.max(1, Math.round(safeViewport.WH))
+        });
         const minBoardSide = Math.min(boardRect.w, boardRect.h);
         const boardPadding = Math.min(
             Math.max(4, minBoardSide * boardLayout.FRAME_PADDING_RATIO),
@@ -89,6 +95,7 @@ export class TutorialBattleLayout {
             mapWidth,
             mapHeight,
             boardRect,
+            worldRect,
             boardPadding,
             gridRect,
             tileWidth,
@@ -111,7 +118,12 @@ export class TutorialBattleLayout {
      * @param {object} options - 현재 층과 피드백 시간입니다.
      * @returns {object} 한 프레임에서 공유할 투영 레이아웃입니다.
      */
-    createFrame({ floor, elapsedSeconds = 0, screenShakeSeconds = 0 } = {}) {
+    createFrame({
+        floor,
+        camera = null,
+        elapsedSeconds = 0,
+        screenShakeSeconds = 0
+    } = {}) {
         if (!this.#geometry) {
             throw new Error('TutorialBattleLayout.resize()를 먼저 호출해야 합니다.');
         }
@@ -121,7 +133,7 @@ export class TutorialBattleLayout {
             x: Math.sin(Number(elapsedSeconds) * 74) * this.#geometry.tileSide * ratio,
             y: Math.cos(Number(elapsedSeconds) * 61) * this.#geometry.tileSide * ratio
         } : { x: 0, y: 0 });
-        const artworkProjection = this.#createArtworkProjection(floor?.id);
+        const artworkProjection = this.#createArtworkProjection(floor?.id, camera);
         return Object.freeze({
             ...this.#geometry,
             ...(artworkProjection || {}),
@@ -264,12 +276,13 @@ export class TutorialBattleLayout {
     }
 
     /**
-     * 원본 맵 이미지의 네 격자 꼭짓점을 현재 보드 사각형으로 비율 유지 투영합니다.
+     * 실제 격자의 좌우 폭을 월드 뷰포트에 맞추고 카메라 초점을 적용합니다.
      * @param {string} floorId - 표시할 층 ID입니다.
+     * @param {object|null} camera - 추적 중인 타일 좌표입니다.
      * @returns {object|null} 맵 이미지와 타일 축을 공유하는 투영값입니다.
      * @private
      */
-    #createArtworkProjection(floorId) {
+    #createArtworkProjection(floorId, camera) {
         const profile = this.#config.mapArtwork?.[floorId];
         const sourceWidth = Number(profile?.sourceDimensions?.width);
         const sourceHeight = Number(profile?.sourceDimensions?.height);
@@ -278,16 +291,18 @@ export class TutorialBattleLayout {
             || !quad?.top || !quad?.right || !quad?.bottom || !quad?.left) {
             return null;
         }
-        const boardRect = this.#geometry.boardRect;
-        const scale = Math.min(boardRect.w / sourceWidth, boardRect.h / sourceHeight);
+        const worldRect = this.#geometry.worldRect;
+        const quadPoints = [quad.top, quad.right, quad.bottom, quad.left];
+        const gridMinX = Math.min(...quadPoints.map((point) => Number(point.x)));
+        const gridMaxX = Math.max(...quadPoints.map((point) => Number(point.x)));
+        const sourceGridWidth = Math.max(1, gridMaxX - gridMinX);
+        const viewportRatio = Math.max(
+            0.01,
+            Number(this.#config.camera?.GRID_WIDTH_VIEWPORT_RATIO) || 1
+        );
+        const scale = (worldRect.w * viewportRatio) / sourceGridWidth;
         const imageW = Math.max(1, Math.round(sourceWidth * scale));
         const imageH = Math.max(1, Math.round(sourceHeight * scale));
-        const mapImageRect = Object.freeze({
-            x: Math.round(boardRect.x + ((boardRect.w - imageW) * 0.5)),
-            y: Math.round(boardRect.y + ((boardRect.h - imageH) * 0.5)),
-            w: imageW,
-            h: imageH
-        });
         const scaleX = imageW / sourceWidth;
         const scaleY = imageH / sourceHeight;
         const mapWidth = this.#geometry.mapWidth;
@@ -316,6 +331,46 @@ export class TutorialBattleLayout {
             x: quad.top.x + (sourceAxisX.x * 0.5) + (sourceAxisY.x * 0.5),
             y: quad.top.y + (sourceAxisX.y * 0.5) + (sourceAxisY.y * 0.5)
         };
+        const hasCamera = camera?.initialized !== false
+            && Number.isFinite(Number(camera?.x))
+            && Number.isFinite(Number(camera?.y));
+        const focusSource = hasCamera ? {
+            x: originSource.x
+                + (Number(camera.x) * sourceAxisX.x)
+                + (Number(camera.y) * sourceAxisY.x),
+            y: originSource.y
+                + (Number(camera.x) * sourceAxisX.y)
+                + (Number(camera.y) * sourceAxisY.y)
+        } : {
+            x: quadPoints.reduce((sum, point) => sum + Number(point.x), 0) / 4,
+            y: quadPoints.reduce((sum, point) => sum + Number(point.y), 0) / 4
+        };
+        const focusXRatio = Number.isFinite(Number(this.#config.camera?.FOCUS_X_RATIO))
+            ? Number(this.#config.camera.FOCUS_X_RATIO)
+            : 0.5;
+        const focusYRatio = Number.isFinite(Number(this.#config.camera?.FOCUS_Y_RATIO))
+            ? Number(this.#config.camera.FOCUS_Y_RATIO)
+            : 0.5;
+        const desiredImageX = worldRect.x + (worldRect.w * focusXRatio)
+            - (focusSource.x * scaleX);
+        const desiredImageY = worldRect.y + (worldRect.h * focusYRatio)
+            - (focusSource.y * scaleY);
+        const mapImageRect = Object.freeze({
+            x: Math.round(this.#constrainImageOffset(
+                desiredImageX,
+                imageW,
+                worldRect.x,
+                worldRect.w
+            )),
+            y: Math.round(this.#constrainImageOffset(
+                desiredImageY,
+                imageH,
+                worldRect.y,
+                worldRect.h
+            )),
+            w: imageW,
+            h: imageH
+        });
         const tileWidth = Math.max(2, Math.abs(gridAxisX.x - gridAxisY.x));
         const tileHeight = Math.max(2, Math.abs(gridAxisX.y + gridAxisY.y));
         const entityRatio = Number(this.#config.board.ENTITY_SCALE_RATIO) || 0.64;
@@ -332,5 +387,22 @@ export class TutorialBattleLayout {
             isoOriginX: mapImageRect.x + (originSource.x * scaleX),
             isoOriginY: mapImageRect.y + (originSource.y * scaleY)
         });
+    }
+
+    /**
+     * 확대된 맵이 뷰포트보다 크면 빈 배경이 드러나지 않는 범위로 이동을 제한합니다.
+     * @param {number} desired - 카메라가 요청한 이미지 시작 좌표입니다.
+     * @param {number} imageSize - 이미지 렌더 크기입니다.
+     * @param {number} viewportStart - 월드 뷰포트 시작 좌표입니다.
+     * @param {number} viewportSize - 월드 뷰포트 크기입니다.
+     * @returns {number} 제한된 이미지 시작 좌표입니다.
+     * @private
+     */
+    #constrainImageOffset(desired, imageSize, viewportStart, viewportSize) {
+        if (imageSize <= viewportSize) {
+            return viewportStart + ((viewportSize - imageSize) * 0.5);
+        }
+        const minimum = viewportStart + viewportSize - imageSize;
+        return Math.min(viewportStart, Math.max(minimum, desired));
     }
 }

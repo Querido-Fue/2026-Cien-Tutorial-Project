@@ -627,6 +627,11 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         }
     },
     LAYOUT: {
+        CAMERA: {
+            GRID_WIDTH_VIEWPORT_RATIO: 1,
+            FOCUS_X_RATIO: 0.5,
+            FOCUS_Y_RATIO: 0.5
+        },
         BOARD: {
             X_UIWW: 2.7,
             Y_WH: 2.5,
@@ -676,6 +681,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
     },
     ANIMATION: {
         EASING: 'easeOutExpo',
+        CAMERA_FOLLOW_SECONDS: 0.3,
         MOVE_SECONDS_PER_TILE: 0.18,
         ATTACK_SECONDS: 0.34,
         LORA_TURN_SECONDS: 1.15,

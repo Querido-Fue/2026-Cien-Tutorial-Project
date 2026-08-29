@@ -69,6 +69,7 @@ const LIGHT_OVERLAY_THEME = Object.freeze({
  */
 const LIGHT_TACTICS_THEME = Object.freeze({
     Backdrop: '#dce6ec',
+    WorldBackdrop: '#101010',
     BoardFrame: '#8fa5b5',
     Tile: Object.freeze({
         Low: '#c8d5de',
@@ -156,7 +157,7 @@ const LIGHT_VIGNETTE_THEME = Object.freeze({
  * 엔진 런타임에 적용되는 라이트 테마 설정 모음
  */
 export const LightTheme = Object.freeze({
-    Background: '#cececeff',
+    Background: '#101010',
     Cursor: Object.freeze({
         Fill: '#cccccc',
         Active: '#2d2d2d',

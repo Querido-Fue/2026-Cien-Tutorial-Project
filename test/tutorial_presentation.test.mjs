@@ -4,6 +4,7 @@ import test from 'node:test';
 
 import { TUTORIAL_GAME_DATA } from '../project/engine/script/data/game/tutorial_game_data.js';
 import { TutorialAnimationTimeline } from '../project/engine/script/scene/tutorial/_tutorial_animation_timeline.js';
+import { TutorialBattleCamera } from '../project/engine/script/scene/tutorial/_tutorial_battle_camera.js';
 import { TutorialAssetLoader } from '../project/engine/script/scene/tutorial/_tutorial_asset_loader.js';
 import { TutorialBattlePresenter } from '../project/engine/script/scene/tutorial/_tutorial_battle_presenter.js';
 import { TutorialFeedbackQueue } from '../project/engine/script/scene/tutorial/_tutorial_feedback_queue.js';
@@ -277,6 +278,33 @@ test('애니메이션 타임라인은 완료와 취소 경계에서 입력 잠�
     timeline.destroy();
 });
 
+test('전투 카메라는 0.3초 easeOutExpo 감쇠로 플레이어를 추적하고 층 전환에는 즉시 맞춘다', () => {
+    const camera = new TutorialBattleCamera({ durationSeconds: 0.3 });
+    camera.reset({ x: 4, y: 4, floorIndex: 0 });
+    const first = camera.update({
+        target: { x: 5, y: 4 },
+        floorIndex: 0,
+        deltaSeconds: 0.03
+    });
+    assert.ok(Math.abs(first.x - 4.5) < 0.000001);
+    const settled = camera.update({
+        target: { x: 5, y: 4 },
+        floorIndex: 0,
+        deltaSeconds: 0.27
+    });
+    assert.ok(Math.abs(settled.x - 5) < 0.001);
+    const nextFloor = camera.update({
+        target: { x: 2, y: 6 },
+        floorIndex: 1,
+        deltaSeconds: 0.01
+    });
+    assert.deepEqual(
+        { x: nextFloor.x, y: nextFloor.y, floorIndex: nextFloor.floorIndex },
+        { x: 2, y: 6, floorIndex: 1 }
+    );
+    camera.destroy();
+});
+
 test('프레젠터의 숫자 게이지 끝값은 타임라인까지 보존된다', async () => {
     let nextId = 0;
     const completions = [];
@@ -429,6 +457,7 @@ test('프레젠테이션 모듈은 장면·모델·저장·명령 큐를 역참�
         '_tutorial_battle_presenter.js',
         '_tutorial_feedback_queue.js',
         '_tutorial_animation_timeline.js',
+        '_tutorial_battle_camera.js',
         '_tutorial_asset_loader.js'
     ];
     const sources = await Promise.all(names.map((name) => readFile(new URL(

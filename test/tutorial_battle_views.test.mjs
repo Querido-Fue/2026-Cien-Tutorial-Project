@@ -4,6 +4,8 @@ import test from 'node:test';
 
 import { TUTORIAL_GAME_DATA } from '../project/engine/script/data/game/tutorial_game_data.js';
 import { TUTORIAL_ASSET_MANIFEST } from '../project/engine/script/data/game/tutorial_asset_manifest.js';
+import { DarkTheme } from '../project/engine/script/data/theme/dark_theme.js';
+import { LightTheme } from '../project/engine/script/data/theme/light_theme.js';
 import { TutorialBattleHudView } from '../project/engine/script/scene/tutorial/view/_tutorial_battle_hud_view.js';
 import { TutorialBattleLayout } from '../project/engine/script/scene/tutorial/view/_tutorial_battle_layout.js';
 import { TutorialBattleTutorialView } from '../project/engine/script/scene/tutorial/view/_tutorial_battle_tutorial_view.js';
@@ -42,6 +44,7 @@ function createLayout() {
         map: TUTORIAL_GAME_DATA.MAP,
         floors: TUTORIAL_GAME_DATA.FLOORS,
         mapArtwork: TUTORIAL_ASSET_MANIFEST.MAPS,
+        camera: TUTORIAL_GAME_DATA.LAYOUT.CAMERA,
         board: TUTORIAL_GAME_DATA.LAYOUT.BOARD,
         hud: TUTORIAL_GAME_DATA.LAYOUT.HUD,
         shakeTileRatio: TUTORIAL_GAME_DATA.ANIMATION.SHAKE_TILE_RATIO
@@ -93,6 +96,55 @@ test('타일 투영 중심은 같은 레이아웃의 히트테스트에서 원�
                 `${viewport.name} 투영과 히트테스트가 달라졌습니다.`
             );
         }
+    }
+});
+
+test('맵은 실제 격자 좌우 폭을 월드 뷰포트에 맞추고 카메라 이동에도 HUD를 고정한다', () => {
+    const layout = createLayout();
+    layout.resize(VIEWPORTS[0]);
+    const floor = TUTORIAL_GAME_DATA.FLOORS[0];
+    const centered = layout.createFrame({
+        floor,
+        camera: { x: 4, y: 4, floorIndex: 0, initialized: true }
+    });
+    const moved = layout.createFrame({
+        floor,
+        camera: { x: 5, y: 4, floorIndex: 0, initialized: true }
+    });
+    const profile = TUTORIAL_ASSET_MANIFEST.MAPS['first-floor'];
+    const quad = Object.values(profile.gridQuad);
+    const sourceGridWidth = Math.max(...quad.map(({ x }) => x))
+        - Math.min(...quad.map(({ x }) => x));
+    const renderedGridWidth = sourceGridWidth
+        * (centered.mapImageRect.w / profile.sourceDimensions.width);
+
+    assert.ok(Math.abs(renderedGridWidth - centered.worldRect.w) <= 1.5);
+    assert.equal(centered.mapImageRect.x <= centered.worldRect.x, true);
+    assert.equal(
+        centered.mapImageRect.x + centered.mapImageRect.w
+            >= centered.worldRect.x + centered.worldRect.w,
+        true
+    );
+    assert.equal(centered.mapImageRect.y <= centered.worldRect.y, true);
+    assert.equal(
+        centered.mapImageRect.y + centered.mapImageRect.h
+            >= centered.worldRect.y + centered.worldRect.h,
+        true
+    );
+    assert.equal(moved.mapImageRect.x < centered.mapImageRect.x, true);
+    assert.deepEqual(moved.hudRects, centered.hudRects);
+    const focused = TutorialBattleLayout.projectTile(moved, 5, 4);
+    assert.ok(Math.abs(focused.x - (moved.worldRect.w * 0.5)) <= 1);
+    assert.deepEqual(
+        TutorialBattleLayout.hitTestTile(moved, focused.x, focused.y),
+        { x: 5, y: 4 }
+    );
+});
+
+test('두 테마의 월드와 디스플레이 바깥 배경은 단일 #101010 색상을 사용한다', () => {
+    for (const theme of [LightTheme, DarkTheme]) {
+        assert.equal(theme.Background, '#101010');
+        assert.equal(theme.Tactics.WorldBackdrop, '#101010');
     }
 });
 

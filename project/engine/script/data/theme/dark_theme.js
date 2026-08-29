@@ -68,6 +68,7 @@ const DARK_OVERLAY_THEME = Object.freeze({
  */
 const DARK_TACTICS_THEME = Object.freeze({
     Backdrop: '#07111f',
+    WorldBackdrop: '#101010',
     BoardFrame: '#13283d',
     Tile: Object.freeze({
         Low: '#183047',
@@ -155,7 +156,7 @@ const DARK_VIGNETTE_THEME = Object.freeze({
  * 엔진 런타임에 적용되는 다크 테마 설정 모음
  */
 export const DarkTheme = Object.freeze({
-    Background: '#05030a',
+    Background: '#101010',
     Cursor: Object.freeze({
         Fill: '#404040',
         Active: '#d8dde6',
