@@ -56,7 +56,7 @@ export const TUTORIAL_SFX_ENTRIES = Object.freeze([
         TUTORIAL_SFX_IDS.LORA_HEAVY_BREATHING,
         'audio/special effects/lora_heavybreathing(불안정, 붕괴 상태).mp3',
         'lora-heavy-breathing',
-        { loop: true, polyphony: 1, cooldownSeconds: 0, defaultVolume: 0.62 }
+        { loop: true, polyphony: 1, cooldownSeconds: 0, defaultVolume: 0.31 }
     ),
     effect(TUTORIAL_SFX_IDS.SLIME_HURT, 'audio/special effects/slime_hurt.mp3', 'slime-hurt'),
     effect(TUTORIAL_SFX_IDS.ITEM_EQUIP, 'audio/special effects/itemequip.mp3', 'item-equip', {

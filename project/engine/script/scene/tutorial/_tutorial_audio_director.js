@@ -58,6 +58,7 @@ export class TutorialAudioDirector {
         const lora = state.lora || {};
         const shouldBreathe = state.mode === 'battle'
             && state.cutsceneOpen !== true
+            && Number(state.floorIndex) >= 1
             && Number(lora.hp) > 0
             && Number(lora.instability) >= this.#instabilityThreshold;
         if (shouldBreathe === this.#breathingActive) {

@@ -66,6 +66,10 @@ test('오디오 매니페스트는 버스 정책과 지하층 fallback을 완전
         const entry = TUTORIAL_AUDIO_MANIFEST.ENTRIES.find((candidate) => candidate.id === id);
         assert.ok(Math.abs(entry.defaultVolume - expectedVolume) < 0.0001, id);
     }
+    const breathing = TUTORIAL_AUDIO_MANIFEST.ENTRIES.find(
+        (entry) => entry.id === TUTORIAL_SFX_IDS.LORA_HEAVY_BREATHING
+    );
+    assert.equal(breathing.defaultVolume, 0.31);
 
     const cyclic = new AudioManifestResolver([
         { id: 'a', available: false, fallback: 'b' },
@@ -223,7 +227,11 @@ test('튜토리얼 오디오 디렉터는 화면 BGM·호흡 loop·UI 명령과 
         lora: { hp: 100, instability: 70 }
     });
     director.sync({ mode: 'battle', floorIndex: 0, lora: { hp: 100, instability: 70 } });
+    assert.equal(calls.filter(([type]) => type === 'loop').length, 0);
     director.sync({ mode: 'battle', floorIndex: 1, lora: { hp: 100, instability: 70 } });
+    assert.deepEqual(calls.filter(([type]) => type === 'loop'), [
+        ['loop', TUTORIAL_SFX_IDS.LORA_HEAVY_BREATHING]
+    ]);
     director.sync({ mode: 'battle', floorIndex: 1, lora: { hp: 100, instability: 60 } });
     director.sync({ mode: 'result', result: { endingId: 'true' } });
     director.sync({ mode: 'result', result: { endingId: 'special' } });
@@ -236,7 +244,6 @@ test('튜토리얼 오디오 디렉터는 화면 BGM·호흡 loop·UI 명령과 
         ['bgm', TUTORIAL_BGM_IDS.ENDING_SUBDUED],
         ['bgm', TUTORIAL_BGM_IDS.OPENING]
     ]);
-    assert.equal(calls.filter(([type]) => type === 'loop').length, 1);
     assert.equal(calls.some(([type, id]) => (
         type === 'stop' && id === TUTORIAL_SFX_IDS.LORA_HEAVY_BREATHING
     )), true);
