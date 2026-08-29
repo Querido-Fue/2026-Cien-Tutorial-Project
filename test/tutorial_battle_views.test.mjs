@@ -159,6 +159,98 @@ test('이동 미리보기는 맵 타일의 두 투영 축으로 계산한 네 �
     assert.notEqual(preview.vertices[0], preview.vertices[4]);
 });
 
+test('1층 양 끝 텔레포트는 장식 테두리가 아닌 실제 타일 중심에 놓인다', () => {
+    const layoutController = createLayout();
+    layoutController.resize(VIEWPORTS[0]);
+    const floor = {
+        ...TUTORIAL_GAME_DATA.FLOORS[0],
+        walls: [],
+        items: [],
+        eventTiles: [],
+        mobs: []
+    };
+    const layout = layoutController.createFrame({
+        floor,
+        elapsedSeconds: 0,
+        screenShakeSeconds: 0
+    });
+    const marker = { width: 59, height: 32 };
+    const commands = [];
+    const view = new TutorialBattleWorldView({
+        render(layer, command) {
+            commands.push({ layer, ...command });
+        },
+        renderGL(layer, command) {
+            commands.push({ layer, ...command });
+        },
+        measureText(text) {
+            return String(text).length * 8;
+        }
+    }, {
+        getMapArtwork() {
+            return { layers: [] };
+        },
+        getUiAsset(key) {
+            return key === 'teleportMarker' ? marker : null;
+        }
+    });
+    view.draw({
+        snapshot: { phase: 'move', floorIndex: 0, player: null, lora: null },
+        floor,
+        layout,
+        fonts: { SMALL: '12px sans-serif', HEADING: '18px sans-serif' },
+        colors: {
+            BoardFrame: '#frame',
+            Entity: {},
+            Tile: {},
+            UI: {}
+        },
+        world: {
+            presentation: { floorIndex: 0, pathProgress: 1 },
+            attackSelected: false,
+            cleanseSelected: false,
+            pathExtensions: [],
+            plannedPath: [],
+            hoveredTile: null,
+            readability: { loraIntent: { ok: false } },
+            floorActors: {},
+            itemMetadata: {},
+            elapsedSeconds: 0,
+            config: {}
+        }
+    });
+
+    const profile = TUTORIAL_ASSET_MANIFEST.MAPS['first-floor'];
+    const scaleX = layout.mapImageRect.w / profile.sourceDimensions.width;
+    const scaleY = layout.mapImageRect.h / profile.sourceDimensions.height;
+    const expectedSourceCenters = [
+        { x: 471, y: 160 },
+        { x: 577, y: 516 }
+    ];
+    const markerCommands = commands.filter((command) => command.image === marker);
+    assert.equal(markerCommands.length, 2);
+    floor.teleports.forEach((teleport, index) => {
+        const point = TutorialBattleLayout.projectTile(
+            layout,
+            teleport.x,
+            teleport.y
+        );
+        const expected = expectedSourceCenters[index];
+        assert.ok(Math.abs(
+            point.x - (layout.mapImageRect.x + (expected.x * scaleX))
+        ) < 0.001, `${teleport.id}의 X 중심이 실제 격자와 다릅니다.`);
+        assert.ok(Math.abs(
+            point.y - (layout.mapImageRect.y + (expected.y * scaleY))
+        ) < 0.001, `${teleport.id}의 Y 중심이 실제 격자와 다릅니다.`);
+        assert.ok(Math.abs(
+            markerCommands[index].x + (markerCommands[index].w * 0.5) - point.x
+        ) <= 0.75, `${teleport.id} 마법진의 X 중심이 타일과 다릅니다.`);
+        assert.ok(Math.abs(
+            markerCommands[index].y + (markerCommands[index].h * 0.5) - point.y
+        ) <= 0.75, `${teleport.id} 마법진의 Y 중심이 타일과 다릅니다.`);
+    });
+});
+
 test('연결된 벽은 공통 변을 빼고 실제 타일 외곽에 낮은 석조벽·가시 울타리를 그린다', () => {
     const layoutController = createLayout();
     layoutController.resize(VIEWPORTS[0]);

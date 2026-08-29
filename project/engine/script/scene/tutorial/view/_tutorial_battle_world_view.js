@@ -476,7 +476,7 @@ export class TutorialBattleWorldView {
             this.#renderPort.renderGL('object', {
                 image: marker,
                 x: Math.round(point.x - (width * 0.5)),
-                y: Math.round(point.y - (height * 0.58)),
+                y: Math.round(point.y - (height * 0.5)),
                 w: Math.round(width),
                 h: Math.round(height),
                 alpha: 0.94,

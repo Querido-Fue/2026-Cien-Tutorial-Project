@@ -68,10 +68,10 @@ export const TUTORIAL_MAP_ASSETS = Object.freeze({
         gridId: 'map.first-floor.grid',
         fullId: 'map.first-floor.full',
         gridQuad: Object.freeze({
-            top: Object.freeze({ x: 461, y: 133 }),
-            right: Object.freeze({ x: 927, y: 321 }),
-            bottom: Object.freeze({ x: 591, y: 544 }),
-            left: Object.freeze({ x: 120, y: 356 })
+            top: Object.freeze({ x: 467, y: 136 }),
+            right: Object.freeze({ x: 917, y: 316 }),
+            bottom: Object.freeze({ x: 581, y: 540 }),
+            left: Object.freeze({ x: 131, y: 360 })
         })
     }),
     basement: Object.freeze({
