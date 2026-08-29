@@ -5,6 +5,10 @@
  */
 export const TUTORIAL_CHANGELOG_CATALOG = Object.freeze([
     Object.freeze({
+        subject: 'refactor: separate tutorial keyboard commands and view models',
+        summary: '화면별 키 명령 해석과 비전투 표시 데이터 조립을 장면에서 분리했습니다.'
+    }),
+    Object.freeze({
         subject: 'refactor: extract tutorial input and meta sessions',
         summary: '키 입력 에지와 진행도 저장 책임을 튜토리얼 장면에서 분리했습니다.'
     }),

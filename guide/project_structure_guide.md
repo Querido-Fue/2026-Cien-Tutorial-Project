@@ -106,6 +106,8 @@
 | `script/scene/tutorial/_tutorial_meta_progress.js` | v5 `tutorialMeta`의 컷씬·업적·엔딩·기록 해금과 완료 횟수를 정규화하고 불변 갱신 함수·SaveSystem I/O를 제공하는 메타 진행도 모듈 |
 | `script/scene/tutorial/_tutorial_meta_session.js` | 장면 한 개의 메타 staging·진행 연산·순차 저장과 미래 버전 저장 차단 상태를 소유하는 클래스 |
 | `script/scene/tutorial/_tutorial_keyboard_edge_tracker.js` | 현재 키 상태와 프레임 사이 빠른 탭을 상승 에지로 정규화하는 입력 상태 클래스 |
+| `script/scene/tutorial/_tutorial_keyboard_command_mapper.js` | 읽기 전용 화면·선택 상태와 키 상승 에지를 시뮬레이션 명령 사양으로 변환하는 클래스 |
+| `script/scene/tutorial/_tutorial_nonbattle_view_model_factory.js` | 비전투·전투 안내 화면의 직렬화 가능한 표시 데이터를 조립하는 클래스 |
 | `script/scene/tutorial/_tutorial_scene_constants.js` | 씬 모드와 시뮬레이션 명령의 단일 상수 원본 |
 | `script/scene/tutorial/_tutorial_input_bindings.js` | 방향·선택·명령 키 코드와 감시 키 목록의 단일 원본 |
 | `script/scene/tutorial/_tutorial_value_utils.js` | 타일·목록·체크포인트 값 복제 및 직렬화 비교를 담당하는 순수 함수 |

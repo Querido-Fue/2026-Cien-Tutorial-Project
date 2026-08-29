@@ -85,4 +85,9 @@ export class TutorialKeyboardEdgeTracker {
     wasAnyPressed(codes) {
         return codes.some((code) => this.wasPressed(code));
     }
+
+    /** @returns {readonly string[]} 이번 프레임 상승 에지 키의 방어 복제본입니다. */
+    getPressedCodes() {
+        return Object.freeze([...this.frameKeyEdges]);
+    }
 }

@@ -46,9 +46,7 @@ import {
     TUTORIAL_MODES as MODES
 } from './_tutorial_scene_constants.js';
 import {
-    TUTORIAL_KEY_CODES as KEY_CODES,
     TUTORIAL_KEY_DIRECTIONS as KEY_DIRECTIONS,
-    TUTORIAL_SELECTION_KEY_CODES as SELECTION_KEY_CODES,
     TUTORIAL_WATCHED_KEY_CODES as WATCHED_KEY_CODES
 } from './_tutorial_input_bindings.js';
 import {
@@ -65,7 +63,9 @@ import {
     toTileKey
 } from './_tutorial_value_utils.js';
 import { TutorialKeyboardEdgeTracker } from './_tutorial_keyboard_edge_tracker.js';
+import { TutorialKeyboardCommandMapper } from './_tutorial_keyboard_command_mapper.js';
 import { TutorialMetaSession } from './_tutorial_meta_session.js';
+import { TutorialNonbattleViewModelFactory } from './_tutorial_nonbattle_view_model_factory.js';
 import { TutorialAnimationTimeline } from './_tutorial_animation_timeline.js';
 import { TutorialAchievementBanner } from './_tutorial_achievement_banner.js';
 import { TutorialAssetLoader } from './_tutorial_asset_loader.js';
@@ -135,6 +135,8 @@ export class TutorialScene extends BaseScene {
         this.floorView = null;
         this.floorActorView = null;
         this.metaSession = new TutorialMetaSession();
+        this.keyboardCommandMapper = new TutorialKeyboardCommandMapper();
+        this.nonbattleViewModels = new TutorialNonbattleViewModelFactory(this.data);
         this.cutscenes = new TutorialCutsceneController(this.data.CUTSCENES);
         const knownCutsceneIds = Object.values(this.data.CUTSCENES).map(
             (entry) => entry.id
@@ -364,17 +366,17 @@ export class TutorialScene extends BaseScene {
         if (this.#openNextRecordPopup()) {
             this.#ensureButtons();
             this.audioDirector.sync(this.#createAudioState());
-            this.#captureKeyboardLatch();
+            this.keyboardEdges.capture();
             return;
         }
-        this.#prepareKeyboardEdges();
+        this.keyboardEdges.prepare();
         this.#handleKeyboardInput();
         if (this.mode === MODES.PAUSE || this.mode === MODES.RECORD) {
             this.battleCameraController.primeWheelBaseline(
                 getMouseInput('wheel')
             );
             this.audioDirector.sync(this.#createAudioState());
-            this.#captureKeyboardLatch();
+            this.keyboardEdges.capture();
             return;
         }
         this.#updateBattleCamera(deltaSeconds);
@@ -388,7 +390,7 @@ export class TutorialScene extends BaseScene {
         this.achievementBanner.update(deltaSeconds);
         this.audioDirector.consume(this.feedbackQueue.drainAudioCues());
         this.audioDirector.sync(this.#createAudioState());
-        this.#captureKeyboardLatch();
+        this.keyboardEdges.capture();
     }
 
     /**
@@ -1795,213 +1797,22 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #handleKeyboardInput() {
-        if (this.mode === MODES.LOADING) {
-            return;
-        }
-        if (this.presentationTimeline.isLocked()) {
-            return;
-        }
-        if (this.cutscenes.isOpen()) {
-            if (this.#wasKeyPressed(KEY_CODES.CONFIRM)
-                || this.#wasKeyPressed(KEY_CODES.ALTERNATE_CONFIRM)) {
-                enqueueSimulationCommand({ type: COMMANDS.CUTSCENE_NEXT });
-            } else if (this.#wasKeyPressed(KEY_CODES.CANCEL)) {
-                enqueueSimulationCommand({ type: COMMANDS.CUTSCENE_CLOSE });
-            }
-            return;
-        }
-
-        if (this.mode === MODES.MENU) {
-            if (this.#wasKeyPressed(KEY_CODES.GALLERY)) {
-                enqueueSimulationCommand({ type: COMMANDS.OPEN_GALLERY });
-            } else if (this.#wasKeyPressed(KEY_CODES.CONFIRM)) {
-                enqueueSimulationCommand({ type: COMMANDS.START });
-            }
-            return;
-        }
-
-        if (this.mode === MODES.CHANGELOG) {
-            if (this.#wasAnyKeyPressed(SELECTION_KEY_CODES.PREVIOUS)) {
-                enqueueSimulationCommand({
-                    type: COMMANDS.CHANGELOG_SHIFT,
-                    payload: { delta: -1 }
-                });
-            } else if (this.#wasAnyKeyPressed(SELECTION_KEY_CODES.NEXT)) {
-                enqueueSimulationCommand({
-                    type: COMMANDS.CHANGELOG_SHIFT,
-                    payload: { delta: 1 }
-                });
-            } else if (this.#wasKeyPressed(KEY_CODES.CANCEL)) {
-                enqueueSimulationCommand({ type: COMMANDS.RETURN_MENU });
-            }
-            return;
-        }
-
-        if (this.mode === MODES.STARTER) {
-            if (this.#wasAnyKeyPressed(SELECTION_KEY_CODES.PREVIOUS)) {
-                enqueueSimulationCommand({
-                    type: COMMANDS.STARTER_SHIFT,
-                    payload: { delta: -1 }
-                });
-            } else if (this.#wasAnyKeyPressed(SELECTION_KEY_CODES.NEXT)) {
-                enqueueSimulationCommand({
-                    type: COMMANDS.STARTER_SHIFT,
-                    payload: { delta: 1 }
-                });
-            } else if (this.#wasKeyPressed(KEY_CODES.CONFIRM)) {
-                enqueueSimulationCommand({ type: COMMANDS.CHOOSE_STARTER });
-            } else if (this.#wasKeyPressed(KEY_CODES.CANCEL)) {
-                enqueueSimulationCommand({ type: COMMANDS.RETURN_MENU });
-            }
-            return;
-        }
-
-        if (this.mode === MODES.PAUSE) {
-            if (this.#wasKeyPressed(KEY_CODES.CANCEL)) {
-                enqueueSimulationCommand({ type: COMMANDS.RESUME });
-            } else if (this.#wasKeyPressed(KEY_CODES.RESTART)) {
-                enqueueSimulationCommand({ type: COMMANDS.RESTART });
-            } else if (this.#wasAnyKeyPressed(SELECTION_KEY_CODES.PREVIOUS)) {
-                enqueueSimulationCommand({
-                    type: COMMANDS.PAUSE_SHIFT,
-                    payload: { delta: -1 }
-                });
-            } else if (this.#wasAnyKeyPressed(SELECTION_KEY_CODES.NEXT)) {
-                enqueueSimulationCommand({
-                    type: COMMANDS.PAUSE_SHIFT,
-                    payload: { delta: 1 }
-                });
-            } else if (this.#wasKeyPressed(KEY_CODES.CONFIRM)
-                || this.#wasKeyPressed(KEY_CODES.ALTERNATE_CONFIRM)) {
-                enqueueSimulationCommand({
-                    type: [COMMANDS.RESUME, COMMANDS.RESTART, COMMANDS.RETURN_MENU][
-                        this.pauseIndex
-                    ]
-                });
-            }
-            return;
-        }
-
-        if (this.#isGalleryMode()) {
-            const direction = KEY_DIRECTIONS.find(
-                (entry) => this.#wasAnyKeyPressed(entry.codes)
-            );
-            if (direction?.y) {
-                enqueueSimulationCommand({
-                    type: COMMANDS.GALLERY_SECTION_SHIFT,
-                    payload: { delta: direction.y }
-                });
-            } else if (direction?.x) {
-                enqueueSimulationCommand({
-                    type: COMMANDS.GALLERY_SHIFT,
-                    payload: { delta: direction.x }
-                });
-            } else if (this.#wasKeyPressed(KEY_CODES.CONFIRM)) {
-                enqueueSimulationCommand({ type: COMMANDS.GALLERY_PLAY });
-            } else if (this.#wasKeyPressed(KEY_CODES.CANCEL)) {
-                enqueueSimulationCommand({
-                    type: this.mode === MODES.RECORD
-                        ? COMMANDS.CLOSE_RECORD
-                        : COMMANDS.RETURN_MENU
-                });
-            }
-            return;
-        }
-
-        if (this.mode === MODES.RESULT) {
-            if (this.#wasKeyPressed(KEY_CODES.RESTART)) {
-                enqueueSimulationCommand({ type: COMMANDS.RESTART });
-            } else if (this.#wasKeyPressed(KEY_CODES.CANCEL)) {
-                enqueueSimulationCommand({ type: COMMANDS.RETURN_MENU });
-            }
-            return;
-        }
-
-        if (this.mode !== MODES.BATTLE) {
-            return;
-        }
-        if (this.guidance.isOpen()) {
-            if (this.#wasKeyPressed(KEY_CODES.GUIDE)
-                || this.#wasKeyPressed(KEY_CODES.CONFIRM)
-                || this.#wasKeyPressed(KEY_CODES.CANCEL)) {
-                enqueueSimulationCommand({ type: COMMANDS.GUIDE_DISMISS });
-            }
-            return;
-        }
-        if (this.#wasKeyPressed(KEY_CODES.GUIDE)) {
-            enqueueSimulationCommand({ type: COMMANDS.GUIDE_SHOW });
-            return;
-        }
-        if (this.#wasKeyPressed(KEY_CODES.RESTART)) {
-            enqueueSimulationCommand({ type: COMMANDS.RESTART });
-            return;
-        }
-        if (this.#wasKeyPressed(KEY_CODES.CANCEL)) {
-            enqueueSimulationCommand({ type: COMMANDS.PAUSE });
-            return;
-        }
-        if (!this.#canAcceptBattleInput()) {
-            return;
-        }
-
-        if (this.#wasKeyPressed(KEY_CODES.PATH_BACK)) {
-            enqueueSimulationCommand({ type: COMMANDS.PLAN_BACK });
-            return;
-        }
-
-        const direction = KEY_DIRECTIONS.find((entry) => this.#wasAnyKeyPressed(entry.codes));
-        if (direction) {
-            enqueueSimulationCommand({
-                type: COMMANDS.PLAN_STEP,
-                payload: { x: direction.x, y: direction.y }
-            });
-            return;
-        }
-        if (this.#wasKeyPressed(KEY_CODES.TARGET_NEXT)
-            && (this.attackSelected || this.cleanseSelected)) {
-            enqueueSimulationCommand({
-                type: COMMANDS.PLAN_STEP,
-                payload: { x: 1, y: 0 }
-            });
-        } else if (this.#wasKeyPressed(KEY_CODES.TARGET_NEXT)) {
-            enqueueSimulationCommand({
-                type: COMMANDS.FOCUS_SHIFT,
-                payload: { delta: 1 }
-            });
-        } else if (this.#wasKeyPressed(KEY_CODES.CONFIRM)) {
-            if (this.cleanseSelected) {
-                const target = this.cleanseTargets[this.cleanseTargetIndex];
-                enqueueSimulationCommand({
-                    type: COMMANDS.CLEANSE_EVENT_TILE,
-                    payload: target
-                });
-            } else if (this.attackSelected) {
-                enqueueSimulationCommand({
-                    type: COMMANDS.ATTACK,
-                    payload: { targetId: this.actionTargets[this.targetIndex]?.id }
-                });
-            } else if (this.model.phase === 'action'
-                && this.#queueFocusedBattleControl()) {
-                return;
-            } else if (this.model.phase === 'move') {
-                enqueueSimulationCommand({ type: COMMANDS.COMMIT_PATH });
-            }
-        } else if (this.#wasKeyPressed(KEY_CODES.ACTION_MELEE)) {
-            enqueueSimulationCommand({
-                type: COMMANDS.SELECT_ATTACK,
-                payload: { weapon: 'melee' }
-            });
-        } else if (this.#wasKeyPressed(KEY_CODES.ACTION_RANGED)) {
-            enqueueSimulationCommand({
-                type: COMMANDS.SELECT_ATTACK,
-                payload: { weapon: 'bow' }
-            });
-        } else if (this.#wasKeyPressed(KEY_CODES.ACTION_HEAL)) {
-            enqueueSimulationCommand({ type: COMMANDS.HEAL });
-        } else if (this.#wasKeyPressed(KEY_CODES.ACTION_IDLE)) {
-            enqueueSimulationCommand({ type: COMMANDS.IDLE });
-        } else if (this.#wasKeyPressed(KEY_CODES.ALTERNATE_CONFIRM)) {
-            enqueueSimulationCommand({ type: COMMANDS.IDLE });
+        const command = this.keyboardCommandMapper.map({
+            mode: this.mode,
+            presentationLocked: this.presentationTimeline.isLocked(),
+            cutsceneOpen: this.cutscenes.isOpen(),
+            guidanceOpen: this.guidance.isOpen(),
+            pauseIndex: this.pauseIndex,
+            canAcceptBattleInput: this.#canAcceptBattleInput(),
+            attackSelected: this.attackSelected,
+            cleanseSelected: this.cleanseSelected,
+            selectedCleanseTarget: this.cleanseTargets[this.cleanseTargetIndex],
+            selectedAttackTargetId: this.actionTargets[this.targetIndex]?.id,
+            modelPhase: this.model?.phase,
+            focusedBattleCommand: this.#createFocusedBattleCommand()
+        }, this.keyboardEdges.getPressedCodes());
+        if (command?.type) {
+            enqueueSimulationCommand(command);
         }
     }
 
@@ -2123,41 +1934,6 @@ export class TutorialScene extends BaseScene {
         enqueueSimulationCommand({ type, payload });
     }
 
-    /**
-     * 키 하나가 이번 프레임에 눌렸는지 확인합니다.
-     * @param {string} code - KeyboardEvent.code 값입니다.
-     * @returns {boolean} 눌림 여부입니다.
-     * @private
-     */
-    #wasKeyPressed(code) {
-        return this.keyboardEdges.wasPressed(code);
-    }
-
-    /**
-     * 후보 키 중 하나가 이번 프레임에 눌렸는지 확인합니다.
-     * @param {readonly string[]} codes - 키 후보입니다.
-     * @returns {boolean} 눌림 여부입니다.
-     * @private
-     */
-    #wasAnyKeyPressed(codes) {
-        return this.keyboardEdges.wasAnyPressed(codes);
-    }
-
-    /**
-     * 현재 눌림과 빠른 탭을 상승 에지 집합으로 합칩니다.
-     * @private
-     */
-    #prepareKeyboardEdges() {
-        this.keyboardEdges.prepare();
-    }
-
-    /**
-     * 다음 프레임을 위해 현재 키 상태를 저장합니다.
-     * @private
-     */
-    #captureKeyboardLatch() {
-        this.keyboardEdges.capture();
-    }
 
     /**
      * 비전투 뷰가 공유하는 직렬화 가능 표시 프레임을 만듭니다.
@@ -2181,93 +1957,84 @@ export class TutorialScene extends BaseScene {
 
     /** @returns {object} 로딩 뷰 모델입니다. @private */
     #createLoadingViewModel() {
-        return Object.freeze({
-            ...this.#createNonbattleViewFrame(),
-            message: '진행도 불러오는 중…'
-        });
+        return this.nonbattleViewModels.createLoading(
+            this.#createNonbattleViewFrame()
+        );
     }
 
     /** @returns {object} 메인 메뉴 뷰 모델입니다. @private */
     #createMenuViewModel() {
-        return Object.freeze({
-            ...this.#createNonbattleViewFrame(),
-            title: this.data.TEXT.TITLE,
-            subtitle: this.data.TEXT.SUBTITLE,
-            playCount: Number(this.meta?.playCount) || 0,
-            canContinue: false,
-            releaseVersion: this.releaseInfo.version
-        });
+        return this.nonbattleViewModels.createMenu(
+            this.#createNonbattleViewFrame(),
+            {
+                meta: this.meta,
+                releaseVersion: this.releaseInfo.version
+            }
+        );
     }
 
     /** @returns {object} 현재 배포와 Git 변경 기록 뷰 모델입니다. @private */
     #createChangelogViewModel() {
-        return Object.freeze({
-            ...this.#createNonbattleViewFrame(),
-            version: this.releaseInfo.version,
-            entries: this.releaseInfo.changelog,
-            page: this.changelogPage
-        });
+        return this.nonbattleViewModels.createChangelog(
+            this.#createNonbattleViewFrame(),
+            { releaseInfo: this.releaseInfo, page: this.changelogPage }
+        );
     }
 
     /** @returns {object} 스타터 선택 뷰 모델입니다. @private */
     #createStarterViewModel() {
-        return Object.freeze({
-            ...this.#createNonbattleViewFrame(),
-            choices: Object.freeze(this.data.STARTER_CHOICES.map((choice) => Object.freeze({
-                id: choice.id,
-                label: choice.label,
-                description: choice.description
-            }))),
-            selectedIndex: this.starterIndex,
-            selectionProgress: Number(
-                this.presentationTimeline.getState().menuSelectionProgress
-            ) || 0,
-            selectionMinScale: Number(this.data.ANIMATION.SELECTION_MIN_SCALE) || 0.72
-        });
+        return this.nonbattleViewModels.createStarter(
+            this.#createNonbattleViewFrame(),
+            {
+                selectedIndex: this.starterIndex,
+                selectionProgress:
+                    this.presentationTimeline.getState().menuSelectionProgress
+            }
+        );
     }
 
     /** @returns {object} Pause 오버레이 뷰 모델입니다. @private */
     #createPauseViewModel() {
-        return Object.freeze({
-            ...this.#createNonbattleViewFrame(),
-            selectedIndex: this.pauseIndex
-        });
+        return this.nonbattleViewModels.createPause(
+            this.#createNonbattleViewFrame(),
+            this.pauseIndex
+        );
     }
 
     /** @returns {object} 갤러리 뷰 모델입니다. @private */
     #createGalleryViewModel() {
-        const gallery = this.galleryController.getSnapshot(this.meta);
-        return Object.freeze({
-            ...this.#createNonbattleViewFrame(),
-            ...gallery,
-            closeCommandType: this.mode === MODES.RECORD
-                ? COMMANDS.CLOSE_RECORD
-                : COMMANDS.RETURN_MENU,
-            recordPopup: this.mode === MODES.RECORD,
-            selectionProgress: Number(
-                this.presentationTimeline.getState().menuSelectionProgress
-            ) || 0,
-            selectionMinScale: Number(this.data.ANIMATION.SELECTION_MIN_SCALE) || 0.72
-        });
+        return this.nonbattleViewModels.createGallery(
+            this.#createNonbattleViewFrame(),
+            {
+                gallery: this.galleryController.getSnapshot(this.meta),
+                mode: this.mode,
+                selectionProgress:
+                    this.presentationTimeline.getState().menuSelectionProgress
+            }
+        );
     }
 
     /** @returns {object} 결과 뷰 모델입니다. @private */
     #createResultViewModel() {
-        return Object.freeze({
-            ...this.#createNonbattleViewFrame(),
-            result: Object.freeze({ ...(this.resultData || {}) }),
-            presentationLocked: this.presentationTimeline.isLocked()
-        });
+        return this.nonbattleViewModels.createResult(
+            this.#createNonbattleViewFrame(),
+            {
+                result: this.resultData,
+                presentationLocked: this.presentationTimeline.isLocked()
+            }
+        );
     }
 
     /** @returns {object} 컷씬 카드 뷰 모델입니다. @private */
     #createCutsceneViewModel() {
-        return Object.freeze({
-            ...this.#createNonbattleViewFrame(),
-            state: Object.freeze({ ...this.cutscenes.getState() }),
-            card: Object.freeze({ ...(this.cutscenes.getCurrentCard() || {}) }),
-            presentationLocked: this.presentationTimeline.isLocked()
-        });
+        return this.nonbattleViewModels.createCutscene(
+            this.#createNonbattleViewFrame(),
+            {
+                state: this.cutscenes.getState(),
+                card: this.cutscenes.getCurrentCard(),
+                presentationLocked: this.presentationTimeline.isLocked()
+            }
+        );
     }
 
     /**
@@ -2555,23 +2322,10 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #createBattleTutorialViewModel(battleViewModel) {
-        if (!battleViewModel) {
-            return null;
-        }
-        const copy = this.data.TEXT.TUTORIAL_GUIDE;
-        return Object.freeze({
-            open: this.guidance.isOpen(),
-            viewport: battleViewModel.viewport,
-            layout: battleViewModel.layout,
-            fonts: battleViewModel.fonts,
-            colors: battleViewModel.colors,
-            modal: Object.freeze({ ...this.data.LAYOUT.MODAL }),
-            copy: Object.freeze({
-                title: copy.TITLE,
-                sentences: Object.freeze([...copy.SENTENCES]),
-                replay: copy.REPLAY
-            })
-        });
+        return this.nonbattleViewModels.createBattleTutorial(
+            battleViewModel,
+            this.guidance.isOpen()
+        );
     }
 
     /**
@@ -2853,42 +2607,39 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * 행동 단계에서 현재 키보드 포커스의 버튼 명령을 큐에 넣습니다.
-     * @returns {boolean} 포커스가 전투 조사 항목이었는지 여부입니다.
+     * 현재 전투 조사 포커스를 부작용 없는 명령 사양으로 변환합니다.
+     * @returns {object|null} 실행할 명령 또는 null입니다.
      * @private
      */
-    #queueFocusedBattleControl() {
+    #createFocusedBattleCommand() {
         const key = this.battleFocus.getFocusedKey();
         if (!key) {
-            return false;
+            return null;
         }
         if (key === 'battle-melee' || key === 'battle-ranged') {
-            enqueueSimulationCommand({
+            return {
                 type: COMMANDS.SELECT_ATTACK,
                 payload: { weapon: key === 'battle-ranged' ? 'bow' : 'melee' }
-            });
-            return true;
+            };
         }
         if (key === 'battle-heal') {
-            enqueueSimulationCommand({ type: COMMANDS.HEAL });
-            return true;
+            return { type: COMMANDS.HEAL };
         }
         if (key === 'battle-idle') {
-            enqueueSimulationCommand({ type: COMMANDS.IDLE });
-            return true;
+            return { type: COMMANDS.IDLE };
         }
         if (key.startsWith('item-')) {
             const itemId = key.slice('item-'.length);
             const item = this.data.ITEMS[itemId];
             if (item && item.movementConsumable !== true && this.#isItemUsable(itemId)) {
-                enqueueSimulationCommand({
+                return {
                     type: COMMANDS.USE_ITEM,
                     payload: { itemId }
-                });
+                };
             }
-            return true;
+            return null;
         }
-        return false;
+        return null;
     }
 
     /**

@@ -522,7 +522,14 @@ test('이탈 안내 팝업은 네 모서리에서도 전체 상자가 화면 안
 });
 
 test('최초 안내·포커스 블러·엔진 생존 정책이 분리되어 있다', async () => {
-    const [html, css, sceneSource, inputBindings, engineSource] = await Promise.all([
+    const [
+        html,
+        css,
+        sceneSource,
+        inputBindings,
+        keyboardMapperSource,
+        engineSource
+    ] = await Promise.all([
         readFile(new URL('../project/engine/index.html', import.meta.url), 'utf8'),
         readFile(new URL('../project/engine/style.css', import.meta.url), 'utf8'),
         readFile(new URL(
@@ -531,6 +538,10 @@ test('최초 안내·포커스 블러·엔진 생존 정책이 분리되어 있�
         ), 'utf8'),
         readFile(new URL(
             '../project/engine/script/scene/tutorial/_tutorial_input_bindings.js',
+            import.meta.url
+        ), 'utf8'),
+        readFile(new URL(
+            '../project/engine/script/scene/tutorial/_tutorial_keyboard_command_mapper.js',
             import.meta.url
         ), 'utf8'),
         readFile(new URL(
@@ -552,8 +563,14 @@ test('최초 안내·포커스 블러·엔진 생존 정책이 분리되어 있�
     assert.match(engineSource, /overlayManager\?\.hasAnyOverlay/);
     assert.match(sceneSource, /consumeMouseState\('middle', 'clicked'\)/);
     assert.match(inputBindings, /ALTERNATE_CONFIRM:\s*'Space'/);
-    assert.match(sceneSource, /KEY_CODES\.ALTERNATE_CONFIRM\)\)\s*\{\s*enqueueSimulationCommand\(\{ type: COMMANDS\.IDLE \}\)/);
-    assert.doesNotMatch(sceneSource, /KEY_CODES\.ALTERNATE_CONFIRM[^\n]*CAMERA/);
+    assert.match(
+        keyboardMapperSource,
+        /KEY_CODES\.ALTERNATE_CONFIRM\)\)\s*\{\s*return \{ type: COMMANDS\.IDLE \}/
+    );
+    assert.doesNotMatch(
+        keyboardMapperSource,
+        /KEY_CODES\.ALTERNATE_CONFIRM[^\n]*CAMERA/
+    );
     for (const policy of [
         APP_PAUSE_DATA.INACTIVE_POLICY,
         APP_PAUSE_DATA.POINTER_LOCK_RELEASED_POLICY
