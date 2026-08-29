@@ -72,7 +72,9 @@ import { TutorialAssetLoader } from './_tutorial_asset_loader.js';
 import { TutorialAssetPort } from './_tutorial_asset_port.js';
 import { TutorialAudioDirector } from './_tutorial_audio_director.js';
 import { TutorialBattlePresenter } from './_tutorial_battle_presenter.js';
+import { TutorialBattleViewModelFactory } from './_tutorial_battle_view_model_factory.js';
 import { TutorialFeedbackQueue } from './_tutorial_feedback_queue.js';
+import { TutorialInventoryPresenter } from './_tutorial_inventory_presenter.js';
 import { TutorialSpriteAnimator } from './_tutorial_sprite_animator.js';
 import { TutorialSpriteClipResolver } from './_tutorial_sprite_clip_resolver.js';
 import { TutorialSpriteCueRouter } from './_tutorial_sprite_cue_router.js';
@@ -101,7 +103,6 @@ const TUTORIAL_SPRITE_CLIPS = getData('TUTORIAL_SPRITE_CLIPS');
 
 const PLAYER_ID = 'player';
 const LORA_ID = 'lora';
-const KNOWN_STARTER_IDS = new Set(['bow', 'mascot-costume']);
 
 /**
  * 반응형 폰트 문자열을 생성합니다.
@@ -269,6 +270,17 @@ export class TutorialScene extends BaseScene {
             items: this.data.ITEMS,
             reasonCopy: this.data.TEXT.COMBAT_REASONS
         });
+        this.inventoryPresenter = new TutorialInventoryPresenter({
+            data: this.data,
+            assetPort: this.assetPort,
+            hudView: this.battleHudView
+        });
+        this.battleViewModels = new TutorialBattleViewModelFactory({
+            data: this.data,
+            inventoryPresenter: this.inventoryPresenter,
+            combatReadability: this.combatReadability,
+            battleFocus: this.battleFocus
+        });
         this.feedbackQueue = new TutorialFeedbackQueue({
             eventLogLimit: this.data.RULES.EVENT_LOG_LIMIT,
             particleCount: this.data.ANIMATION.PARTICLE_COUNT,
@@ -310,7 +322,6 @@ export class TutorialScene extends BaseScene {
         this.cleanseSelected = false;
         this.cleanseTargets = [];
         this.cleanseTargetIndex = 0;
-        this.inventoryPage = 0;
         this.loraTurnState = null;
 
         this.uiActionHandled = false;
@@ -816,7 +827,7 @@ export class TutorialScene extends BaseScene {
         this.cleanseSelected = false;
         this.cleanseTargets = [];
         this.cleanseTargetIndex = 0;
-        this.inventoryPage = 0;
+        this.inventoryPresenter.reset();
         this.hoveredTile = null;
         this.hoveredTileKey = '';
         this.battleFocus.reset();
@@ -866,7 +877,7 @@ export class TutorialScene extends BaseScene {
         this.cleanseSelected = false;
         this.cleanseTargets = [];
         this.cleanseTargetIndex = 0;
-        this.inventoryPage = 0;
+        this.inventoryPresenter.reset();
         this.loraTurnState = null;
         this.battleFocus.reset();
         this.guidance.beginRun({ seen: this.meta.combatGuideSeen === true });
@@ -2053,265 +2064,41 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * 현재 공격 선택 또는 공통 버튼 포커스를 모델 미리보기 호출로 변환합니다.
-     * @param {string|null} focusedKey - 키보드·포인터 공통 포커스 키입니다.
-     * @returns {{preview:object|null,label:string}} 모델 결과와 짧은 선택 이름입니다.
-     * @private
-     */
-    #createPlayerActionPreviewSelection(focusedKey) {
-        if (!this.model || this.model.phase !== 'action' || this.model.result) {
-            return { preview: null, label: '이동 경로' };
-        }
-        if (this.attackSelected) {
-            const target = this.actionTargets[this.targetIndex];
-            return {
-                preview: this.model.previewPlayerAction('attack', {
-                    targetId: target?.id || LORA_ID,
-                    weapon: this.attackWeapon
-                }),
-                label: this.attackWeapon === 'bow' ? '원거리 공격' : '근접 공격'
-            };
-        }
-        if (focusedKey === 'battle-melee' || focusedKey === 'battle-ranged') {
-            const weapon = focusedKey === 'battle-ranged' ? 'bow' : 'melee';
-            const target = toList(this.model.getValidTargets({ weapon }))[0];
-            return {
-                preview: this.model.previewPlayerAction('attack', {
-                    targetId: target?.id || LORA_ID,
-                    weapon
-                }),
-                label: weapon === 'bow' ? '원거리 공격' : '근접 공격'
-            };
-        }
-        if (focusedKey === 'battle-heal') {
-            return {
-                preview: this.model.previewPlayerAction('heal'),
-                label: '회복'
-            };
-        }
-        if (focusedKey === 'battle-idle') {
-            return {
-                preview: this.model.previewPlayerAction('wait'),
-                label: '대기'
-            };
-        }
-        if (focusedKey?.startsWith('item-')) {
-            const itemId = focusedKey.slice('item-'.length);
-            return {
-                preview: this.model.previewPlayerAction('use-item', { itemId }),
-                label: this.data.ITEMS[itemId]?.label || itemId
-            };
-        }
-        return { preview: null, label: '행동을 선택하세요' };
-    }
-
-    /**
-     * 한 프레임의 모델·선택·표현·HUD 상태를 읽기 전용 BattleViewModel로 조립합니다.
-     * @returns {object|null} 세 전투 뷰가 함께 소비할 프레임입니다.
+     * 한 프레임의 모델·선택·표현 상태를 전용 팩토리에 전달합니다.
+     * @returns {object|null} 전투 뷰들이 공유할 읽기 전용 모델입니다.
      * @private
      */
     #createBattleViewModel() {
         if (!this.model) {
             return null;
         }
-        const snapshot = this.#getSnapshot();
-        if (!snapshot) {
-            return null;
-        }
-        const floor = cloneCheckpointValue(this.#getCurrentFloor() || snapshot.floor);
-        const presentation = Object.freeze(cloneCheckpointValue(
-            this.presentationTimeline.getState()
-        ));
-        const feedback = this.feedbackQueue.getSnapshot();
-        const layout = this.#createBattleLayoutFrame(floor);
-        const inventoryEntries = this.#getInventoryEntries();
-        const inventory = this.battleHudView.getInventoryPaging(
-            inventoryEntries,
-            this.inventoryPage,
-            this.data.LAYOUT.INVENTORY.PAGE_SIZE
-        );
-        this.inventoryPage = inventory.page;
-        const ready = this.#canAcceptBattleInput();
-        const actionReady = ready
-            && snapshot.phase === 'action'
-            && !snapshot.actionUsed;
-        const meleeTargets = toList(this.model.getValidTargets({ weapon: 'melee' }));
-        const bowTargets = toList(this.model.getValidTargets({ weapon: 'bow' }));
-        const cleanseTargets = toList(this.model.getCleanseTargets?.());
-        const itemMetadata = Object.freeze(Object.fromEntries(
-            Object.entries(this.data.ITEMS).map(([itemId, item]) => ([itemId, Object.freeze({
-                id: itemId,
-                label: item.label || itemId,
-                description: item.description || '효과 확인 중',
-                known: this.#isItemKnown(itemId),
-                hasIcon: this.assetPort.hasItemIcon(itemId),
-                usable: this.#isItemUsable(itemId),
-                movementConsumable: item.movementConsumable === true,
-                statusLabel: item.movementConsumable === true
-                    ? '이동'
-                    : item.passive === true && item.useOnce !== true
-                        ? '자동'
-                        : item.consumable === true || item.useOnce === true
-                            ? '사용'
-                            : '보유'
-            })]))
-        ));
-        const pagedInventory = Object.freeze({
-            page: inventory.page,
-            pageCount: inventory.pageCount,
-            entries: Object.freeze(inventory.entries.map((entry) => {
-                const metadata = itemMetadata[entry.itemId] || {};
-                const movementConsumable = metadata.movementConsumable === true;
-                return Object.freeze({
-                    itemId: entry.itemId,
-                    count: Number(entry.count) || 0,
-                    label: metadata.known ? metadata.label : '미확인',
-                    description: metadata.known
-                        ? metadata.description
-                        : '선택해 효과를 확인하세요.',
-                    statusLabel: metadata.statusLabel || '보유',
-                    known: metadata.known === true,
-                    hasIcon: metadata.hasIcon === true,
-                    movementConsumable,
-                    usable: movementConsumable
-                        ? ready && snapshot.phase === 'move' && cleanseTargets.length > 0
-                        : actionReady && metadata.usable === true
-                });
-            }))
-        });
-        const pathExtensions = [];
-        if (Number(presentation.floorIndex) === (Number(snapshot.floorIndex) || 0)
-            && snapshot.phase === 'move') {
-            for (const direction of KEY_DIRECTIONS) {
-                const extension = this.#normalizePath(this.model.extendPath(
-                    this.plannedPath,
-                    direction.x,
-                    direction.y
-                ));
-                pathExtensions.push(Object.freeze(
-                    extension.slice(this.plannedPath.length)
-                        .map((tile) => Object.freeze({ ...tile }))
-                ));
-            }
-        }
-        const movePreview = snapshot.phase === 'move'
-            ? cloneCheckpointValue(this.model.previewPath(this.plannedPath))
-            : null;
-        const inventoryFocusKeys = pagedInventory.entries.map(
-            (entry) => 'item-' + entry.itemId
-        );
-        const actionFocusKeys = [
-            'battle-melee',
-            'battle-ranged',
-            'battle-heal',
-            'battle-idle'
-        ];
-        this.battleFocus.setKeys(snapshot.phase === 'move'
-            ? inventoryFocusKeys
-            : [...actionFocusKeys, ...inventoryFocusKeys]);
-        const focusedControlKey = this.battleFocus.getFocusedKey();
-        const actionSelection = this.#createPlayerActionPreviewSelection(
-            focusedControlKey
-        );
-        const inspectedItem = focusedControlKey?.startsWith('item-')
-            ? pagedInventory.entries.find(
-                (entry) => entry.itemId === focusedControlKey.slice('item-'.length)
-            ) || null
-            : null;
-        const readability = this.combatReadability.create({
-            snapshot,
-            loraIntent: this.model.getLoraIntent({ allowForecast: true }),
-            actionPreview: actionSelection.preview,
-            selectionLabel: actionSelection.label,
-            inspectedItem
-        });
-        return Object.freeze({
-            viewport: layout.viewport,
-            layout,
-            fonts: Object.freeze({ ...this.fonts }),
+        const floor = this.#getCurrentFloor();
+        return this.battleViewModels.create({
+            model: this.model,
+            floor,
+            layout: this.#createBattleLayoutFrame(floor),
+            fonts: this.fonts,
             colors: ColorSchemes.Tactics,
-            snapshot: Object.freeze(snapshot),
-            floor: Object.freeze(floor || {}),
-            world: Object.freeze({
-                elapsedSeconds: this.elapsedSeconds,
-                presentation,
-                spriteAnimations: this.spriteAnimator.getSnapshot(),
-                floorActors: this.floorActorView
-                    ? Object.freeze(cloneCheckpointValue(this.floorActorView))
-                    : null,
-                plannedPath: Object.freeze(this.plannedPath.map((tile) => Object.freeze({ ...tile }))),
-                reachability: Object.freeze(Array.from(this.reachability.values()).map(
-                    (entry) => Object.freeze(cloneCheckpointValue(entry))
-                )),
-                pathExtensions: Object.freeze(pathExtensions),
-                hoveredTile: this.hoveredTile
-                    ? Object.freeze({ ...this.hoveredTile })
-                    : null,
+            elapsedSeconds: this.elapsedSeconds,
+            presentation: this.presentationTimeline.getState(),
+            presentationLocked: this.presentationTimeline.isLocked(),
+            feedback: this.feedbackQueue.getSnapshot(),
+            spriteAnimations: this.spriteAnimator.getSnapshot(),
+            floorActors: this.floorActorView,
+            ready: this.#canAcceptBattleInput(),
+            achievement: this.achievementBanner.getSnapshot(),
+            selection: {
+                plannedPath: this.plannedPath,
+                reachability: this.reachability,
+                hoveredTile: this.hoveredTile,
                 attackSelected: this.attackSelected,
                 attackWeapon: this.attackWeapon,
-                actionTargets: Object.freeze(this.actionTargets.map(
-                    (target) => Object.freeze(cloneCheckpointValue(target))
-                )),
+                actionTargets: this.actionTargets,
                 targetIndex: this.targetIndex,
                 cleanseSelected: this.cleanseSelected,
-                cleanseTargets: Object.freeze(this.cleanseTargets.map(
-                    (target) => Object.freeze(cloneCheckpointValue(target))
-                )),
-                cleanseTargetIndex: this.cleanseTargetIndex,
-                itemMetadata,
-                readability,
-                feedback: Object.freeze({
-                    flashSeconds: feedback.flashSeconds,
-                    stabilizeSeconds: feedback.stabilizeSeconds
-                }),
-                config: Object.freeze({
-                    attackRange: this.data.ACTORS.PLAYER.ATTACK_RANGE,
-                    pathMarkerRatio: this.data.LAYOUT.BOARD.PATH_MARKER_RATIO,
-                    shadowProjection: this.data.LAYOUT.BOARD.SHADOW_PROJECTION,
-                    selectionMinScale: this.data.ANIMATION.SELECTION_MIN_SCALE,
-                    actionPlayerScale: this.data.ANIMATION.ACTION_PLAYER_SCALE,
-                    actionLoraScale: this.data.ANIMATION.ACTION_LORA_SCALE,
-                    itemIcon: this.data.SPRITES.ITEM,
-                    recordIcon: this.data.SPRITES.RECORD,
-                    loraSprite: this.data.SPRITES.LORA
-                })
-            }),
-            hud: Object.freeze({
-                presentationLocked: this.presentationTimeline.isLocked(),
-                attackSelected: this.attackSelected,
-                attackWeapon: this.attackWeapon,
-                cleanseSelected: this.cleanseSelected,
-                focusedControlKey,
-                instabilityState: Object.freeze(cloneCheckpointValue(
-                    this.model.getInstabilityState?.() || {}
-                )),
-                movePreview: movePreview ? Object.freeze(movePreview) : null,
-                readability,
-                eventLog: feedback.eventLog,
-                inventory: pagedInventory,
-                controls: Object.freeze({
-                    ready,
-                    actionReady,
-                    meleeTargetCount: meleeTargets.length,
-                    bowTargetCount: bowTargets.length,
-                    hasBow: inventoryEntries.some((entry) => entry.itemId === 'bow'),
-                    cleanseTargetCount: cleanseTargets.length
-                }),
-                config: Object.freeze({
-                    actions: this.data.LAYOUT.ACTIONS,
-                    inventory: this.data.LAYOUT.INVENTORY,
-                    itemIcon: this.data.SPRITES.ITEM,
-                    text: this.data.TEXT,
-                    floorTransitionAfterTurn: this.data.RULES.FLOOR_TRANSITION_AFTER_TURN,
-                    playerMoveRange: this.data.ACTORS.PLAYER.MOVE_RANGE,
-                    healAmount: this.data.ACTORS.PLAYER.HEAL_AMOUNT
-                })
-            }),
-            achievement: this.achievementBanner.getSnapshot(),
-            feedback: Object.freeze({
-                floatingTexts: feedback.floatingTexts,
-                particles: feedback.particles
-            })
+                cleanseTargets: this.cleanseTargets,
+                cleanseTargetIndex: this.cleanseTargetIndex
+            }
         });
     }
 
@@ -2353,7 +2140,7 @@ export class TutorialScene extends BaseScene {
         const cutsceneState = this.cutscenes.getState();
         const galleryState = this.galleryController.getSnapshot(this.meta);
         const pointerLock = getPointerLockSnapshot();
-        const inventory = this.#getInventoryEntries()
+        const inventory = this.inventoryPresenter.getEntries(this.model)
             .map((entry) => entry.itemId + ':' + String(entry.count))
             .join('|');
         return [
@@ -2378,7 +2165,7 @@ export class TutorialScene extends BaseScene {
             String(this.cleanseSelected),
             String(this.cleanseTargetIndex),
             this.plannedPath.map((point) => toTileKey(point.x, point.y)).join('>'),
-            String(this.inventoryPage),
+            String(this.inventoryPresenter.getPage()),
             String(this.battleFocus.getFocusedKey()),
             String(this.guidance.isOpen()),
             String(this.presentationTimeline.isLocked()),
@@ -2479,41 +2266,6 @@ export class TutorialScene extends BaseScene {
         return specs;
     }
 
-    /**
-     * 현재 인벤토리를 아이템 ID와 수량 배열로 반환합니다.
-     * @returns {Array<{itemId:string,count:number}>} 인벤토리입니다.
-     * @private
-     */
-    #getInventoryEntries() {
-        if (!this.model) {
-            return [];
-        }
-        if (this.model.inventory instanceof Map) {
-            return Array.from(this.model.inventory.entries())
-                .filter(([, count]) => Number(count) > 0)
-                .map(([itemId, count]) => ({ itemId, count: Number(count) }));
-        }
-        return toList(this.#getSnapshot()?.inventory)
-            .filter((entry) => Number(entry?.count) > 0)
-            .map((entry) => ({
-                itemId: entry.itemId,
-                count: Number(entry.count)
-            }));
-    }
-
-    /**
-     * 현재 인벤토리 페이지와 표시 항목을 계산합니다.
-     * @returns {{entries:Array<{itemId:string,count:number}>,page:number,pageCount:number}} 페이지 정보입니다.
-     * @private
-     */
-    #getInventoryPaging() {
-        const entries = this.#getInventoryEntries();
-        return this.battleHudView.getInventoryPaging(
-            entries,
-            this.inventoryPage,
-            this.data.LAYOUT.INVENTORY.PAGE_SIZE
-        );
-    }
 
     /**
      * 명령 경계에서 인벤토리 표시 페이지를 순환합니다.
@@ -2524,18 +2276,9 @@ export class TutorialScene extends BaseScene {
         if (this.mode !== MODES.BATTLE || !this.model) {
             return;
         }
-        const paging = this.#getInventoryPaging();
-        if (paging.pageCount <= 1) {
-            return;
+        if (this.inventoryPresenter.shiftPage(this.model, payload?.delta)) {
+            this.buttonHost.invalidate();
         }
-        const delta = Number(payload?.delta) || 0;
-        if (delta === 0) {
-            return;
-        }
-        this.inventoryPage = (
-            paging.page + Math.sign(delta) + paging.pageCount
-        ) % paging.pageCount;
-        this.buttonHost.invalidate();
     }
 
     /**
@@ -2631,7 +2374,9 @@ export class TutorialScene extends BaseScene {
         if (key.startsWith('item-')) {
             const itemId = key.slice('item-'.length);
             const item = this.data.ITEMS[itemId];
-            if (item && item.movementConsumable !== true && this.#isItemUsable(itemId)) {
+            if (item
+                && item.movementConsumable !== true
+                && this.inventoryPresenter.isItemUsable(itemId)) {
                 return {
                     type: COMMANDS.USE_ITEM,
                     payload: { itemId }
@@ -2640,28 +2385,6 @@ export class TutorialScene extends BaseScene {
             return null;
         }
         return null;
-    }
-
-    /**
-     * 아이템을 현재 행동으로 사용할 수 있는지 확인합니다.
-     * @param {string} itemId - 아이템 ID입니다.
-     * @returns {boolean} 사용 가능 여부입니다.
-     * @private
-     */
-    #isItemUsable(itemId) {
-        const item = this.data.ITEMS[itemId];
-        return Boolean(item && (item.consumable || item.useOnce));
-    }
-
-    /**
-     * 아이템 이름이 반복 플레이에서 공개됐는지 확인합니다.
-     * @param {string} itemId - 아이템 ID입니다.
-     * @returns {boolean} 공개 여부입니다.
-     * @private
-     */
-    #isItemKnown(itemId) {
-        return KNOWN_STARTER_IDS.has(itemId)
-            || Boolean(this.data.ITEMS[itemId]);
     }
 
     /**

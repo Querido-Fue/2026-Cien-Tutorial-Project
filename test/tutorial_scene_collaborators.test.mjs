@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { TutorialBattleViewModelFactory } from '../project/engine/script/scene/tutorial/_tutorial_battle_view_model_factory.js';
+import { TutorialInventoryPresenter } from '../project/engine/script/scene/tutorial/_tutorial_inventory_presenter.js';
 import { TutorialKeyboardEdgeTracker } from '../project/engine/script/scene/tutorial/_tutorial_keyboard_edge_tracker.js';
 import { TutorialKeyboardCommandMapper } from '../project/engine/script/scene/tutorial/_tutorial_keyboard_command_mapper.js';
 import { TutorialMetaSession } from '../project/engine/script/scene/tutorial/_tutorial_meta_session.js';
@@ -148,4 +150,118 @@ test('비전투 뷰 모델 팩토리는 장면 상태 없이 표시 데이터만
     assert.equal(gallery.recordPopup, true);
     assert.equal(gallery.closeCommandType, TUTORIAL_COMMANDS.CLOSE_RECORD);
     assert.equal(Object.isFrozen(menu), true);
+});
+
+test('인벤토리 프레젠터와 전투 뷰 모델 팩토리는 페이지·표시 조립만 소유한다', () => {
+    const data = {
+        ITEMS: {
+            bow: {
+                label: '활',
+                description: '원거리 공격',
+                passive: true
+            }
+        },
+        LAYOUT: {
+            INVENTORY: { PAGE_SIZE: 5 },
+            ACTIONS: {},
+            BOARD: { PATH_MARKER_RATIO: 0.2, SHADOW_PROJECTION: {} }
+        },
+        ANIMATION: {
+            SELECTION_MIN_SCALE: 0.72,
+            ACTION_PLAYER_SCALE: 1,
+            ACTION_LORA_SCALE: 1
+        },
+        SPRITES: { ITEM: {}, RECORD: {}, LORA: {} },
+        RULES: { FLOOR_TRANSITION_AFTER_TURN: 6 },
+        ACTORS: {
+            PLAYER: { ATTACK_RANGE: 1, MOVE_RANGE: 4, HEAL_AMOUNT: 20 }
+        },
+        TEXT: {}
+    };
+    const hudView = {
+        getInventoryPaging(entries, requestedPage, pageSize) {
+            return {
+                entries: entries.slice(0, pageSize),
+                page: Math.max(0, requestedPage),
+                pageCount: 1
+            };
+        }
+    };
+    const inventoryPresenter = new TutorialInventoryPresenter({
+        data,
+        assetPort: { hasItemIcon: () => true },
+        hudView
+    });
+    const battleFocus = {
+        keys: [],
+        setKeys(keys) {
+            this.keys = keys;
+        },
+        getFocusedKey() {
+            return null;
+        }
+    };
+    const factory = new TutorialBattleViewModelFactory({
+        data,
+        inventoryPresenter,
+        combatReadability: { create: () => Object.freeze({}) },
+        battleFocus
+    });
+    const snapshot = {
+        phase: 'move',
+        actionUsed: false,
+        floorIndex: 0,
+        player: { x: 0, y: 0 },
+        lora: { hp: 100, instability: 0 }
+    };
+    const model = {
+        inventory: new Map([['bow', 1]]),
+        phase: 'move',
+        result: null,
+        getSnapshot: () => snapshot,
+        getValidTargets: () => [],
+        getCleanseTargets: () => [],
+        previewPath: () => ({ ok: true }),
+        getLoraIntent: () => ({}),
+        getInstabilityState: () => ({ id: 'stable' }),
+        extendPath: (path) => path
+    };
+    const viewModel = factory.create({
+        model,
+        floor: { index: 0 },
+        layout: { viewport: { WW: 1280, WH: 720 } },
+        fonts: {},
+        colors: {},
+        elapsedSeconds: 0,
+        presentation: { floorIndex: 0 },
+        presentationLocked: false,
+        feedback: {
+            eventLog: [],
+            floatingTexts: [],
+            particles: [],
+            flashSeconds: 0,
+            stabilizeSeconds: 0
+        },
+        spriteAnimations: {},
+        floorActors: null,
+        ready: true,
+        achievement: null,
+        selection: {
+            plannedPath: [{ x: 0, y: 0 }],
+            reachability: new Map(),
+            hoveredTile: null,
+            attackSelected: false,
+            attackWeapon: 'melee',
+            actionTargets: [],
+            targetIndex: 0,
+            cleanseSelected: false,
+            cleanseTargets: [],
+            cleanseTargetIndex: 0
+        }
+    });
+
+    assert.equal(viewModel.hud.inventory.entries[0].itemId, 'bow');
+    assert.equal(viewModel.hud.controls.hasBow, true);
+    assert.deepEqual(battleFocus.keys, ['item-bow']);
+    assert.equal(Object.isFrozen(viewModel), true);
 });

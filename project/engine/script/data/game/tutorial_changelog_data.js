@@ -5,6 +5,10 @@
  */
 export const TUTORIAL_CHANGELOG_CATALOG = Object.freeze([
     Object.freeze({
+        subject: 'refactor: extract tutorial battle view model assembly',
+        summary: '전투 표시 데이터와 인벤토리 페이지 책임을 장면에서 분리했습니다.'
+    }),
+    Object.freeze({
         subject: 'refactor: separate tutorial keyboard commands and view models',
         summary: '화면별 키 명령 해석과 비전투 표시 데이터 조립을 장면에서 분리했습니다.'
     }),

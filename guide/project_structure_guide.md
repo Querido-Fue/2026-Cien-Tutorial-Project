@@ -108,6 +108,8 @@
 | `script/scene/tutorial/_tutorial_keyboard_edge_tracker.js` | 현재 키 상태와 프레임 사이 빠른 탭을 상승 에지로 정규화하는 입력 상태 클래스 |
 | `script/scene/tutorial/_tutorial_keyboard_command_mapper.js` | 읽기 전용 화면·선택 상태와 키 상승 에지를 시뮬레이션 명령 사양으로 변환하는 클래스 |
 | `script/scene/tutorial/_tutorial_nonbattle_view_model_factory.js` | 비전투·전투 안내 화면의 직렬화 가능한 표시 데이터를 조립하는 클래스 |
+| `script/scene/tutorial/_tutorial_inventory_presenter.js` | 전투 인벤토리 페이지와 아이템 공개·사용 가능 표시 정책을 소유하는 클래스 |
+| `script/scene/tutorial/_tutorial_battle_view_model_factory.js` | 모델 읽기 결과와 선택·표현 snapshot을 월드·HUD·피드백 공용 BattleViewModel로 조립하는 클래스 |
 | `script/scene/tutorial/_tutorial_scene_constants.js` | 씬 모드와 시뮬레이션 명령의 단일 상수 원본 |
 | `script/scene/tutorial/_tutorial_input_bindings.js` | 방향·선택·명령 키 코드와 감시 키 목록의 단일 원본 |
 | `script/scene/tutorial/_tutorial_value_utils.js` | 타일·목록·체크포인트 값 복제 및 직렬화 비교를 담당하는 순수 함수 |
