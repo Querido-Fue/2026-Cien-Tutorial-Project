@@ -52,6 +52,9 @@ test('Bloom은 정확히 1/4 해상도이며 렌더 스케일별 품질 단계�
     assert.equal(resolveWorldPostProcessQuality(94), 'medium');
     assert.equal(resolveWorldPostProcessQuality(95), 'high');
     assert.equal(resolveWorldPostProcessQuality(100), 'high');
+    assert.ok(WORLD_POSTPROCESS_CONSTANTS.QUALITY_TIERS.low.bloomIntensity >= 0.28);
+    assert.ok(WORLD_POSTPROCESS_CONSTANTS.QUALITY_TIERS.medium.bloomIntensity >= 0.4);
+    assert.ok(WORLD_POSTPROCESS_CONSTANTS.QUALITY_TIERS.high.bloomIntensity >= 0.52);
 });
 
 test('기본 월드 영상은 NEAREST를 유지하고 Bloom 버퍼만 선형 필터링한다', async () => {
@@ -82,6 +85,14 @@ test('절차적 WebGL 효과는 화면 좌표를 픽셀 격자에 고정한다',
     assert.match(shaderUtils, /floor\(rawFragCoord \/ pixelSize\) \* pixelSize/);
     assert.match(flamePass, /u_pixelSize/);
     assert.match(shieldPass, /u_pixelSize/);
+});
+
+test('화염은 둥근 물방울 실루엣과 넓은 발광 영역을 합성한다', async () => {
+    const { shaderUtils } = await readSources();
+    assert.match(shaderUtils, /float bulbMask/);
+    assert.match(shaderUtils, /float tipWidth/);
+    assert.match(shaderUtils, /float coreBulbMask/);
+    assert.match(shaderUtils, /float bloomHalo/);
 });
 
 test('WebGL 오류 시 현재 월드 명령을 기존 레이어로 재생하는 폴백이 존재한다', async () => {

@@ -342,7 +342,7 @@ export const PANEL_TEXTURE_FRAGMENT_SHADER = `
 `;
 
 /**
- * 촛불 심지 위에서 난류로 흔들리는 화염, 코어, 외곽광과 상승 불씨를 합성하는 셰이더입니다.
+ * 촛불 심지 위에서 물방울형으로 흔들리는 화염, 코어, 외곽광과 상승 불씨를 합성하는 셰이더입니다.
  */
 export const FLAME_PARTICLE_FRAGMENT_SHADER = `
     precision highp float;
@@ -389,42 +389,67 @@ export const FLAME_PARTICLE_FRAGMENT_SHADER = `
         );
         float phase = u_phase * 6.28318530718;
         float turbulence = flameTurbulence(point, u_time, phase);
-        float normalizedHeight = clamp(point.y / 2.62, 0.0, 1.0);
         float sway = (
             sin((u_time * 3.35) + phase + (point.y * 2.15)) * 0.12
             + (turbulence * 0.075)
         ) * smoothstep(-0.05, 2.55, point.y);
         float centeredX = point.x - sway;
-        float width = mix(0.66, 0.035, pow(normalizedHeight, 0.78));
-        width *= 0.91 + (0.09 * sin((u_time * 6.7) + phase + (point.y * 5.2)));
-        float horizontalMask = 1.0 - smoothstep(
-            max(0.0, width - 0.07),
-            width + 0.09,
+        float widthFlicker = 0.94 + (0.06 * sin(
+            (u_time * 6.7) + phase + (point.y * 5.2)
+        ));
+
+        vec2 bulbPoint = vec2(
+            centeredX / max(0.01, 0.69 * widthFlicker),
+            (point.y - 0.46) / 0.68
+        );
+        float bulbMask = 1.0 - smoothstep(0.86, 1.06, length(bulbPoint));
+
+        float tipProgress = clamp((point.y - 0.38) / 2.34, 0.0, 1.0);
+        float tipWidth = (0.61 * widthFlicker)
+            * pow(max(0.0, 1.0 - tipProgress), 0.52);
+        float tipMask = 1.0 - smoothstep(
+            max(0.0, tipWidth - 0.07),
+            tipWidth + 0.09,
             abs(centeredX)
         );
-        float bottomMask = smoothstep(-0.18, 0.06, point.y);
+        tipMask *= smoothstep(0.25, 0.56, point.y);
         float topMask = 1.0 - smoothstep(
-            2.04,
-            2.70,
-            point.y + (turbulence * 0.17)
+            2.38,
+            2.74,
+            point.y + (turbulence * 0.13)
         );
-        float outer = horizontalMask * bottomMask * topMask;
+        float outer = max(bulbMask, tipMask * topMask);
         outer *= 0.84 + (0.16 * turbulence);
 
-        float coreHeight = clamp(point.y / 1.68, 0.0, 1.0);
-        float coreWidth = mix(0.36, 0.025, pow(coreHeight, 0.72));
-        float core = 1.0 - smoothstep(
-            max(0.0, coreWidth - 0.05),
-            coreWidth + 0.07,
+        vec2 coreBulbPoint = vec2(
+            (centeredX + (turbulence * 0.018)) / 0.35,
+            (point.y - 0.31) / 0.42
+        );
+        float coreBulbMask = 1.0 - smoothstep(
+            0.82,
+            1.08,
+            length(coreBulbPoint)
+        );
+        float coreTipProgress = clamp((point.y - 0.27) / 1.48, 0.0, 1.0);
+        float coreTipWidth = 0.31
+            * pow(max(0.0, 1.0 - coreTipProgress), 0.56);
+        float coreTipMask = 1.0 - smoothstep(
+            max(0.0, coreTipWidth - 0.05),
+            coreTipWidth + 0.07,
             abs(centeredX + (turbulence * 0.025))
         );
-        core *= smoothstep(-0.11, 0.07, point.y)
-            * (1.0 - smoothstep(1.16, 1.72, point.y + (turbulence * 0.08)));
+        coreTipMask *= smoothstep(0.16, 0.39, point.y)
+            * (1.0 - smoothstep(1.43, 1.77, point.y + (turbulence * 0.07)));
+        float core = max(coreBulbMask, coreTipMask);
 
-        vec2 haloPoint = vec2(point.x * 0.72, (point.y - 0.58) * 0.5);
-        float halo = exp(-dot(haloPoint, haloPoint) * 1.7);
+        vec2 haloPoint = vec2(point.x * 0.68, (point.y - 0.58) * 0.46);
+        float halo = exp(-dot(haloPoint, haloPoint) * 1.46);
         halo *= smoothstep(-0.72, -0.12, point.y)
             * (1.0 - smoothstep(2.45, 3.35, point.y));
+        vec2 bloomPoint = vec2(point.x * 0.43, (point.y - 0.62) * 0.3);
+        float bloomHalo = exp(-dot(bloomPoint, bloomPoint) * 1.62);
+        bloomHalo *= smoothstep(-0.92, -0.18, point.y)
+            * (1.0 - smoothstep(2.72, 3.82, point.y));
 
         float ember = 0.0;
         for (int emberIndex = 0; emberIndex < 4; emberIndex++) {
@@ -452,10 +477,14 @@ export const FLAME_PARTICLE_FRAGMENT_SHADER = `
         vec3 flameColor = mix(u_outerColor, u_coreColor, coreMix);
         flameColor = mix(flameColor, u_emberColor, core * 0.38);
         vec3 color = (flameColor * solid)
-            + (u_outerColor * halo * 0.16)
+            + (u_outerColor * halo * 0.24)
+            + (u_coreColor * bloomHalo * 0.1)
             + (u_emberColor * ember * 0.92);
         float alpha = clamp(
-            (solid * 0.94) + (halo * 0.13) + (ember * 0.82),
+            (solid * 0.96)
+                + (halo * 0.18)
+                + (bloomHalo * 0.075)
+                + (ember * 0.82),
             0.0,
             1.0
         ) * u_alpha;
