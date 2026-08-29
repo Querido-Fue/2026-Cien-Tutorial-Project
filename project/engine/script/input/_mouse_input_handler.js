@@ -13,6 +13,31 @@ import { resolveFiniteNumber } from 'util/number_util.js';
  * @type {ReadonlyArray<string>}
  */
 const DEFAULT_MOUSE_FOCUS_LIST = Object.freeze(['ui', 'object']);
+const WHEEL_PIXEL_MODE_UNITS = 1 / 100;
+const WHEEL_LINE_MODE_UNITS = 1 / 3;
+const WHEEL_PAGE_MODE_UNITS = 1;
+const MAX_WHEEL_UNITS_PER_EVENT = 4;
+
+/**
+ * DOM WheelEvent 값을 장치와 deltaMode에 독립적인 누적 단위로 변환합니다.
+ * @param {*} rawDelta - deltaX 또는 deltaY입니다.
+ * @param {*} rawDeltaMode - WheelEvent.deltaMode입니다.
+ * @returns {number} 제한된 무차원 휠 단위입니다.
+ */
+function normalizeWheelDelta(rawDelta, rawDeltaMode) {
+    const delta = Number(rawDelta);
+    if (!Number.isFinite(delta) || delta === 0) {
+        return 0;
+    }
+    const deltaMode = Number(rawDeltaMode);
+    const modeScale = deltaMode === 1
+        ? WHEEL_LINE_MODE_UNITS
+        : (deltaMode === 2 ? WHEEL_PAGE_MODE_UNITS : WHEEL_PIXEL_MODE_UNITS);
+    return Math.max(
+        -MAX_WHEEL_UNITS_PER_EVENT,
+        Math.min(MAX_WHEEL_UNITS_PER_EVENT, delta * modeScale)
+    );
+}
 
 /**
  * @class MouseInputHandler
@@ -34,6 +59,8 @@ export class MouseInputHandler {
             deltaY: 0,
             lastDeltaX: 0,
             lastDeltaY: 0,
+            totalX: 0,
+            totalY: 0,
             activeFrames: 0,
             eventCount: 0
         };
@@ -56,10 +83,14 @@ export class MouseInputHandler {
         });
         window.addEventListener('wheel', (e) => {
             this.#updateMousePosition(e);
-            this.wheelState.deltaX += resolveFiniteNumber(Number(e.deltaX), 0);
-            this.wheelState.deltaY += resolveFiniteNumber(Number(e.deltaY), 0);
-            this.wheelState.lastDeltaX = resolveFiniteNumber(Number(e.deltaX), 0);
-            this.wheelState.lastDeltaY = resolveFiniteNumber(Number(e.deltaY), 0);
+            const deltaX = resolveFiniteNumber(Number(e.deltaX), 0);
+            const deltaY = resolveFiniteNumber(Number(e.deltaY), 0);
+            this.wheelState.deltaX += deltaX;
+            this.wheelState.deltaY += deltaY;
+            this.wheelState.lastDeltaX = deltaX;
+            this.wheelState.lastDeltaY = deltaY;
+            this.wheelState.totalX += normalizeWheelDelta(deltaX, e.deltaMode);
+            this.wheelState.totalY += normalizeWheelDelta(deltaY, e.deltaMode);
             this.wheelState.activeFrames = 10;
             this.wheelState.eventCount += 1;
         }, { passive: true });
@@ -196,6 +227,8 @@ export class MouseInputHandler {
                     deltaY: this.wheelState.deltaY,
                     lastDeltaX: this.wheelState.lastDeltaX,
                     lastDeltaY: this.wheelState.lastDeltaY,
+                    totalX: this.wheelState.totalX,
+                    totalY: this.wheelState.totalY,
                     active: this.wheelState.activeFrames > 0,
                     eventCount: this.wheelState.eventCount
                 };
@@ -204,7 +237,8 @@ export class MouseInputHandler {
     }
 
     /**
-     * 휠 입력 상태를 초기화합니다.
+     * 일시 휠 표시값만 초기화하고 의미 입력용 누적값은 보존합니다.
+     * 누적값을 되감으면 소비자가 반대 방향 휠로 오인하므로 장면 기준선에서 무시합니다.
      * @private
      */
     #resetWheelState() {

@@ -68,7 +68,7 @@ export class InputSystem {
 
     /**
      * 시뮬레이션 런타임에 전달할 입력 스냅샷을 생성합니다.
-     * @returns {{mousePos: {x: number, y: number}, mouseButtons: {left: string[], right: string[], middle: string[]}, focusList: string[], keys: Record<string, boolean>}}
+     * @returns {{mousePos: {x: number, y: number}, mouseWheel:{deltaX:number,deltaY:number,lastDeltaX:number,lastDeltaY:number,totalX:number,totalY:number,active:boolean,eventCount:number}, mouseButtons: {left: string[], right: string[], middle: string[]}, focusList: string[], keys: Record<string, boolean>}}
      */
     getSimulationInputSnapshot() {
         const mouseButtons = this.mouseInputHandler?.mouseButtons || {};
@@ -79,6 +79,8 @@ export class InputSystem {
             deltaY: 0,
             lastDeltaX: 0,
             lastDeltaY: 0,
+            totalX: 0,
+            totalY: 0,
             active: false,
             eventCount: 0
         };

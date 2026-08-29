@@ -276,7 +276,7 @@ export class TutorialBattleLayout {
     }
 
     /**
-     * 실제 격자의 좌우 폭을 월드 뷰포트에 맞추고 카메라 초점을 적용합니다.
+     * 실제 격자의 기본 폭과 이미지 좌우 맞춤 최소 줌을 계산하고 카메라 초점을 적용합니다.
      * @param {string} floorId - 표시할 층 ID입니다.
      * @param {object|null} camera - 추적 중인 타일 좌표입니다.
      * @returns {object|null} 맵 이미지와 타일 축을 공유하는 투영값입니다.
@@ -300,7 +300,29 @@ export class TutorialBattleLayout {
             0.01,
             Number(this.#config.camera?.GRID_WIDTH_VIEWPORT_RATIO) || 1
         );
-        const scale = (worldRect.w * viewportRatio) / sourceGridWidth;
+        const baseScale = (worldRect.w * viewportRatio) / sourceGridWidth;
+        const defaultZoom = Math.max(
+            0.01,
+            Number(this.#config.camera?.DEFAULT_ZOOM) || 1
+        );
+        const maximumZoom = Math.max(
+            defaultZoom,
+            Number(this.#config.camera?.MAX_ZOOM) || defaultZoom
+        );
+        const imageWidthFitZoom = worldRect.w / (sourceWidth * baseScale);
+        const minimumZoom = Math.min(
+            defaultZoom,
+            Math.max(0.01, imageWidthFitZoom)
+        );
+        const requestedZoom = Number(camera?.zoom);
+        const zoom = Math.min(
+            maximumZoom,
+            Math.max(
+                minimumZoom,
+                Number.isFinite(requestedZoom) ? requestedZoom : defaultZoom
+            )
+        );
+        const scale = baseScale * zoom;
         const imageW = Math.max(1, Math.round(sourceWidth * scale));
         const imageH = Math.max(1, Math.round(sourceHeight * scale));
         const scaleX = imageW / sourceWidth;
@@ -376,6 +398,12 @@ export class TutorialBattleLayout {
         const entityRatio = Number(this.#config.board.ENTITY_SCALE_RATIO) || 0.64;
         const gapRatio = Math.max(0, Number(this.#config.board.TILE_GAP_RATIO) || 0);
         return Object.freeze({
+            cameraZoom: zoom,
+            cameraZoomBounds: Object.freeze({
+                min: minimumZoom,
+                default: defaultZoom,
+                max: maximumZoom
+            }),
             mapImageRect,
             ambientFire: this.#createAmbientFireProjection(
                 profile.ambientFire,

@@ -9,7 +9,11 @@ import {
     POINTER_LOCK_EXIT_HINT_EVENT,
     PointerLockInputHandler
 } from '../project/engine/script/input/_pointer_lock_input_handler.js';
+import { TUTORIAL_GAME_DATA } from '../project/engine/script/data/game/tutorial_game_data.js';
+import { TUTORIAL_ASSET_MANIFEST } from '../project/engine/script/data/game/tutorial_asset_manifest.js';
+import { TutorialBattleCamera } from '../project/engine/script/scene/tutorial/_tutorial_battle_camera.js';
 import { TutorialBattleCameraController } from '../project/engine/script/scene/tutorial/_tutorial_battle_camera_controller.js';
+import { TutorialBattleLayout } from '../project/engine/script/scene/tutorial/view/_tutorial_battle_layout.js';
 
 class TestCustomEvent extends Event {
     constructor(type, options = {}) {
@@ -59,6 +63,11 @@ const LAYOUT = Object.freeze({
     mapHeight: 8,
     gridAxisX: Object.freeze({ x: 50, y: 25 }),
     gridAxisY: Object.freeze({ x: -50, y: 25 })
+});
+
+const ZOOM_LAYOUT = Object.freeze({
+    ...LAYOUT,
+    cameraZoomBounds: Object.freeze({ min: 0.81, default: 1, max: 1.2 })
 });
 
 test('가장자리 카메라는 격자 역투영으로 이동하고 휠 클릭 복귀 뒤 재무장한다', () => {
@@ -128,6 +137,147 @@ test('가장자리 카메라는 격자 역투영으로 이동하고 휠 클릭 �
         edgePanEnabled: true
     });
     assert.deepEqual(nextFloor, { x: 2, y: 3 });
+});
+
+test('누적 휠 차분은 한 번만 소비하고 최신 목표 줌에 연속 누적된다', () => {
+    const controller = new TutorialBattleCameraController({
+        defaultZoom: 1,
+        maximumZoom: 1.2,
+        wheelZoomRatio: 1.12,
+        maximumWheelDelta: 12
+    });
+    controller.reset({ x: 4, y: 4, floorIndex: 0 });
+    const wheel = { totalY: 0 };
+    const update = (zoomEnabled = true) => controller.update({
+        player: { x: 4, y: 4 },
+        floorIndex: 0,
+        layout: ZOOM_LAYOUT,
+        pointer: { x: 500, y: 300 },
+        wheel,
+        deltaSeconds: 1 / 60,
+        zoomEnabled
+    });
+
+    update();
+    assert.equal(controller.getTargetZoom(), 1);
+    wheel.totalY = -1;
+    update();
+    assert.ok(Math.abs(controller.getTargetZoom() - 1.12) < 0.000001);
+    update();
+    assert.ok(Math.abs(controller.getTargetZoom() - 1.12) < 0.000001);
+
+    wheel.totalY = -2;
+    update();
+    assert.equal(controller.getTargetZoom(), 1.2);
+    wheel.totalY = 20;
+    update();
+    assert.equal(controller.getTargetZoom(), 0.81);
+
+    wheel.totalY = 19;
+    update(false);
+    assert.equal(controller.getTargetZoom(), 0.81);
+    update(true);
+    assert.equal(controller.getTargetZoom(), 0.81);
+});
+
+test('줌 easeOutExpo는 진행 중 역방향 목표를 현재 배율에서 끊김 없이 재지정한다', () => {
+    const camera = new TutorialBattleCamera({
+        durationSeconds: 0.3,
+        zoomDurationSeconds: 0.4,
+        defaultZoom: 1
+    });
+    camera.reset({ x: 4, y: 4, floorIndex: 0, zoom: 1 });
+
+    const zoomingIn = camera.update({
+        target: { x: 4, y: 4 },
+        floorIndex: 0,
+        deltaSeconds: 0.1,
+        zoomTarget: 1.2
+    });
+    assert.ok(zoomingIn.zoom > 1 && zoomingIn.zoom < 1.2);
+    const retargetStart = zoomingIn.zoom;
+
+    const retargeted = camera.update({
+        target: { x: 4, y: 4 },
+        floorIndex: 0,
+        deltaSeconds: 0,
+        zoomTarget: 0.81
+    });
+    assert.equal(retargeted.zoom, retargetStart);
+    assert.equal(retargeted.targetZoom, 0.81);
+    assert.equal(retargeted.zooming, true);
+
+    const settled = camera.update({
+        target: { x: 4, y: 4 },
+        floorIndex: 0,
+        deltaSeconds: 0.4,
+        zoomTarget: 0.81
+    });
+    assert.equal(settled.zoom, 0.81);
+    assert.equal(settled.zooming, false);
+
+    const nextFloor = camera.update({
+        target: { x: 2, y: 3 },
+        floorIndex: 1,
+        deltaSeconds: 1 / 60,
+        zoomTarget: 0.81
+    });
+    assert.deepEqual(
+        { x: nextFloor.x, y: nextFloor.y, floorIndex: nextFloor.floorIndex },
+        { x: 2, y: 3, floorIndex: 1 }
+    );
+    assert.equal(nextFloor.zoom, 0.81);
+});
+
+test('최소 줌은 맵 이미지 양끝을 뷰포트에 맞추고 최대 줌은 기본의 120%다', () => {
+    const battleLayout = new TutorialBattleLayout({
+        map: TUTORIAL_GAME_DATA.MAP,
+        floors: TUTORIAL_GAME_DATA.FLOORS,
+        mapArtwork: TUTORIAL_ASSET_MANIFEST.MAPS,
+        camera: TUTORIAL_GAME_DATA.LAYOUT.CAMERA,
+        board: TUTORIAL_GAME_DATA.LAYOUT.BOARD,
+        hud: TUTORIAL_GAME_DATA.LAYOUT.HUD,
+        shakeTileRatio: TUTORIAL_GAME_DATA.ANIMATION.SHAKE_TILE_RATIO
+    });
+    const floor = TUTORIAL_GAME_DATA.FLOORS[0];
+    const viewports = [
+        { WW: 1280, WH: 720, UIWW: 1280, UIOffsetX: 0 },
+        { WW: 1538, WH: 900, UIWW: 1538, UIOffsetX: 0 },
+        { WW: 2560, WH: 1080, UIWW: 1920, UIOffsetX: 320 }
+    ];
+
+    for (const viewport of viewports) {
+        battleLayout.resize(viewport);
+        const createFrame = (zoom) => battleLayout.createFrame({
+            floor,
+            camera: { x: 4, y: 4, floorIndex: 0, initialized: true, zoom }
+        });
+        const defaultFrame = createFrame(1);
+        const minimumZoom = defaultFrame.cameraZoomBounds.min;
+        const minimumFrame = createFrame(minimumZoom);
+        const maximumFrame = createFrame(defaultFrame.cameraZoomBounds.max);
+
+        assert.ok(minimumZoom < 1);
+        assert.equal(minimumFrame.mapImageRect.x, 0);
+        assert.equal(minimumFrame.mapImageRect.w, viewport.WW);
+        assert.equal(defaultFrame.cameraZoomBounds.default, 1);
+        assert.equal(defaultFrame.cameraZoomBounds.max, 1.2);
+        assert.ok(
+            Math.abs(
+                maximumFrame.mapImageRect.w - (defaultFrame.mapImageRect.w * 1.2)
+            ) <= 1
+        );
+
+        const playerPoint = TutorialBattleLayout.projectTile(maximumFrame, 4, 4);
+        assert.deepEqual(
+            TutorialBattleLayout.hitTestTile(
+                maximumFrame,
+                playerPoint.x,
+                playerPoint.y
+            ),
+            { x: 4, y: 4 }
+        );
+    }
 });
 
 test('재포커스 클릭과 Escape는 게임 입력으로 전파되지 않는다', () => {

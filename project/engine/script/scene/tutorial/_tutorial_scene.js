@@ -217,13 +217,19 @@ export class TutorialScene extends BaseScene {
             shakeTileRatio: this.data.ANIMATION.SHAKE_TILE_RATIO
         });
         this.battleCamera = new TutorialBattleCamera({
-            durationSeconds: this.data.ANIMATION.CAMERA_FOLLOW_SECONDS
+            durationSeconds: this.data.ANIMATION.CAMERA_FOLLOW_SECONDS,
+            zoomDurationSeconds: this.data.ANIMATION.CAMERA_ZOOM_SECONDS,
+            defaultZoom: this.data.LAYOUT.CAMERA.DEFAULT_ZOOM
         });
         this.battleCameraController = new TutorialBattleCameraController({
             edgeMarginRatio: this.data.LAYOUT.CAMERA.EDGE_MARGIN_RATIO,
             edgeSpeedViewportRatioPerSecond:
                 this.data.LAYOUT.CAMERA.EDGE_SPEED_VIEWPORT_RATIO_PER_SECOND,
-            maxDeltaSeconds: this.data.LAYOUT.CAMERA.EDGE_MAX_DELTA_SECONDS
+            maxDeltaSeconds: this.data.LAYOUT.CAMERA.EDGE_MAX_DELTA_SECONDS,
+            defaultZoom: this.data.LAYOUT.CAMERA.DEFAULT_ZOOM,
+            maximumZoom: this.data.LAYOUT.CAMERA.MAX_ZOOM,
+            wheelZoomRatio: this.data.LAYOUT.CAMERA.WHEEL_ZOOM_RATIO,
+            maximumWheelDelta: this.data.LAYOUT.CAMERA.MAX_WHEEL_DELTA
         });
         this.buttonHost = new TutorialButtonHost({
             parent: this,
@@ -357,6 +363,9 @@ export class TutorialScene extends BaseScene {
         this.#prepareKeyboardEdges();
         this.#handleKeyboardInput();
         if (this.mode === MODES.PAUSE || this.mode === MODES.RECORD) {
+            this.battleCameraController.primeWheelBaseline(
+                getMouseInput('wheel')
+            );
             this.audioDirector.sync(this.#createAudioState());
             this.#captureKeyboardLatch();
             return;
@@ -840,7 +849,8 @@ export class TutorialScene extends BaseScene {
         this.battleCamera.reset({
             x: Number(this.model.player?.x) || 0,
             y: Number(this.model.player?.y) || 0,
-            floorIndex: Number(this.model.floorIndex) || 0
+            floorIndex: Number(this.model.floorIndex) || 0,
+            zoom: this.data.LAYOUT.CAMERA.DEFAULT_ZOOM
         });
         this.battleCameraController.reset({
             x: Number(this.model.player?.x) || 0,
@@ -3038,7 +3048,7 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * 플레이어 추적점에 가장자리 이동 또는 휠 클릭 중앙 복귀를 결합합니다.
+     * 플레이어 추적점에 가장자리 이동·휠 줌·휠 클릭 중앙 복귀를 결합합니다.
      * @param {number} deltaSeconds - 현재 가변 프레임 델타입니다.
      * @private
      */
@@ -3052,23 +3062,27 @@ export class TutorialScene extends BaseScene {
             && !this.cutscenes.isOpen()
             && !this.guidance.isOpen()
             && !this.presentationTimeline.isLocked();
+        const layout = this.#createBattleLayoutFrame();
         const target = this.battleCameraController.update({
             player: {
                 x: presentation.playerX,
                 y: presentation.playerY
             },
             floorIndex: presentation.floorIndex,
-            layout: this.#createBattleLayoutFrame(),
+            layout,
             pointer: getMouseInput('pos'),
+            wheel: getMouseInput('wheel'),
             deltaSeconds,
             edgePanEnabled: cameraInputEnabled,
+            zoomEnabled: cameraInputEnabled,
             recenter: cameraInputEnabled
                 && consumeMouseState('middle', 'clicked')
         });
         this.battleCamera.update({
             target,
             floorIndex: presentation.floorIndex,
-            deltaSeconds
+            deltaSeconds,
+            zoomTarget: this.battleCameraController.getTargetZoom()
         });
     }
 

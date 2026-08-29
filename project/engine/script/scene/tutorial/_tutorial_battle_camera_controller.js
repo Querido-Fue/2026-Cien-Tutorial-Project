@@ -38,14 +38,21 @@ export class TutorialBattleCameraController {
     #edgeMarginRatio;
     #edgeSpeedViewportRatioPerSecond;
     #maxDeltaSeconds;
+    #defaultZoom;
+    #maximumZoom;
+    #wheelZoomRatio;
+    #maximumWheelDelta;
     #offsetX;
     #offsetY;
+    #targetZoom;
+    #lastWheelTotalY;
+    #wheelBaselineInitialized;
     #floorIndex;
     #initialized;
     #edgePanArmed;
 
     /**
-     * @param {{edgeMarginRatio?:number,edgeSpeedViewportRatioPerSecond?:number,maxDeltaSeconds?:number}} [config={}] - 가장자리 스크롤 설정입니다.
+     * @param {{edgeMarginRatio?:number,edgeSpeedViewportRatioPerSecond?:number,maxDeltaSeconds?:number,defaultZoom?:number,maximumZoom?:number,wheelZoomRatio?:number,maximumWheelDelta?:number}} [config={}] - 가장자리 스크롤과 휠 줌 설정입니다.
      */
     constructor(config = {}) {
         this.#edgeMarginRatio = clamp(
@@ -62,6 +69,19 @@ export class TutorialBattleCameraController {
             1 / 240,
             0.25
         );
+        this.#defaultZoom = Math.max(0.01, finite(config.defaultZoom) || 1);
+        this.#maximumZoom = Math.max(
+            this.#defaultZoom,
+            finite(config.maximumZoom) || 1.2
+        );
+        this.#wheelZoomRatio = Math.max(
+            1.001,
+            finite(config.wheelZoomRatio) || 1.12
+        );
+        this.#maximumWheelDelta = Math.max(
+            1,
+            finite(config.maximumWheelDelta) || 12
+        );
         this.clear();
     }
 
@@ -72,6 +92,9 @@ export class TutorialBattleCameraController {
     reset(target) {
         this.#offsetX = 0;
         this.#offsetY = 0;
+        this.#targetZoom = this.#defaultZoom;
+        this.#lastWheelTotalY = 0;
+        this.#wheelBaselineInitialized = false;
         this.#floorIndex = finite(target?.floorIndex);
         this.#initialized = true;
         this.#edgePanArmed = true;
@@ -81,6 +104,9 @@ export class TutorialBattleCameraController {
     clear() {
         this.#offsetX = 0;
         this.#offsetY = 0;
+        this.#targetZoom = this.#defaultZoom;
+        this.#lastWheelTotalY = 0;
+        this.#wheelBaselineInitialized = false;
         this.#floorIndex = 0;
         this.#initialized = false;
         this.#edgePanArmed = true;
@@ -96,16 +122,24 @@ export class TutorialBattleCameraController {
         floorIndex = 0,
         layout,
         pointer,
+        wheel,
         deltaSeconds = 0,
         edgePanEnabled = false,
+        zoomEnabled = false,
         recenter = false
     } = {}) {
         const playerX = finite(player?.x);
         const playerY = finite(player?.y);
         const normalizedFloorIndex = finite(floorIndex);
-        if (!this.#initialized || normalizedFloorIndex !== this.#floorIndex) {
+        if (!this.#initialized) {
             this.reset({ x: playerX, y: playerY, floorIndex: normalizedFloorIndex });
+        } else if (normalizedFloorIndex !== this.#floorIndex) {
+            this.#offsetX = 0;
+            this.#offsetY = 0;
+            this.#floorIndex = normalizedFloorIndex;
+            this.#edgePanArmed = true;
         }
+        this.#updateZoomTarget(layout, wheel, zoomEnabled);
 
         if (recenter) {
             this.#offsetX = 0;
@@ -149,14 +183,31 @@ export class TutorialBattleCameraController {
         return Object.freeze({ x: targetX, y: targetY });
     }
 
-    /** @returns {{offsetX:number,offsetY:number,floorIndex:number,initialized:boolean,edgePanArmed:boolean}} */
+    /** 최신 누적 휠값을 입력 기준점으로 삼아 이후 변화만 소비합니다. @param {object|null} wheel */
+    primeWheelBaseline(wheel) {
+        const totalY = Number(wheel?.totalY);
+        if (!Number.isFinite(totalY)) {
+            return;
+        }
+        this.#lastWheelTotalY = totalY;
+        this.#wheelBaselineInitialized = true;
+    }
+
+    /** @returns {number} 연속 휠 입력이 누적되는 최신 목표 줌입니다. */
+    getTargetZoom() {
+        return this.#targetZoom;
+    }
+
+    /** @returns {{offsetX:number,offsetY:number,targetZoom:number,floorIndex:number,initialized:boolean,edgePanArmed:boolean,wheelBaselineInitialized:boolean}} */
     getSnapshot() {
         return Object.freeze({
             offsetX: this.#offsetX,
             offsetY: this.#offsetY,
+            targetZoom: this.#targetZoom,
             floorIndex: this.#floorIndex,
             initialized: this.#initialized,
-            edgePanArmed: this.#edgePanArmed
+            edgePanArmed: this.#edgePanArmed,
+            wheelBaselineInitialized: this.#wheelBaselineInitialized
         });
     }
 
@@ -188,5 +239,52 @@ export class TutorialBattleCameraController {
             x: ((screenX * axisYY) - (screenY * axisYX)) / determinant,
             y: ((screenY * axisXX) - (screenX * axisXY)) / determinant
         };
+    }
+
+    /**
+     * 누적 휠 차분을 한 번만 소비해 최신 목표 줌을 갱신합니다.
+     * @param {object} layout - 동적 최소 배율이 포함된 레이아웃입니다.
+     * @param {object|null} wheel - 누적 휠 스냅샷입니다.
+     * @param {boolean} enabled - 현재 줌 입력을 적용할 수 있는지 여부입니다.
+     * @private
+     */
+    #updateZoomTarget(layout, wheel, enabled) {
+        const bounds = layout?.cameraZoomBounds || {};
+        const minimum = Math.max(
+            0.01,
+            Number.isFinite(Number(bounds.min))
+                ? Number(bounds.min)
+                : this.#defaultZoom
+        );
+        const maximum = Math.max(
+            minimum,
+            Number.isFinite(Number(bounds.max))
+                ? Number(bounds.max)
+                : this.#maximumZoom
+        );
+        this.#targetZoom = clamp(this.#targetZoom, minimum, maximum);
+
+        const totalY = Number(wheel?.totalY);
+        if (!Number.isFinite(totalY)) {
+            return;
+        }
+        if (!this.#wheelBaselineInitialized) {
+            this.primeWheelBaseline(wheel);
+            return;
+        }
+        const wheelDelta = clamp(
+            totalY - this.#lastWheelTotalY,
+            -this.#maximumWheelDelta,
+            this.#maximumWheelDelta
+        );
+        this.#lastWheelTotalY = totalY;
+        if (!enabled || Math.abs(wheelDelta) <= AXIS_EPSILON) {
+            return;
+        }
+        this.#targetZoom = clamp(
+            this.#targetZoom * Math.pow(this.#wheelZoomRatio, -wheelDelta),
+            minimum,
+            maximum
+        );
     }
 }
