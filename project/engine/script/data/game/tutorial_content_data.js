@@ -14,21 +14,20 @@ function deepFreeze(value) {
 }
 
 /**
- * 확정 콘텐츠 문구와 현재 프로토타입에서만 사용하는 임시 해금 정책입니다.
- * `provisional` 조건은 표시 설명으로 승인된 문구가 아니며 안정된 모델 사건에만 연결됩니다.
+ * 확정 콘텐츠 문구와 안정된 모델 사건에 연결한 업적 해금 정책입니다.
  */
 export const TUTORIAL_CONTENT_DATA = deepFreeze({
-    VERSION: 1,
+    VERSION: 2,
     ACHIEVEMENTS: [
         {
             id: 'steve-pickaxe',
             title: '스티브..?',
             englishTitle: 'Steve? Is that you?',
-            description: null,
-            descriptionStatus: 'unconfirmed',
-            conditionStatus: 'provisional',
+            description: '다이아곡괭이를 사용해 벽을 넘어 이동하였다',
+            descriptionStatus: 'confirmed',
+            conditionStatus: 'confirmed',
             condition: {
-                eventType: 'item-picked',
+                eventType: 'wall-traversed',
                 field: 'itemId',
                 equals: 'diamond-pickaxe'
             }
@@ -37,9 +36,9 @@ export const TUTORIAL_CONTENT_DATA = deepFreeze({
             id: 'legend-of-lora',
             title: '로라의 전설',
             englishTitle: 'The Legend of Lora',
-            description: null,
-            descriptionStatus: 'unconfirmed',
-            conditionStatus: 'provisional',
+            description: '시간의 오카리나를 획득했다',
+            descriptionStatus: 'confirmed',
+            conditionStatus: 'confirmed',
             condition: {
                 eventType: 'item-picked',
                 field: 'itemId',
@@ -50,27 +49,35 @@ export const TUTORIAL_CONTENT_DATA = deepFreeze({
             id: 'just-the-beginning',
             title: '이건 시작에 불과해',
             englishTitle: "It's Just the Beginning",
-            description: null,
-            descriptionStatus: 'unconfirmed',
-            conditionStatus: 'provisional',
-            condition: { eventType: 'floor-transition' }
+            description: '처음 로라에게 죽었다',
+            descriptionStatus: 'confirmed',
+            conditionStatus: 'confirmed',
+            condition: {
+                eventType: 'battle-finished',
+                field: 'defeatedBy',
+                equals: 'lora'
+            }
         },
         {
             id: 'another-random-player',
             title: '그녀를 스쳐가는 또 한 명의 플레이어',
             englishTitle: 'Just Another Random Player',
-            description: null,
-            descriptionStatus: 'unconfirmed',
-            conditionStatus: 'provisional',
-            condition: { eventType: 'battle-finished' }
+            description: '엔딩을 보았다',
+            descriptionStatus: 'confirmed',
+            conditionStatus: 'confirmed',
+            condition: {
+                eventType: 'battle-finished',
+                field: 'outcome',
+                equals: 'success'
+            }
         },
         {
             id: 'you-are-my-sunshine',
             title: '너는 나의 빛이야',
             englishTitle: 'You Are My Sunshine',
-            description: null,
-            descriptionStatus: 'unconfirmed',
-            conditionStatus: 'provisional',
+            description: '진엔딩을 보았다',
+            descriptionStatus: 'confirmed',
+            conditionStatus: 'confirmed',
             condition: {
                 eventType: 'battle-finished',
                 field: 'endingId',
@@ -81,10 +88,14 @@ export const TUTORIAL_CONTENT_DATA = deepFreeze({
             id: 'peekaboo',
             title: '깜짝 놀랐지?',
             englishTitle: 'Peekaboo!',
-            description: null,
-            descriptionStatus: 'unconfirmed',
-            conditionStatus: 'provisional',
-            condition: { eventType: 'teleported' }
+            description: '처음 2페이즈에 진입했다',
+            descriptionStatus: 'confirmed',
+            conditionStatus: 'confirmed',
+            condition: {
+                eventType: 'floor-transition',
+                field: 'floorIndex',
+                equals: 1
+            }
         }
     ],
     DIARIES: {

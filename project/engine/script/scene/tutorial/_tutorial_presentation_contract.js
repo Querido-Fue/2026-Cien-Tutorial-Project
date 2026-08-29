@@ -30,7 +30,8 @@ export const TUTORIAL_MODEL_EVENT_TYPES = Object.freeze([
     'player-turn-started',
     'player-waited',
     'teleported',
-    'wall-destroyed'
+    'wall-destroyed',
+    'wall-traversed'
 ]);
 
 /**

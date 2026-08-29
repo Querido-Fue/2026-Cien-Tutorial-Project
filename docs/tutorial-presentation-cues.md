@@ -58,7 +58,7 @@ tween은 계속 `TutorialAnimationTimeline`이 담당해 중복 이동을 만들
 
 ## 4. 모델 event 목록과 현재 cue
 
-모델이 생성하는 전체 26개 타입은 `_tutorial_presentation_contract.js`의
+모델이 생성하는 전체 27개 타입은 `_tutorial_presentation_contract.js`의
 `TUTORIAL_MODEL_EVENT_TYPES`가 단일 문서화 목록이다.
 
 | 모델 event | 현재 생성 cue |
@@ -89,6 +89,7 @@ tween은 계속 `TutorialAnimationTimeline`이 담당해 중복 이동을 만들
 | `player-waited` | log |
 | `teleported` | log, actor-animation(`teleport`), audio |
 | `wall-destroyed` | log |
+| `wall-traversed` | 직접 cue 없음; 업적 판정기가 실제 곡괭이 벽 통과를 식별 |
 
 event가 누락됐거나 HP·불안정도 event의 값이 불완전해도 이전/새 snapshot 차이는
 `sourceEventType: 'snapshot-sync'` transition cue로 보완한다. 실패한 모델 명령은

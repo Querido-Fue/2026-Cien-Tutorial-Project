@@ -795,7 +795,9 @@ export class TutorialBattleModel {
             this.loraActionsCompleted += 1;
             this.turnNumber = Math.min(this.maxTurns, this.loraActionsCompleted + 1);
             this.round = this.turnNumber;
-            this.#finishBattle('failure', 'player-defeated', events);
+            this.#finishBattle('failure', 'player-defeated', events, {
+                defeatedBy: LORA_ID
+            });
         }
         this.#setLastEvents(events);
         return {
@@ -839,7 +841,9 @@ export class TutorialBattleModel {
             this.lora.peaceTurns -= 1;
         }
         if (!this.player.alive && !this.result) {
-            this.#finishBattle('failure', 'player-defeated', events);
+            this.#finishBattle('failure', 'player-defeated', events, {
+                defeatedBy: 'mob'
+            });
         }
         if (this.result) {
             this.#setLastEvents(events);
@@ -1214,6 +1218,14 @@ export class TutorialBattleModel {
                         step: stepsUsed,
                         remainingMoves
                     }));
+                    if (blocker?.type === 'wall') {
+                        events.push(this.#createEvent('wall-traversed', {
+                            wallId: blocker.id,
+                            itemId: this.#getWallTraversalItemId(),
+                            x: point.x,
+                            y: point.y
+                        }));
+                    }
                     this.#processTileEntry(events);
                     if (this.result) {
                         break;
@@ -1301,7 +1313,9 @@ export class TutorialBattleModel {
             }
         }
         if (!this.player.alive && !this.result) {
-            this.#finishBattle('failure', 'player-defeated', events);
+            this.#finishBattle('failure', 'player-defeated', events, {
+                defeatedBy: 'event-tile'
+            });
         }
     }
 
@@ -1490,8 +1504,15 @@ export class TutorialBattleModel {
         return calculation.change;
     }
 
-    /** 종료 조건과 불안정도 기반 결과를 확정합니다. @private */
-    #finishBattle(outcome, reason, events) {
+    /**
+     * 종료 조건과 불안정도 기반 결과를 확정하고 패배 원인을 보존합니다.
+     * @param {string} outcome - 성공 또는 실패 결과입니다.
+     * @param {string} reason - 전투 종료 사유입니다.
+     * @param {object[]} events - 결과 사건을 추가할 배열입니다.
+     * @param {{defeatedBy?:string|null}} [details={}] - 플레이어를 쓰러뜨린 주체입니다.
+     * @private
+     */
+    #finishBattle(outcome, reason, events, { defeatedBy = null } = {}) {
         if (this.result) {
             return;
         }
@@ -1524,6 +1545,7 @@ export class TutorialBattleModel {
             loraHp: this.lora.hp,
             instability: this.lora.instability,
             neutralized,
+            defeatedBy: reason === 'player-defeated' ? defeatedBy : null,
             usedItems: [...this.usedItems],
             unlockedCutscenes: [],
             score: this.#calculateScore(outcome, endingId),
@@ -1631,6 +1653,16 @@ export class TutorialBattleModel {
     /** 아이템 보유 여부를 확인합니다. @private */
     #hasItem(itemId) {
         return (this.inventory.get(itemId) ?? 0) > 0;
+    }
+
+    /** 보유 아이템 중 벽 통과 효과를 제공한 안정 ID를 반환합니다. @private */
+    #getWallTraversalItemId() {
+        for (const [itemId, count] of this.inventory) {
+            if (count > 0 && this.#combatRules.grantsWallTraversal(itemId)) {
+                return itemId;
+            }
+        }
+        return null;
     }
 
     /** 복원 상태의 핵심 불변식을 확인합니다. @private */

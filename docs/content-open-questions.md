@@ -20,22 +20,22 @@
 - 점수와 턴별 전투 기록 화면은 표시하지 않는다. v2 저장 호환용 `bestScore` 값은 읽기만
   유지하고 새 결과로 갱신하지 않는다.
 
-## 임시 업적 조건
+## 확정 업적 조건
 
-업적 설명과 해금 조건은 최신 회의에서도 미확정이다. 현재 프로토타입에서는 새로운
-전투 규칙을 만들지 않고 이미 존재하는 모델 사건만 아래처럼 임시 연결했다. 정적 데이터의
-`conditionStatus: provisional`과 `descriptionStatus: unconfirmed`가 이 경계를 표시한다.
+업적 설명과 해금 조건은 전달받은 확정안을 사용한다. 정적 데이터의
+`conditionStatus: confirmed`와 `descriptionStatus: confirmed`가 이 상태를 표시한다.
+`처음` 조건은 별도 횟수 카운터를 만들지 않고 기존 메타의 업적 ID 멱등 해금으로 보장한다.
 
-| 내부 ID | 표시명 | 임시 사건 조건 |
+| 내부 ID | 표시명 | 확정 사건 조건 |
 | --- | --- | --- |
-| `steve-pickaxe` | 스티브..? | `diamond-pickaxe` 획득 |
-| `legend-of-lora` | 로라의 전설 | `ocarina` 획득 |
-| `just-the-beginning` | 이건 시작에 불과해 | 첫 `floor-transition` |
-| `another-random-player` | 그녀를 스쳐가는 또 한 명의 플레이어 | `battle-finished` |
+| `steve-pickaxe` | 스티브..? | `diamond-pickaxe` 보유 상태로 실제 벽 칸을 통과한 `wall-traversed` |
+| `legend-of-lora` | 로라의 전설 | `ocarina`를 획득한 `item-picked` |
+| `just-the-beginning` | 이건 시작에 불과해 | `battle-finished.defeatedBy === 'lora'` |
+| `another-random-player` | 그녀를 스쳐가는 또 한 명의 플레이어 | 성공한 `battle-finished` |
 | `you-are-my-sunshine` | 너는 나의 빛이야 | `battle-finished`의 `endingId === true` |
-| `peekaboo` | 깜짝 놀랐지? | 첫 `teleported` |
+| `peekaboo` | 깜짝 놀랐지? | `floor-transition.floorIndex === 1` |
 
-승인 전까지 갤러리에는 업적의 확정 이름과 `간단 설명 미확정`만 표시한다.
+갤러리에는 각 업적의 확정 해금 조건 문구를 설명으로 표시한다.
 
 ## 임시 컷씬 트리거
 
@@ -63,7 +63,6 @@
 
 ## 후속 승인 필요
 
-- 6개 업적의 최종 조건과 간단 설명
 - `special` 엔딩 유지 여부, 표시명과 최종 대사
 - `failure` 결과의 최종 표시명
 - 거울·아이라인·오르골 개별 컷씬 카드와 정확한 재생 시점

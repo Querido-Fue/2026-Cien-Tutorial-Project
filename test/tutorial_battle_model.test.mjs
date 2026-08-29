@@ -224,6 +224,43 @@ test('짝 포탈은 진입 즉시 반대편을 삽입하고 남은 이동력을 
     assert.equal(teleported.remainingMoves, 3);
 });
 
+test('다이아몬드 곡괭이를 획득한 뒤 실제 벽 칸을 통과하면 전용 사건을 만든다', () => {
+    const model = createModel();
+    seedState(model, (state) => {
+        state.player.x = 8;
+        state.player.y = 6;
+    });
+
+    assert.equal(model.previewPath([
+        { x: 8, y: 6 },
+        { x: 7, y: 6 },
+        { x: 6, y: 6 }
+    ]).ok, true);
+    const moved = model.commitPath([
+        { x: 8, y: 6 },
+        { x: 7, y: 6 },
+        { x: 6, y: 6 }
+    ]);
+    assert.equal(moved.ok, true);
+    assert.ok(moved.events.some(({ type, itemId }) => (
+        type === 'item-picked' && itemId === 'diamond-pickaxe'
+    )));
+    assert.deepEqual(
+        moved.events.find(({ type }) => type === 'wall-traversed'),
+        {
+            type: 'wall-traversed',
+            turn: 1,
+            loraActionsCompleted: 0,
+            playerTurn: 1,
+            floorIndex: 0,
+            wallId: 'f1-wall-5',
+            itemId: 'diamond-pickaxe',
+            x: 6,
+            y: 6
+        }
+    );
+});
+
 test('피해·이동력 감소·불안정도 증감 이벤트 타일을 적용한다', () => {
     const damageModel = createModel();
     seedState(damageModel, (state) => {
@@ -308,6 +345,27 @@ test('로라 연속 공격의 불안정도 증가량은 10, 14, 18 순서다', (
 
     assert.deepEqual(increases, [10, 14, 18]);
     assert.equal(model.getSnapshot().consecutiveAttackCount, 3);
+});
+
+test('로라의 공격으로 사망한 결과는 다른 패배 원인과 구분된다', () => {
+    const model = createModel();
+    seedState(model, (state) => {
+        state.turn = 'lora';
+        state.phase = 'lora';
+        state.player.x = 4;
+        state.player.y = 1;
+        state.player.hp = 1;
+        state.player.alive = true;
+    });
+
+    const attacked = model.performLoraTurn();
+    assert.equal(attacked.defeated, true);
+    assert.equal(attacked.result.reason, 'player-defeated');
+    assert.equal(attacked.result.defeatedBy, 'lora');
+    assert.equal(
+        attacked.events.find(({ type }) => type === 'battle-finished').defeatedBy,
+        'lora'
+    );
 });
 
 test('헤이스트 획득 직후 한 턴에 행동 두 번을 충전한다', () => {

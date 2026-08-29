@@ -22,7 +22,7 @@ import {
     unlockTutorialCutscene
 } from '../project/engine/script/scene/tutorial/_tutorial_meta_progress.js';
 
-test('확정 일기와 업적명은 문서 순서를 보존하고 임시 조건을 명시한다', () => {
+test('확정 일기와 업적명·설명·조건은 문서 순서를 보존한다', () => {
     assert.equal(Object.isFrozen(TUTORIAL_CONTENT_DATA), true);
     assert.deepEqual(
         TUTORIAL_CONTENT_DATA.ACHIEVEMENTS.map((entry) => entry.title),
@@ -46,13 +46,31 @@ test('확정 일기와 업적명은 문서 순서를 보존하고 임시 조건�
             'Peekaboo!'
         ]
     );
-    assert.equal(
-        TUTORIAL_CONTENT_DATA.ACHIEVEMENTS.every(
-            (entry) => entry.description === null
-                && entry.descriptionStatus === 'unconfirmed'
-                && entry.conditionStatus === 'provisional'
-        ),
-        true
+    assert.deepEqual(
+        TUTORIAL_CONTENT_DATA.ACHIEVEMENTS.map((entry) => entry.description),
+        [
+            '다이아곡괭이를 사용해 벽을 넘어 이동하였다',
+            '시간의 오카리나를 획득했다',
+            '처음 로라에게 죽었다',
+            '엔딩을 보았다',
+            '진엔딩을 보았다',
+            '처음 2페이즈에 진입했다'
+        ]
+    );
+    assert.equal(TUTORIAL_CONTENT_DATA.ACHIEVEMENTS.every(
+        (entry) => entry.descriptionStatus === 'confirmed'
+            && entry.conditionStatus === 'confirmed'
+    ), true);
+    assert.deepEqual(
+        TUTORIAL_CONTENT_DATA.ACHIEVEMENTS.map((entry) => entry.condition),
+        [
+            { eventType: 'wall-traversed', field: 'itemId', equals: 'diamond-pickaxe' },
+            { eventType: 'item-picked', field: 'itemId', equals: 'ocarina' },
+            { eventType: 'battle-finished', field: 'defeatedBy', equals: 'lora' },
+            { eventType: 'battle-finished', field: 'outcome', equals: 'success' },
+            { eventType: 'battle-finished', field: 'endingId', equals: 'true' },
+            { eventType: 'floor-transition', field: 'floorIndex', equals: 1 }
+        ]
     );
     assert.equal(TUTORIAL_CONTENT_DATA.DIARIES.LORA.length, 7);
     assert.equal(TUTORIAL_CONTENT_DATA.DIARIES.DEVELOPER.length, 3);
@@ -67,14 +85,20 @@ test('업적 판정은 안정된 모델 사건만 사용하고 저장된 ID를 �
         TUTORIAL_CONTENT_DATA.ACHIEVEMENTS
     );
     const events = [
-        { type: 'item-picked', itemId: 'diamond-pickaxe' },
+        { type: 'wall-traversed', itemId: 'diamond-pickaxe' },
         { type: 'item-picked', itemId: 'ocarina' },
+        {
+            type: 'battle-finished',
+            outcome: 'failure',
+            endingId: 'failure',
+            defeatedBy: 'lora'
+        },
         { type: 'floor-transition', floorIndex: 1 },
-        { type: 'battle-finished', endingId: 'true' },
-        { type: 'teleported' }
+        { type: 'battle-finished', outcome: 'success', endingId: 'true' }
     ];
-    const result = evaluator.evaluate(events, ['steve-pickaxe']);
+    const result = evaluator.evaluate(events);
     assert.deepEqual(result.unlockedIds, [
+        'steve-pickaxe',
         'legend-of-lora',
         'just-the-beginning',
         'another-random-player',
@@ -83,12 +107,36 @@ test('업적 판정은 안정된 모델 사건만 사용하고 저장된 ID를 �
     ]);
     assert.deepEqual(
         result.notifications.map((entry) => entry.detail),
-        ['로라의 전설', '이건 시작에 불과해', '그녀를 스쳐가는 또 한 명의 플레이어', '너는 나의 빛이야', '깜짝 놀랐지?']
+        ['스티브..?', '로라의 전설', '이건 시작에 불과해', '그녀를 스쳐가는 또 한 명의 플레이어', '너는 나의 빛이야', '깜짝 놀랐지?']
     );
     assert.deepEqual(
-        evaluator.evaluate(events, ['steve-pickaxe', ...result.unlockedIds]).unlockedIds,
+        evaluator.evaluate(events, result.unlockedIds).unlockedIds,
         []
     );
+});
+
+test('유사 사건은 곡괭이 벽 통과·로라 사망·2페이즈·엔딩 업적을 해금하지 않는다', () => {
+    const evaluator = new TutorialAchievementEvaluator(
+        TUTORIAL_CONTENT_DATA.ACHIEVEMENTS
+    );
+    const result = evaluator.evaluate([
+        { type: 'item-picked', itemId: 'diamond-pickaxe' },
+        { type: 'wall-traversed', itemId: 'other-item' },
+        { type: 'teleported' },
+        { type: 'floor-transition', floorIndex: 0 },
+        {
+            type: 'battle-finished',
+            outcome: 'failure',
+            endingId: 'failure',
+            defeatedBy: 'mob'
+        }
+    ]);
+    assert.deepEqual(result.unlockedIds, []);
+
+    const normalEnding = evaluator.evaluate([{
+        type: 'battle-finished', outcome: 'success', endingId: 'special'
+    }]);
+    assert.deepEqual(normalEnding.unlockedIds, ['another-random-player']);
 });
 
 test('컷씬 트리거는 오프닝·실제 아이템·층 전환·엔딩만 한 런에 한 번 연결한다', () => {

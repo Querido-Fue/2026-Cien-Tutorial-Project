@@ -1,6 +1,6 @@
 /**
  * @class TutorialAchievementEvaluator
- * @description 안정된 모델 사건을 임시 업적 조건과 대조해 새 해금 알림만 생성합니다.
+ * @description 안정된 모델 사건을 확정 업적 조건과 대조해 새 해금 알림만 생성합니다.
  */
 export class TutorialAchievementEvaluator {
     #definitions;
