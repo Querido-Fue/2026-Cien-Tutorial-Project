@@ -104,7 +104,6 @@ export class TutorialBattleHudView {
         }
         this.#frame = viewModel;
         try {
-            this.#drawBattleStageHeader();
             this.#drawLoraStatusCard();
             this.#drawPlayerStatus();
             this.#drawInventoryCard();
@@ -242,60 +241,6 @@ export class TutorialBattleHudView {
             return specs;
         } finally {
             this.#frame = null;
-        }
-    }
-
-    /** 스테이지 제목과 턴 진행 핍을 그립니다. @private */
-    #drawBattleStageHeader() {
-        const { colors, hud, layout, snapshot } = this.#frame;
-        const rect = layout.hudRects.STAGE_HEADER;
-        drawTutorialPixelAsset(this.#renderPort, {
-            layer: 'ui',
-            image: this.#assetPort.getUiAsset?.('turnFrame'),
-            rect,
-            alpha: 0.82
-        });
-        const completed = clampBattleViewNumber(
-            Number(snapshot.loraActionsCompleted) || 0,
-            0,
-            Number(snapshot.maxTurns) || 12
-        );
-        const maxTurns = Number(snapshot.maxTurns) || 12;
-        const transitionAfter = Number(hud.config.floorTransitionAfterTurn) || 6;
-        const pipsX = rect.x + (rect.w * 0.08);
-        const pipsW = rect.w * 0.84;
-        const dividerGap = Math.max(3, rect.w * 0.012);
-        const pipGap = Math.max(1, rect.w * 0.004);
-        const pipSize = Math.min(
-            rect.h * 0.34,
-            (pipsW - dividerGap - (pipGap * (maxTurns - 1))) / maxTurns
-        );
-        const pipY = rect.y + ((rect.h - pipSize) * 0.52);
-        let pipX = pipsX;
-        for (let index = 0; index < maxTurns; index++) {
-            if (index === transitionAfter) {
-                const dividerX = pipX + (dividerGap * 0.5);
-                this.#renderPort.render('ui', {
-                    shape: 'rect',
-                    x: dividerX,
-                    y: pipY - (pipSize * 0.15),
-                    w: 1,
-                    h: pipSize * 1.3,
-                    fill: colors.UI.Border
-                });
-                pipX += dividerGap;
-            }
-            const done = index < completed;
-            const upcoming = index === completed && snapshot.phase !== 'result';
-            drawTutorialPixelAsset(this.#renderPort, {
-                layer: 'ui',
-                image: this.#assetPort.getUiAsset?.(
-                    done ? 'turnPassed' : upcoming ? 'turnDuring' : 'turnBefore'
-                ),
-                rect: { x: pipX, y: pipY, w: pipSize, h: pipSize },
-                alpha: 0.96
-            });
-            pipX += pipSize + pipGap;
         }
     }
 

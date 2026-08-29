@@ -712,6 +712,10 @@ test('우하단 행동 메뉴는 원본 다이아 프레임 하나와 상단 회
 test('로라와 플레이어 상태는 원본 패널의 초상·슬롯·게이지에 맞춰진다', () => {
     const commands = [];
     const assets = {
+        turnFrame: { naturalWidth: 177, naturalHeight: 29 },
+        turnBefore: { naturalWidth: 15, naturalHeight: 15 },
+        turnDuring: { naturalWidth: 15, naturalHeight: 15 },
+        turnPassed: { naturalWidth: 15, naturalHeight: 15 },
         loraPanelFull: { naturalWidth: 247, naturalHeight: 90 },
         loraPortraitIcon: { naturalWidth: 125, naturalHeight: 125 },
         loraHpBar: { naturalWidth: 80, naturalHeight: 4 },
@@ -892,6 +896,15 @@ test('로라와 플레이어 상태는 원본 패널의 초상·슬롯·게이�
     assert.equal(
         commands.some((command) => typeof command.text === 'string'
             && /^(로라|HP|불안정)/.test(command.text)),
+        false
+    );
+    assert.equal(
+        commands.some((command) => [
+            assets.turnFrame,
+            assets.turnBefore,
+            assets.turnDuring,
+            assets.turnPassed
+        ].includes(command.image)),
         false
     );
     assert.deepEqual(
