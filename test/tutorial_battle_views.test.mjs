@@ -7,6 +7,7 @@ import { TUTORIAL_ASSET_MANIFEST } from '../project/engine/script/data/game/tuto
 import { TutorialBattleHudView } from '../project/engine/script/scene/tutorial/view/_tutorial_battle_hud_view.js';
 import { TutorialBattleLayout } from '../project/engine/script/scene/tutorial/view/_tutorial_battle_layout.js';
 import { TutorialBattleTutorialView } from '../project/engine/script/scene/tutorial/view/_tutorial_battle_tutorial_view.js';
+import { TutorialBattleWorldView } from '../project/engine/script/scene/tutorial/view/_tutorial_battle_world_view.js';
 import { TUTORIAL_UI_LAYOUT_TOKENS } from '../project/engine/script/scene/tutorial/view/_tutorial_ui_layout_tokens.js';
 import { TutorialBattleFocusController } from '../project/engine/script/scene/tutorial/_tutorial_battle_focus_controller.js';
 import { TutorialCombatReadabilityPresenter } from '../project/engine/script/scene/tutorial/_tutorial_combat_readability_presenter.js';
@@ -93,6 +94,69 @@ test('타일 투영 중심은 같은 레이아웃의 히트테스트에서 원�
             );
         }
     }
+});
+
+test('이동 미리보기는 맵 타일의 두 투영 축으로 계산한 네 꼭짓점을 그린다', () => {
+    const layoutController = createLayout();
+    layoutController.resize(VIEWPORTS[0]);
+    const floor = {
+        ...TUTORIAL_GAME_DATA.FLOORS[0],
+        walls: [],
+        items: [],
+        eventTiles: [],
+        teleports: [],
+        mobs: []
+    };
+    const layout = layoutController.createFrame({
+        floor,
+        elapsedSeconds: 0,
+        screenShakeSeconds: 0
+    });
+    const commands = [];
+    const view = new TutorialBattleWorldView({
+        render() {},
+        renderGL(layer, command) {
+            commands.push({ layer, ...command });
+        },
+        measureText(text) {
+            return String(text).length * 8;
+        }
+    }, {
+        getMapArtwork() {
+            return { layers: [] };
+        }
+    });
+    view.draw({
+        snapshot: { phase: 'move', floorIndex: 0, player: null, lora: null },
+        floor,
+        layout,
+        fonts: { SMALL: '12px sans-serif', HEADING: '18px sans-serif' },
+        colors: {
+            BoardFrame: '#frame',
+            Tile: { Reachable: '#reachable', Teleport: '#teleport' },
+            UI: {}
+        },
+        world: {
+            presentation: { floorIndex: 0, pathProgress: 1 },
+            attackSelected: false,
+            cleanseSelected: false,
+            pathExtensions: [[{ x: 4, y: 4 }]],
+            plannedPath: [],
+            hoveredTile: null,
+            readability: { loraIntent: { ok: false } },
+            floorActors: {},
+            itemMetadata: {},
+            elapsedSeconds: 0,
+            config: {}
+        }
+    });
+
+    const preview = commands.find((command) => command.fill === '#reachable');
+    const expectedVertices = TutorialBattleLayout.projectTileQuad(layout, 4, 4, 0.76);
+    assert.equal(preview.shape, 'rect');
+    assert.deepEqual(preview.vertices, expectedVertices);
+    assert.notEqual(preview.vertices[1], preview.vertices[3]);
+    assert.notEqual(preview.vertices[0], preview.vertices[4]);
 });
 
 test('세 화면비에서 HUD 영역은 UI 안에 있고 서로 겹치지 않는다', () => {

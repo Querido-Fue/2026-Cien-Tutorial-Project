@@ -2,7 +2,7 @@ import { toRadians } from 'util/math_util.js';
 
 /**
  * @class ShapeGeometryBuilder
- * @description 렌더 옵션(크기/회전/반지름)으로부터 사각형 정점 좌표를 계산합니다.
+ * @description 렌더 옵션의 크기·회전 또는 명시적 사각형 정점으로 화면 기하를 계산합니다.
  */
 export class ShapeGeometryBuilder {
     /**
@@ -12,6 +12,31 @@ export class ShapeGeometryBuilder {
      * @returns {Float32Array|Array|object} 결과값이 채워진 객체입니다.
      */
     static buildInto(options, out) {
+        const vertices = options?.vertices;
+        let hasCustomVertices = (Array.isArray(vertices) || ArrayBuffer.isView(vertices))
+            && vertices.length >= 8;
+        if (hasCustomVertices) {
+            for (let index = 0; index < 8; index++) {
+                if (!Number.isFinite(Number(vertices[index]))) {
+                    hasCustomVertices = false;
+                    break;
+                }
+            }
+        }
+        if (hasCustomVertices) {
+            if (Array.isArray(out) || ArrayBuffer.isView(out)) {
+                for (let index = 0; index < 8; index++) {
+                    out[index] = Number(vertices[index]);
+                }
+                return out;
+            }
+            out.x1 = Number(vertices[0]); out.y1 = Number(vertices[1]);
+            out.x2 = Number(vertices[2]); out.y2 = Number(vertices[3]);
+            out.x3 = Number(vertices[4]); out.y3 = Number(vertices[5]);
+            out.x4 = Number(vertices[6]); out.y4 = Number(vertices[7]);
+            return out;
+        }
+
         let x1, y1, x2, y2, x3, y3, x4, y4;
 
         const x = options.x;

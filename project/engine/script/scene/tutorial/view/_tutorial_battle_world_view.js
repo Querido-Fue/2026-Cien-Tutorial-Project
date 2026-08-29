@@ -89,28 +89,23 @@ export class TutorialBattleWorldView {
         ));
         if (!hasMapArtwork) {
             for (const tile of boardTiles) {
-                const point = this.#projectTile(tile.x, tile.y);
                 const alternate = (tile.x + tile.y) % 2 === 0;
-                this.#renderPort.renderGL('background', {
-                    shape: 'diamond',
-                    x: point.x,
-                    y: point.y,
-                    w: layout.tileWidth - layout.tileGap,
-                    h: layout.tileHeight - (layout.tileGap * 0.5),
-                    fill: floorIndex === 0
+                const tileScale = Math.max(
+                    0,
+                    1 - (layout.tileGap / layout.tileWidth)
+                );
+                this.#renderTileOverlay(
+                    'background',
+                    tile,
+                    tileScale,
+                    floorIndex === 0
                         ? (alternate ? baseFill : colors.Tile.High1)
                         : (alternate ? baseFill : colors.Tile.Side2),
-                    alpha: 0.96
-                });
-                this.#renderPort.renderGL('background', {
-                    shape: 'diamond',
-                    x: point.x,
-                    y: point.y,
-                    w: (layout.tileWidth - layout.tileGap) * 0.9,
-                    h: (layout.tileHeight - (layout.tileGap * 0.5)) * 0.9,
-                    fill: baseFill,
-                    alpha: 0.9
-                });
+                    0.96
+                );
+                this.#renderTileOverlay(
+                    'background', tile, tileScale * 0.9, baseFill, 0.9
+                );
             }
         }
 
@@ -125,16 +120,13 @@ export class TutorialBattleWorldView {
         if (snapshot.phase === 'move') {
             for (const extension of world.pathExtensions) {
                 extension.forEach((tile, index) => {
-                    const point = this.#projectTile(tile.x, tile.y);
-                    this.#renderPort.renderGL('background', {
-                        shape: 'diamond',
-                        x: point.x,
-                        y: point.y,
-                        w: layout.tileWidth * (index === 0 ? 0.76 : 0.58),
-                        h: layout.tileHeight * (index === 0 ? 0.76 : 0.58),
-                        fill: index === 0 ? colors.Tile.Reachable : colors.Tile.Teleport,
-                        alpha: index === 0 ? 0.58 : 0.46
-                    });
+                    this.#renderTileOverlay(
+                        'background',
+                        tile,
+                        index === 0 ? 0.76 : 0.58,
+                        index === 0 ? colors.Tile.Reachable : colors.Tile.Teleport,
+                        index === 0 ? 0.58 : 0.46
+                    );
                 });
             }
         }
@@ -145,71 +137,55 @@ export class TutorialBattleWorldView {
                     const distance = Math.abs(tile.x - snapshot.player.x)
                         + Math.abs(tile.y - snapshot.player.y);
                     if (distance > 0 && distance <= range) {
-                        const point = this.#projectTile(tile.x, tile.y);
-                        this.#renderPort.renderGL('background', {
-                            shape: 'diamond',
-                            x: point.x,
-                            y: point.y,
-                            w: layout.tileWidth * 0.7,
-                            h: layout.tileHeight * 0.7,
-                            fill: colors.Tile.Attack,
-                            alpha: 0.16
-                        });
+                        this.#renderTileOverlay(
+                            'background', tile, 0.7, colors.Tile.Attack, 0.16
+                        );
                     }
                 }
             }
             world.actionTargets.forEach((target, index) => {
-                const point = this.#projectTile(target.x, target.y);
                 const selected = index === world.targetIndex;
                 const minScale = Number(world.config.selectionMinScale) || 0.72;
                 const scale = selected
                     ? minScale + ((1 - minScale) * world.presentation.attackProgress)
                     : 0.82;
-                this.#renderPort.renderGL('background', {
-                    shape: 'diamond',
-                    x: point.x,
-                    y: point.y,
-                    w: layout.tileWidth * scale,
-                    h: layout.tileHeight * scale,
-                    fill: colors.Tile.Attack,
-                    alpha: selected
+                this.#renderTileOverlay(
+                    'background',
+                    target,
+                    scale,
+                    colors.Tile.Attack,
+                    selected
                         ? 0.36 + (0.3 * world.presentation.attackProgress)
                         : 0.42
-                });
+                );
             });
         }
         if (world.cleanseSelected) {
             world.cleanseTargets.forEach((target, index) => {
-                const point = this.#projectTile(target.x, target.y);
                 const selected = index === world.cleanseTargetIndex;
                 const scale = selected
                     ? 0.72 + (0.28 * world.presentation.attackProgress)
                     : 0.82;
-                this.#renderPort.renderGL('background', {
-                    shape: 'diamond',
-                    x: point.x,
-                    y: point.y,
-                    w: layout.tileWidth * scale,
-                    h: layout.tileHeight * scale,
-                    fill: colors.UI.Success,
-                    alpha: selected ? 0.64 : 0.38
-                });
+                this.#renderTileOverlay(
+                    'background',
+                    target,
+                    scale,
+                    colors.UI.Success,
+                    selected ? 0.64 : 0.38
+                );
             });
         }
         if (world.hoveredTile) {
-            const point = this.#projectTile(world.hoveredTile.x, world.hoveredTile.y);
             const minScale = Number(world.config.selectionMinScale) || 0.72;
             const scale = minScale
                 + ((0.88 - minScale) * world.presentation.hoverProgress);
-            this.#renderPort.renderGL('background', {
-                shape: 'diamond',
-                x: point.x,
-                y: point.y,
-                w: layout.tileWidth * scale,
-                h: layout.tileHeight * scale,
-                fill: colors.Tile.Hover,
-                alpha: 0.24 + (0.34 * world.presentation.hoverProgress)
-            });
+            this.#renderTileOverlay(
+                'background',
+                world.hoveredTile,
+                scale,
+                colors.Tile.Hover,
+                0.24 + (0.34 * world.presentation.hoverProgress)
+            );
         }
         let plannedStep = 0;
         world.plannedPath.slice(1).forEach((tile, index) => {
@@ -249,7 +225,7 @@ export class TutorialBattleWorldView {
      * @private
      */
     #drawLoraIntentRange(boardTiles) {
-        const { colors, layout, world } = this.#frame;
+        const { colors, world } = this.#frame;
         const intent = world.readability?.loraIntent;
         if (!intent?.ok || intent.actionType === 'none') {
             return;
@@ -258,16 +234,13 @@ export class TutorialBattleWorldView {
             ? boardTiles
             : toBattleViewList(intent.affectedTiles);
         for (const tile of tiles) {
-            const point = this.#projectTile(tile.x, tile.y);
-            this.#renderPort.renderGL('background', {
-                shape: 'diamond',
-                x: point.x,
-                y: point.y,
-                w: layout.tileWidth * 0.82,
-                h: layout.tileHeight * 0.82,
-                fill: colors.Tile.Attack,
-                alpha: intent.affectsAll ? 0.07 : 0.24
-            });
+            this.#renderTileOverlay(
+                'background',
+                tile,
+                0.82,
+                colors.Tile.Attack,
+                intent.affectsAll ? 0.07 : 0.24
+            );
         }
     }
 
@@ -378,7 +351,7 @@ export class TutorialBattleWorldView {
 
     /** 이벤트 타일을 그립니다. @param {object} eventTile - 타일 상태입니다. @private */
     #drawEventTile(eventTile) {
-        const { colors, fonts, layout } = this.#frame;
+        const { colors, fonts } = this.#frame;
         const point = this.#projectTile(eventTile.x, eventTile.y);
         const positive = eventTile.type === 'instability-down';
         const glyphs = {
@@ -387,15 +360,13 @@ export class TutorialBattleWorldView {
             'instability-up': '+10',
             'instability-down': '-10'
         };
-        this.#renderPort.renderGL('object', {
-            shape: 'diamond',
-            x: point.x,
-            y: point.y,
-            w: layout.tileWidth * 0.58,
-            h: layout.tileHeight * 0.58,
-            fill: positive ? colors.UI.Success : colors.Tile.Trap,
-            alpha: 0.78
-        });
+        this.#renderTileOverlay(
+            'object',
+            eventTile,
+            0.58,
+            positive ? colors.UI.Success : colors.Tile.Trap,
+            0.78
+        );
         this.#drawText(
             'texteffect',
             glyphs[eventTile.type] || '!',
@@ -465,6 +436,40 @@ export class TutorialBattleWorldView {
             'tile-cleanser': '정'
         };
         return glyphs[itemId] || 'I';
+    }
+
+    /**
+     * 레이아웃의 두 타일 축에서 계산한 네 꼭짓점으로 투영 오버레이를 그립니다.
+     * @param {string} layer - WebGL 대상 레이어입니다.
+     * @param {{x:number,y:number}} tile - 모델 타일 좌표입니다.
+     * @param {number} scale - 타일 중심 기준 배율입니다.
+     * @param {string} fill - 오버레이 색입니다.
+     * @param {number} alpha - 오버레이 투명도입니다.
+     * @private
+     */
+    #renderTileOverlay(layer, tile, scale, fill, alpha) {
+        const layout = this.#frame.layout;
+        const point = this.#projectTile(tile.x, tile.y);
+        const numericScale = Number(scale);
+        const safeScale = Math.max(
+            0,
+            Number.isFinite(numericScale) ? numericScale : 1
+        );
+        this.#renderPort.renderGL(layer, {
+            shape: 'rect',
+            x: point.x,
+            y: point.y,
+            w: layout.tileWidth * safeScale,
+            h: layout.tileHeight * safeScale,
+            vertices: TutorialBattleLayout.projectTileQuad(
+                layout,
+                tile.x,
+                tile.y,
+                safeScale
+            ),
+            fill,
+            alpha
+        });
     }
 
     /** 동일 레이아웃 원본으로 타일을 투영합니다. @private */

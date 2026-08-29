@@ -171,6 +171,50 @@ export class TutorialBattleLayout {
     }
 
     /**
+     * 타일 중심과 같은 투영 축으로 임의 배율의 네 꼭짓점을 계산합니다.
+     * 반환 순서는 위→오른쪽→아래→왼쪽이며 WebGL 사각형 정점 순서와 같습니다.
+     * @param {object} frame - `createFrame()` 결과입니다.
+     * @param {number} x - 타일 X입니다.
+     * @param {number} y - 타일 Y입니다.
+     * @param {number} [scale=1] - 타일 중심을 기준으로 한 배율입니다.
+     * @returns {number[]} 네 꼭짓점의 평면 좌표 배열입니다.
+     */
+    static projectTileQuad(frame, x, y, scale = 1) {
+        const point = TutorialBattleLayout.projectTile(frame, x, y);
+        const axisX = frame?.gridAxisX || {
+            x: Number(frame?.tileWidth) * 0.5,
+            y: Number(frame?.tileHeight) * 0.5
+        };
+        const axisY = frame?.gridAxisY || {
+            x: Number(frame?.tileWidth) * -0.5,
+            y: Number(frame?.tileHeight) * 0.5
+        };
+        const numericScale = Number(scale);
+        const halfScale = Math.max(
+            0,
+            Number.isFinite(numericScale) ? numericScale : 1
+        ) * 0.5;
+        const halfAxisX = {
+            x: Number(axisX.x) * halfScale,
+            y: Number(axisX.y) * halfScale
+        };
+        const halfAxisY = {
+            x: Number(axisY.x) * halfScale,
+            y: Number(axisY.y) * halfScale
+        };
+        return [
+            point.x - halfAxisX.x - halfAxisY.x,
+            point.y - halfAxisX.y - halfAxisY.y,
+            point.x + halfAxisX.x - halfAxisY.x,
+            point.y + halfAxisX.y - halfAxisY.y,
+            point.x + halfAxisX.x + halfAxisY.x,
+            point.y + halfAxisX.y + halfAxisY.y,
+            point.x - halfAxisX.x + halfAxisY.x,
+            point.y - halfAxisX.y + halfAxisY.y
+        ];
+    }
+
+    /**
      * 포인터 좌표가 포함된 가장 앞쪽 타일을 찾습니다.
      * @param {object} frame - 렌더와 동일한 투영 프레임입니다.
      * @param {number} px - 화면 X입니다.
