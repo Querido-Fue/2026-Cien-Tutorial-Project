@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { TutorialBattleCommandController } from '../project/engine/script/scene/tutorial/_tutorial_battle_command_controller.js';
+import { TutorialBattleOutcomeCoordinator } from '../project/engine/script/scene/tutorial/_tutorial_battle_outcome_coordinator.js';
 import { TutorialBattleViewModelFactory } from '../project/engine/script/scene/tutorial/_tutorial_battle_view_model_factory.js';
 import { TutorialBattleSelectionController } from '../project/engine/script/scene/tutorial/_tutorial_battle_selection_controller.js';
 import { TutorialInventoryPresenter } from '../project/engine/script/scene/tutorial/_tutorial_inventory_presenter.js';
@@ -373,6 +374,119 @@ test('결과 컨트롤러는 연출 차단 뒤 엔딩 데이터와 컷씬을 한
 
     transition.data.displayName = '변조';
     assert.equal(results.getData().displayName, '진엔딩');
+});
+
+test('전투 결과 조정자는 cue·진행도·기록·컷씬을 고정 순서로 배포한다', () => {
+    const calls = [];
+    const presenterInputs = [];
+    const coordinator = new TutorialBattleOutcomeCoordinator({
+        presenter: {
+            createCues(input) {
+                calls.push('present');
+                presenterInputs.push(input);
+                return ['cue'];
+            }
+        },
+        spriteCueRouter: {
+            route(cues) {
+                calls.push('route');
+                return cues;
+            }
+        },
+        feedbackQueue: {
+            enqueue(cues, context) {
+                calls.push(['feedback', context.projectTile({ x: 2, y: 3 })]);
+                return cues;
+            }
+        },
+        presentationTimeline: {
+            applyCues() {
+                calls.push('timeline');
+            }
+        },
+        achievementEvaluator: {
+            evaluate() {
+                calls.push('evaluate');
+                return { unlockedIds: ['achievement'], notifications: ['notice'] };
+            }
+        },
+        metaSession: {
+            unlockAchievements(ids) {
+                calls.push(['unlock', ids]);
+            },
+            syncBattleSnapshot(snapshot) {
+                calls.push(['sync', snapshot.player.hp]);
+            }
+        },
+        achievementBanner: {
+            enqueue() {
+                calls.push('banner');
+                return 1;
+            }
+        },
+        audioDirector: {
+            notifyAchievements(count) {
+                calls.push(['audio', count]);
+            }
+        },
+        recordPopups: {
+            enqueue(ids) {
+                calls.push(['records', ids]);
+            }
+        },
+        cutsceneTriggers: {
+            consume() {
+                calls.push('triggers');
+                return ['ending-cutscene', 'story-cutscene'];
+            }
+        },
+        results: {
+            isEndingCutsceneId: (id) => id === 'ending-cutscene',
+            queueEndingCutscene(id) {
+                calls.push(['ending', id]);
+            }
+        },
+        projectTile: (_layout, tile) => ({ px: tile.x * 10, py: tile.y * 10 }),
+        getFeedbackColors: () => ({ danger: '#f00' })
+    });
+    coordinator.reset({ player: { hp: 90 } });
+    const nextSnapshot = { player: { hp: 80 }, lora: { hp: 70 } };
+    const output = coordinator.process({
+        result: {
+            ok: true,
+            path: [{ x: 1, y: 1 }],
+            events: [{ type: 'record-picked', recordId: 'diary-1' }]
+        },
+        nextSnapshot,
+        layout: { tileSide: 32 },
+        unlockedAchievementIds: []
+    });
+
+    assert.deepEqual(output.cutsceneIds, ['story-cutscene']);
+    assert.deepEqual(presenterInputs[0].previousSnapshot, { player: { hp: 90 } });
+    assert.deepEqual(calls, [
+        'present',
+        'route',
+        ['feedback', { px: 20, py: 30 }],
+        'timeline',
+        'evaluate',
+        ['unlock', ['achievement']],
+        'banner',
+        ['audio', 1],
+        ['sync', 80],
+        ['records', ['diary-1']],
+        'triggers',
+        ['ending', 'ending-cutscene']
+    ]);
+
+    nextSnapshot.player.hp = 1;
+    coordinator.process({
+        result: { ok: false, reason: 'blocked', events: [] },
+        nextSnapshot: { player: { hp: 60 } },
+        layout: {},
+        unlockedAchievementIds: []
+    });
+    assert.equal(presenterInputs[1].previousSnapshot.player.hp, 80);
 });
 
 test('비전투 뷰 모델 팩토리는 장면 상태 없이 표시 데이터만 조립한다', () => {

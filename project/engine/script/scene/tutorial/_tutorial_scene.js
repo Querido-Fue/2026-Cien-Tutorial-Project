@@ -71,6 +71,7 @@ import { TutorialAssetLoader } from './_tutorial_asset_loader.js';
 import { TutorialAssetPort } from './_tutorial_asset_port.js';
 import { TutorialAudioDirector } from './_tutorial_audio_director.js';
 import { TutorialBattleCommandController } from './_tutorial_battle_command_controller.js';
+import { TutorialBattleOutcomeCoordinator } from './_tutorial_battle_outcome_coordinator.js';
 import { TutorialBattlePresenter } from './_tutorial_battle_presenter.js';
 import { TutorialBattleSelectionController } from './_tutorial_battle_selection_controller.js';
 import { TutorialBattleViewModelFactory } from './_tutorial_battle_view_model_factory.js';
@@ -173,7 +174,6 @@ export class TutorialScene extends BaseScene {
         this.pauseIndex = 0;
         this.destroyed = false;
         this.timelineRevision = 0;
-        this.lastPresentationSnapshot = null;
         const releaseInfo = options.releaseInfo || {};
         this.releaseInfo = Object.freeze({
             id: String(releaseInfo.id || 'development'),
@@ -310,6 +310,30 @@ export class TutorialScene extends BaseScene {
             animationPort: Object.freeze({ animate, remove }),
             config: this.data.ANIMATION,
             onLockChange: () => this.buttonHost.invalidate()
+        });
+        this.battleOutcomes = new TutorialBattleOutcomeCoordinator({
+            presenter: this.battlePresenter,
+            spriteCueRouter: this.spriteCueRouter,
+            feedbackQueue: this.feedbackQueue,
+            presentationTimeline: this.presentationTimeline,
+            achievementEvaluator: this.achievementEvaluator,
+            metaSession: this.metaSession,
+            achievementBanner: this.achievementBanner,
+            audioDirector: this.audioDirector,
+            recordPopups: this.recordPopups,
+            cutsceneTriggers: this.cutsceneTriggers,
+            results: this.results,
+            projectTile: (layout, tile) => TutorialBattleLayout.projectTile(
+                layout,
+                tile.x,
+                tile.y
+            ),
+            getFeedbackColors: () => ({
+                danger: ColorSchemes.Tactics.UI.Danger,
+                success: ColorSchemes.Tactics.UI.Success,
+                accent: ColorSchemes.Tactics.UI.Accent,
+                move: ColorSchemes.Tactics.Effects.Move
+            })
         });
         this.battleCommands = new TutorialBattleCommandController({
             selection: this.battleSelection,
@@ -642,6 +666,7 @@ export class TutorialScene extends BaseScene {
         this.battleFocus.reset();
         this.guidance.reset();
         this.loraTurns.reset();
+        this.battleOutcomes.reset();
         this.floorView = null;
         this.floorActorView = null;
     }
@@ -835,7 +860,7 @@ export class TutorialScene extends BaseScene {
         this.battleSelection.reset();
         this.battleFocus.reset();
         this.guidance.reset();
-        this.lastPresentationSnapshot = null;
+        this.battleOutcomes.reset();
         this.feedbackQueue.clear();
         this.achievementBanner.clear();
         this.buttonHost.invalidate();
@@ -876,7 +901,7 @@ export class TutorialScene extends BaseScene {
         this.guidance.beginRun({ seen: this.meta.combatGuideSeen === true });
         this.feedbackQueue.clear();
         this.achievementBanner.clear();
-        this.lastPresentationSnapshot = cloneCheckpointValue(initialSnapshot);
+        this.battleOutcomes.reset(initialSnapshot);
         this.presentationTimeline.reset({
             floorIndex: Number(this.model.floorIndex) || 0,
             playerX: Number(this.model.player?.x) || 0,
@@ -1063,54 +1088,15 @@ export class TutorialScene extends BaseScene {
      */
     #afterModelChange(result) {
         const nextSnapshot = this.#getSnapshot();
-        const cues = this.battlePresenter.createCues({
-            events: result?.events,
-            previousSnapshot: this.lastPresentationSnapshot || nextSnapshot,
-            nextSnapshot,
-            path: result?.ok === true ? result?.path : [],
-            failureReason: result?.ok === false ? result.reason : ''
-        });
         const layout = this.#createBattleLayoutFrame();
-        const routedCues = this.spriteCueRouter.route(cues);
-        const orderedCues = this.feedbackQueue.enqueue(routedCues, {
-            actors: {
-                player: nextSnapshot?.player,
-                lora: nextSnapshot?.lora
-            },
-            projectTile: (tile) => TutorialBattleLayout.projectTile(
-                layout,
-                tile.x,
-                tile.y
-            ),
-            tileSide: layout.tileSide,
-            colors: {
-                danger: ColorSchemes.Tactics.UI.Danger,
-                success: ColorSchemes.Tactics.UI.Success,
-                accent: ColorSchemes.Tactics.UI.Accent,
-                move: ColorSchemes.Tactics.Effects.Move
-            }
+        const outcome = this.battleOutcomes.process({
+            result,
+            nextSnapshot,
+            layout,
+            unlockedAchievementIds: this.meta.unlockedAchievementIds
         });
-        this.presentationTimeline.applyCues(orderedCues);
-        const achievementResult = this.achievementEvaluator.evaluate(
-            result?.events,
-            this.meta.unlockedAchievementIds
-        );
-        this.metaSession.unlockAchievements(achievementResult.unlockedIds);
-        const achievementCount = this.achievementBanner.enqueue(
-            achievementResult.notifications
-        );
-        this.audioDirector.notifyAchievements(achievementCount);
-        this.lastPresentationSnapshot = cloneCheckpointValue(nextSnapshot);
-        this.metaSession.syncBattleSnapshot(nextSnapshot);
-        this.recordPopups.enqueue(toList(result?.events)
-            .filter((event) => event?.type === 'record-picked')
-            .map((event) => event.recordId));
-        for (const cutsceneId of this.cutsceneTriggers.consume(result?.events)) {
-            if (this.results.isEndingCutsceneId(cutsceneId)) {
-                this.results.queueEndingCutscene(cutsceneId);
-            } else {
-                this.#openCutscene(cutsceneId, MODES.BATTLE, false);
-            }
+        for (const cutsceneId of outcome.cutsceneIds) {
+            this.#openCutscene(cutsceneId, MODES.BATTLE, false);
         }
         this.#refreshBattleCache();
         this.#enterResultIfNeeded();

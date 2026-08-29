@@ -5,6 +5,10 @@
  */
 export const TUTORIAL_CHANGELOG_CATALOG = Object.freeze([
     Object.freeze({
+        subject: 'refactor: extract tutorial battle outcome flow',
+        summary: '모델 결과를 연출·업적·진행도·기록·컷씬으로 배포하는 책임을 장면에서 분리했습니다.'
+    }),
+    Object.freeze({
         subject: 'refactor: extract tutorial result state',
         summary: '전투 종료 판정·엔딩 표시·엔딩 컷씬 대기 상태를 장면에서 분리했습니다.'
     }),

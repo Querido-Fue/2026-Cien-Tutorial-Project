@@ -69,6 +69,7 @@ import하지 않고, 모드 정책만 모드 상수를 참조한다.
 | 플레이어 명령 | 작은 모델/입력/표현 포트 | 이동·공격·회복·대기·정화·아이템 명령 적용 | `TutorialBattleCommandController` |
 | 로라 턴 | 로라 턴 stage와 예약 시간 | 대기·행동·완료 명령의 세대별 1회 예약 | `TutorialLoraTurnController` |
 | 결과 상태 | 정규화 결과와 엔딩 컷씬 대기 | 종료 판정·표시 데이터·결과 1회 기록 | `TutorialResultController` |
+| 결과 배포 | 이전 표현 snapshot | cue·업적·메타·기록·컷씬 트리거 순차 배포 | `TutorialBattleOutcomeCoordinator` |
 | 저장·메타 | `meta`, 모델 snapshot, 결과 | `meta`, `committedMeta`, `metaStaging`, `saveSequence` | `_tutorial_meta_progress.js` |
 | 프레젠테이션 | 모델 결과·전후 snapshot, cue, floor view | 장면은 floor snapshot 교체만 조율 | presenter, feedback queue, animation timeline |
 | 배우 스프라이트 | 표시 층 배우·actor-animation cue·clip 데이터 | 장면은 roster 동기화와 snapshot 전달만 조율 | clip resolver, sprite animator, cue router, actor view |
@@ -203,6 +204,7 @@ import하지 않고, 모드 정책만 모드 상수를 참조한다.
 | SRP 후속 | `TutorialBattleCommandController` | 플레이어 전투 명령 검증·모델 호출·연출 시작 | 작은 model/selection/presentation callback 포트 |
 | SRP 후속 | `TutorialLoraTurnController` | 로라 행동 전 대기·표시·완료 예약 수명주기 | model/revision/mode callback, selection 포트 |
 | SRP 후속 | `TutorialResultController` | 종료 판정·엔딩 표시·컷씬 대기와 결과 1회 기록 | endings 데이터, meta record callback |
+| SRP 후속 | `TutorialBattleOutcomeCoordinator` | 모델 결과 구독자 순서와 이전 표현 snapshot | 명시적 presenter/progress/record/cutscene 포트 |
 | Turn 05 | `TutorialBattleWorldView` | 타일·경로·오브젝트·액터 렌더 | battle view model, layout, render/asset port |
 | Turn 05 | `TutorialBattleHudView` | 턴·게이지·행동·인벤토리 렌더 | battle view model, render port |
 | Turn 05 | `TutorialBattleFeedbackView` | cue의 화면 표시 | feedback snapshot, render port |
