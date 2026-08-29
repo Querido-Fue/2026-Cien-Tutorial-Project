@@ -211,13 +211,12 @@ test('재포커스 클릭과 Escape는 게임 입력으로 전파되지 않는�
     handler.destroy();
 });
 
-test('가장자리 이탈 안내는 1%·1.2초·1초·20도 조건을 모두 만족해야 한다', () => {
-    const changes = [];
-    const detector = new PointerLockExitIntentDetector({
-        movementContinuityMilliseconds: 180,
-        onChange: (snapshot) => changes.push(snapshot)
-    });
-    const record = (timeMilliseconds, degrees = 0, pointerX = 1000) => {
+test('가장자리 이탈 안내는 1%·1초 체류와 40도 이동 또는 정지 조건을 지원한다', () => {
+    const record = (
+        detector,
+        timeMilliseconds,
+        { degrees = 0, pointerX = 1000, movementDistance = 4 } = {}
+    ) => {
         const radians = degrees * (Math.PI / 180);
         detector.record({
             locked: true,
@@ -225,75 +224,64 @@ test('가장자리 이탈 안내는 1%·1.2초·1초·20도 조건을 모두 만
             pointerY: 300,
             viewportWidth: 1000,
             viewportHeight: 600,
-            movementX: Math.cos(radians) * 4,
-            movementY: Math.sin(radians) * 4,
+            movementX: Math.cos(radians) * movementDistance,
+            movementY: Math.sin(radians) * movementDistance,
             timeMilliseconds
         });
     };
 
-    for (let time = 0; time <= 1100; time += 100) {
-        record(time, 8);
+    const movingDetector = new PointerLockExitIntentDetector();
+    for (let time = 0; time <= 900; time += 100) {
+        record(movingDetector, time, { degrees: 0 });
     }
-    assert.equal(detector.getSnapshot().visible, false);
-    record(1200, 8);
-    assert.equal(detector.getSnapshot().visible, true);
-    assert.equal(detector.getSnapshot().edge, 'right');
+    assert.equal(movingDetector.getSnapshot().visible, false);
+    record(movingDetector, 1000, { degrees: 0 });
+    assert.equal(movingDetector.getSnapshot().visible, true);
+    assert.equal(movingDetector.getSnapshot().edge, 'right');
+    record(movingDetector, 1500, { degrees: 35 });
+    assert.equal(movingDetector.getSnapshot().visible, true);
+    record(movingDetector, 1510, { degrees: 50 });
+    assert.equal(movingDetector.getSnapshot().visible, false);
 
-    record(1210, 29);
-    assert.equal(detector.getSnapshot().visible, false);
-    assert.equal(changes.at(-1).visible, false);
+    const stationaryDetector = new PointerLockExitIntentDetector();
+    record(stationaryDetector, 2000, { movementDistance: 0 });
+    stationaryDetector.update(2999);
+    assert.equal(stationaryDetector.getSnapshot().visible, false);
+    stationaryDetector.update(3000);
+    assert.equal(stationaryDetector.getSnapshot().visible, true);
 
-    detector.reset();
-    for (let time = 2000; time <= 3200; time += 100) {
-        record(time, 0);
-    }
-    assert.equal(detector.getSnapshot().visible, true);
-    detector.update(3381);
-    assert.equal(detector.getSnapshot().visible, false);
-
-    detector.reset();
-    record(4000, 0, 989);
-    assert.equal(detector.getSnapshot().edge, null);
-    assert.equal(detector.getSnapshot().visible, false);
-
-    const noisyDetector = new PointerLockExitIntentDetector();
-    for (let time = 5000; time <= 6200; time += 100) {
-        noisyDetector.record({
-            locked: true,
-            pointerX: 1000,
-            pointerY: 300,
-            viewportWidth: 1000,
-            viewportHeight: 600,
-            movementX: 1,
-            movementY: 1,
-            timeMilliseconds: time
-        });
-        noisyDetector.record({
-            locked: true,
-            pointerX: 1000,
-            pointerY: 300,
-            viewportWidth: 1000,
-            viewportHeight: 600,
-            movementX: 1,
-            movementY: -1,
-            timeMilliseconds: time + 1
+    const withinToleranceDetector = new PointerLockExitIntentDetector();
+    for (let time = 4000; time <= 5000; time += 100) {
+        record(withinToleranceDetector, time, {
+            degrees: (time / 100) % 2 === 0 ? -19 : 19
         });
     }
-    assert.equal(noisyDetector.getSnapshot().visible, true);
-    noisyDetector.record({
-        locked: true,
-        pointerX: 1000,
-        pointerY: 300,
-        viewportWidth: 1000,
-        viewportHeight: 600,
-        movementX: 0,
-        movementY: 3,
-        timeMilliseconds: 6210
+    assert.equal(withinToleranceDetector.getSnapshot().visible, true);
+
+    const outsideToleranceDetector = new PointerLockExitIntentDetector();
+    for (let time = 6000; time <= 7000; time += 100) {
+        record(outsideToleranceDetector, time, {
+            degrees: (time / 100) % 2 === 0 ? -21 : 21
+        });
+    }
+    assert.equal(outsideToleranceDetector.getSnapshot().visible, false);
+
+    const minimumVisibleDetector = new PointerLockExitIntentDetector();
+    record(minimumVisibleDetector, 8000, { movementDistance: 0 });
+    minimumVisibleDetector.update(9000);
+    assert.equal(minimumVisibleDetector.getSnapshot().visible, true);
+    record(minimumVisibleDetector, 9100, {
+        pointerX: 500,
+        movementDistance: 0
     });
-    assert.equal(noisyDetector.getSnapshot().visible, false);
+    assert.equal(minimumVisibleDetector.getSnapshot().visible, true);
+    minimumVisibleDetector.update(9499);
+    assert.equal(minimumVisibleDetector.getSnapshot().visible, true);
+    minimumVisibleDetector.update(9500);
+    assert.equal(minimumVisibleDetector.getSnapshot().visible, false);
 
     const cornerDetector = new PointerLockExitIntentDetector();
-    for (let time = 7000; time <= 8200; time += 100) {
+    for (let time = 10000; time <= 11000; time += 100) {
         const useRightEdge = (time / 100) % 2 === 0;
         cornerDetector.record({
             locked: true,
@@ -339,6 +327,17 @@ test('포인터 핸들러는 이탈 의도 표시와 해제를 DOM 상태 이벤
 
     windowRef.now = 1441;
     handler.update();
+    assert.equal(hintEvents.at(-1)?.visible, true);
+
+    windowRef.now = 1500;
+    handler.recordPointerMovement({
+        pointerX: 500,
+        pointerY: 300,
+        viewportWidth: 1000,
+        viewportHeight: 600,
+        movementX: 0,
+        movementY: 0
+    });
     assert.equal(hintEvents.at(-1)?.visible, false);
     handler.destroy();
 });

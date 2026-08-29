@@ -1,9 +1,10 @@
 const DEFAULT_EDGE_RATIO = 0.01;
-const DEFAULT_EDGE_HOLD_MILLISECONDS = 1200;
+const DEFAULT_EDGE_HOLD_MILLISECONDS = 1000;
 const DEFAULT_DIRECTION_WINDOW_MILLISECONDS = 1000;
-const DEFAULT_DIRECTION_TOLERANCE_DEGREES = 20;
+const DEFAULT_DIRECTION_TOLERANCE_DEGREES = 40;
 const DEFAULT_DIRECTION_BUCKET_MILLISECONDS = 100;
 const DEFAULT_MOVEMENT_CONTINUITY_MILLISECONDS = 240;
+const DEFAULT_MINIMUM_VISIBLE_MILLISECONDS = 500;
 const MIN_MOVEMENT_DISTANCE = 0.01;
 const MIN_DELIBERATE_DIRECTION_CHANGE_DISTANCE = 2;
 const MIN_DIRECTION_WINDOW_DISTANCE = 6;
@@ -68,7 +69,7 @@ const resolveEdge = (xRatio, yRatio, edgeRatio) => {
 
 /**
  * @class PointerLockExitIntentDetector
- * @description 가장자리 체류와 최근 1초의 안정된 바깥 방향 상대 이동을 함께 검사합니다.
+ * @description 1초 가장자리 체류를 기본으로 하고, 이동 중에는 최근 방향의 안정성까지 검사합니다.
  */
 export class PointerLockExitIntentDetector {
     #edgeRatio;
@@ -77,6 +78,7 @@ export class PointerLockExitIntentDetector {
     #directionToleranceRadians;
     #directionBucketMilliseconds;
     #movementContinuityMilliseconds;
+    #minimumVisibleMilliseconds;
     #onChange;
     #edge;
     #edgeEnteredAt;
@@ -85,6 +87,8 @@ export class PointerLockExitIntentDetector {
     #movementSamples;
     #movementSampleStartIndex;
     #visibleDirectionAngle;
+    #visibleEdge;
+    #visibleSince;
     #xRatio;
     #yRatio;
     #visible;
@@ -98,6 +102,7 @@ export class PointerLockExitIntentDetector {
      * directionToleranceDegrees?:number,
      * directionBucketMilliseconds?:number,
      * movementContinuityMilliseconds?:number,
+     * minimumVisibleMilliseconds?:number,
      * onChange?:Function
      * }} [options={}] - 판정 임계값과 상태 콜백입니다.
      */
@@ -144,6 +149,13 @@ export class PointerLockExitIntentDetector {
                 DEFAULT_MOVEMENT_CONTINUITY_MILLISECONDS
             )
         );
+        this.#minimumVisibleMilliseconds = Math.max(
+            0,
+            toFiniteNumber(
+                options.minimumVisibleMilliseconds,
+                DEFAULT_MINIMUM_VISIBLE_MILLISECONDS
+            )
+        );
         this.#onChange = typeof options.onChange === 'function'
             ? options.onChange
             : null;
@@ -154,6 +166,8 @@ export class PointerLockExitIntentDetector {
         this.#movementSamples = [];
         this.#movementSampleStartIndex = 0;
         this.#visibleDirectionAngle = null;
+        this.#visibleEdge = null;
+        this.#visibleSince = null;
         this.#xRatio = 0.5;
         this.#yRatio = 0.5;
         this.#visible = false;
@@ -194,14 +208,17 @@ export class PointerLockExitIntentDetector {
         );
         const nextEdge = resolveEdge(this.#xRatio, this.#yRatio, this.#edgeRatio);
         if (!nextEdge) {
-            this.reset();
+            this.#edge = null;
+            this.#edgeEnteredAt = null;
+            this.#resetDirectionWindow();
+            this.#setVisible(false, now);
             return;
         }
         if (this.#edge === null) {
             this.#edge = nextEdge;
             this.#edgeEnteredAt = now;
             this.#resetDirectionWindow();
-            this.#setVisible(false);
+            this.#setVisible(false, now);
         } else {
             // 모서리에서는 가장 가까운 변이 교대로 바뀌어도 같은 1% 영역 체류입니다.
             this.#edge = nextEdge;
@@ -226,21 +243,17 @@ export class PointerLockExitIntentDetector {
 
     /** 모든 누적 판정 상태를 초기화합니다. */
     reset() {
-        const wasVisible = this.#visible;
         this.#edge = null;
         this.#edgeEnteredAt = null;
         this.#resetDirectionWindow();
-        this.#visible = false;
-        if (wasVisible) {
-            this.#emitChange();
-        }
+        this.#setVisible(false, 0, null, true);
     }
 
     /** @returns {Readonly<object>} UI에 전달할 방어 스냅샷입니다. */
     getSnapshot() {
         return Object.freeze({
             visible: this.#visible,
-            edge: this.#edge,
+            edge: this.#visible ? (this.#edge || this.#visibleEdge) : this.#edge,
             xRatio: this.#xRatio,
             yRatio: this.#yRatio
         });
@@ -268,8 +281,10 @@ export class PointerLockExitIntentDetector {
                 this.#visibleDirectionAngle
             ) > this.#directionToleranceRadians;
 
+        if (deliberateDirectionChange) {
+            this.#setVisible(false, now);
+        }
         if (continuityBroken || deliberateDirectionChange) {
-            this.#setVisible(false);
             this.#resetDirectionWindow();
         }
         if (this.#directionStartedAt === null) {
@@ -287,38 +302,55 @@ export class PointerLockExitIntentDetector {
 
     /** @param {number} now @param {boolean} positionChanged @private */
     #evaluate(now, positionChanged) {
-        const movementIsContinuous = this.#lastMovementAt !== null
-            && now - this.#lastMovementAt <= this.#movementContinuityMilliseconds;
-        if (!movementIsContinuous) {
-            this.#setVisible(false);
-            this.#resetDirectionWindow();
+        if (!this.#edge) {
+            this.#setVisible(false, now);
             return;
         }
 
         const edgeHeldLongEnough = this.#edgeEnteredAt !== null
             && now - this.#edgeEnteredAt >= this.#edgeHoldMilliseconds;
+        if (!edgeHeldLongEnough) {
+            this.#setVisible(false, now);
+            return;
+        }
+
+        const movementIsContinuous = this.#lastMovementAt !== null
+            && now - this.#lastMovementAt <= this.#movementContinuityMilliseconds;
+        if (!movementIsContinuous) {
+            this.#resetDirectionWindow();
+            const visibilityChanged = this.#setVisible(true, now);
+            if (this.#visible && positionChanged && !visibilityChanged) {
+                this.#emitChange();
+            }
+            return;
+        }
+
         const directionObservedLongEnough = this.#directionStartedAt !== null
             && now - this.#directionStartedAt >= this.#directionWindowMilliseconds;
-        if (!this.#edge || !edgeHeldLongEnough || !directionObservedLongEnough) {
-            this.#setVisible(false);
+        if (!directionObservedLongEnough) {
+            const visibilityChanged = this.#visible
+                ? this.#setVisible(true, now)
+                : this.#setVisible(false, now);
+            if (this.#visible && positionChanged && !visibilityChanged) {
+                this.#emitChange();
+            }
             return;
         }
 
         this.#pruneMovementSamples(now);
         const direction = this.#resolveStableDirection();
-        const nextVisible = Boolean(
-            direction.stable
+        const visibilityChanged = this.#setVisible(
+            direction.stable,
+            now,
+            direction.angle
         );
-        const visibilityChanged = this.#visible !== nextVisible;
-        this.#visible = nextVisible;
-        this.#visibleDirectionAngle = nextVisible ? direction.angle : null;
-        if (visibilityChanged || (nextVisible && positionChanged)) {
+        if (this.#visible && positionChanged && !visibilityChanged) {
             this.#emitChange();
         }
     }
 
     /**
-     * 100ms 단위 합성 벡터가 모두 하나의 20° 원호 안에 드는지 확인합니다.
+     * 100ms 단위 합성 벡터가 모두 하나의 40° 원호 안에 드는지 확인합니다.
      * @returns {{stable:boolean,angle:number|null}} 판정 결과입니다.
      * @private
      */
@@ -393,22 +425,51 @@ export class PointerLockExitIntentDetector {
         this.#lastMovementAt = null;
         this.#movementSamples.length = 0;
         this.#movementSampleStartIndex = 0;
-        this.#visibleDirectionAngle = null;
     }
 
-    /** @param {boolean} visible @private */
-    #setVisible(visible) {
-        if (this.#visible === visible) {
-            if (!visible) {
-                this.#visibleDirectionAngle = null;
+    /**
+     * 최소 표시 시간을 보존하면서 안내 표시 상태를 전환합니다.
+     * @param {boolean} visible - 목표 표시 여부입니다.
+     * @param {number} now - 현재 단조 증가 시각입니다.
+     * @param {number|null} [directionAngle=null] - 안정된 이동 방향입니다.
+     * @param {boolean} [force=false] - 잠금 해제처럼 즉시 숨겨야 하는지 여부입니다.
+     * @returns {boolean} 표시 상태가 실제로 바뀌었는지 여부입니다.
+     * @private
+     */
+    #setVisible(visible, now, directionAngle = null, force = false) {
+        const currentTime = toFiniteNumber(now, 0);
+        if (visible) {
+            if (this.#edge) {
+                this.#visibleEdge = this.#edge;
             }
-            return;
+            if (Number.isFinite(directionAngle)) {
+                this.#visibleDirectionAngle = directionAngle;
+            }
+            if (this.#visible) {
+                return false;
+            }
+            this.#visible = true;
+            this.#visibleSince = currentTime;
+            this.#emitChange();
+            return true;
         }
-        this.#visible = visible;
-        this.#visibleDirectionAngle = visible
-            ? this.#visibleDirectionAngle
-            : null;
+        if (!this.#visible) {
+            this.#visibleDirectionAngle = null;
+            this.#visibleEdge = null;
+            this.#visibleSince = null;
+            return false;
+        }
+        if (!force
+            && this.#visibleSince !== null
+            && currentTime - this.#visibleSince < this.#minimumVisibleMilliseconds) {
+            return false;
+        }
+        this.#visible = false;
+        this.#visibleSince = null;
+        this.#visibleEdge = null;
+        this.#visibleDirectionAngle = null;
         this.#emitChange();
+        return true;
     }
 
     /** @private */
