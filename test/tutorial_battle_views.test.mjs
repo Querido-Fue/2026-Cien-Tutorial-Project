@@ -593,9 +593,17 @@ test('로라와 플레이어 상태는 원본 패널의 초상·슬롯·게이�
             y: loraPortrait.y,
             w: loraPortrait.w,
             h: loraPortrait.h,
+            clipVertices: loraPortrait.clipVertices,
             smoothing: loraPortrait.smoothing
         },
-        { x: 929, y: 58, w: 31, h: 31, smoothing: true }
+        {
+            x: 929,
+            y: 58,
+            w: 31,
+            h: 31,
+            clipVertices: [944, 58, 959, 74, 944, 89, 930, 74],
+            smoothing: true
+        }
     );
     assert.deepEqual(
         { x: loraHpGauge.x, y: loraHpGauge.y, w: loraHpGauge.w, h: loraHpGauge.h },

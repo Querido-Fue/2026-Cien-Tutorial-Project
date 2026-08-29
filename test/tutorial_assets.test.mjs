@@ -297,6 +297,35 @@ test('픽셀 UI는 비율을 유지한 정수 사각형과 일시적 nearest 옵
         ['restore']
     ]);
 
+    const clipCalls = [];
+    const clippedContext = {
+        imageSmoothingEnabled: true,
+        save() { clipCalls.push(['save']); },
+        beginPath() { clipCalls.push(['beginPath']); },
+        moveTo(...args) { clipCalls.push(['moveTo', ...args]); },
+        lineTo(...args) { clipCalls.push(['lineTo', ...args]); },
+        closePath() { clipCalls.push(['closePath']); },
+        clip() { clipCalls.push(['clip']); },
+        drawImage(...args) { clipCalls.push(['drawImage', ...args]); },
+        restore() { clipCalls.push(['restore']); }
+    };
+    renderDrawImage(clippedContext, {
+        image: 'portrait', x: 10, y: 20, w: 30, h: 30,
+        clipVertices: [25, 20, 40, 35, 25, 50, 10, 35]
+    });
+    assert.deepEqual(clipCalls, [
+        ['save'],
+        ['beginPath'],
+        ['moveTo', 25, 20],
+        ['lineTo', 40, 35],
+        ['lineTo', 25, 50],
+        ['lineTo', 10, 35],
+        ['closePath'],
+        ['clip'],
+        ['drawImage', 'portrait', 10, 20, 30, 30],
+        ['restore']
+    ]);
+
     const throwingContext = {
         imageSmoothingEnabled: true,
         drawImage() { throw new Error('draw failed'); }

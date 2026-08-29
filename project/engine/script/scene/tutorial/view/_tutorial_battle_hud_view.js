@@ -14,6 +14,12 @@ import {
 const LORA_STATUS_PANEL_LAYOUT = Object.freeze({
     SOURCE: Object.freeze({ WIDTH: 247, HEIGHT: 90 }),
     PORTRAIT: Object.freeze({ X: 12, Y: 14, WIDTH: 26, HEIGHT: 26 }),
+    PORTRAIT_CLIP: Object.freeze([
+        Object.freeze({ X: 25, Y: 14 }),
+        Object.freeze({ X: 37, Y: 27 }),
+        Object.freeze({ X: 25, Y: 40 }),
+        Object.freeze({ X: 13, Y: 27 })
+    ]),
     HP_BAR: Object.freeze({ X: 62, Y: 56, WIDTH: 149, HEIGHT: 4 }),
     INSTABILITY_BAR: Object.freeze({ X: 51, Y: 70, WIDTH: 149, HEIGHT: 4 })
 });
@@ -383,6 +389,11 @@ export class TutorialBattleHudView {
             this.#renderPort.render('ui', {
                 shape: 'image', image: portrait,
                 ...portraitRect,
+                clipVertices: this.#resolveSourcePanelVertices(
+                    panelRect,
+                    LORA_STATUS_PANEL_LAYOUT.PORTRAIT_CLIP,
+                    LORA_STATUS_PANEL_LAYOUT.SOURCE
+                ),
                 smoothing: true
             });
         } else if (portraitRect) {
@@ -614,6 +625,29 @@ export class TutorialBattleHudView {
             w: Math.max(1, Math.round(partWidth * scaleX)),
             h: Math.max(1, Math.round(partHeight * scaleY))
         };
+    }
+
+    /**
+     * 패널 원본 픽셀 꼭짓점을 현재 렌더 좌표의 평면 배열로 투영합니다.
+     * @param {object} panelRect - 실제 패널 사각형입니다.
+     * @param {{X:number,Y:number}[]} points - 원본 픽셀 기준 꼭짓점입니다.
+     * @param {object} source - 패널 원본 크기입니다.
+     * @returns {number[]|null} 렌더 명령용 평면 꼭짓점 배열입니다.
+     * @private
+     */
+    #resolveSourcePanelVertices(panelRect, points, source) {
+        const sourceWidth = Number(source?.WIDTH);
+        const sourceHeight = Number(source?.HEIGHT);
+        if (!(sourceWidth > 0) || !(sourceHeight > 0)
+            || !Array.isArray(points) || points.length < 3) {
+            return null;
+        }
+        const scaleX = panelRect.w / sourceWidth;
+        const scaleY = panelRect.h / sourceHeight;
+        return points.flatMap((point) => [
+            Math.round(panelRect.x + (Number(point.X) * scaleX)),
+            Math.round(panelRect.y + (Number(point.Y) * scaleY))
+        ]);
     }
 
     /**
