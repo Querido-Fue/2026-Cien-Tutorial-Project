@@ -93,6 +93,7 @@ test('원본이 없는 Range·Breathing·로라 액션은 순환 없는 명시�
     });
     assert.equal(unstable.resolvedClipId, 'lora.idle.down');
     assert.equal(unstable.frames.length, 4);
+    assert.equal(unstable.fps, 2);
     assert.equal(unstable.loop, true);
     assert.equal(unstable.fallbackEffect, 'breathing');
     assert.equal(unstable.visualTopInsetRatio, 0.257);

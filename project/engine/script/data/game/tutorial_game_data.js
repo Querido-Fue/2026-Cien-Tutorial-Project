@@ -94,6 +94,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
             BASE_SIZE_TILE_RATIO: 0.64,
             SPRITE_SIZE_TILE_RATIO: 0.84,
             OFFSET_Y_TILE_RATIO: 0,
+            FLOAT_AMPLITUDE_TILE_RATIO: 0.08,
             FLASH_GLOW_SIZE_RATIO: 1.08,
             FLASH_GLOW_ALPHA: 0.34
         }

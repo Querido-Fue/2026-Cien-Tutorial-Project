@@ -257,6 +257,7 @@ test('월드 HP 바는 캐릭터별 스프라이트 크기와 발 앵커에 맞�
                     shadowProjection: SHADOW_PROJECTION,
                     loraSprite: {
                         BASE_SIZE_TILE_RATIO: 0.8,
+                        FLOAT_AMPLITUDE_TILE_RATIO: 0.08,
                         FLASH_GLOW_SIZE_RATIO: 1.12,
                         FLASH_GLOW_ALPHA: 0.2
                     }
@@ -286,4 +287,95 @@ test('월드 HP 바는 캐릭터별 스프라이트 크기와 발 앵커에 맞�
             `${actorCase.type} HP 바가 머리에서 과도하게 떨어지지 않아야 합니다.`
         );
     }
+});
+
+test('로라 불안정 대기는 크기 변화 없이 지면 그림자 위를 천천히 부유한다', () => {
+    const image = { width: 296, height: 296 };
+    const drawAt = (progress) => {
+        const commands = [];
+        const view = new TutorialBattleActorView({
+            renderGL(layer, options) {
+                commands.push({ layer, ...options });
+            },
+            render() {}
+        }, {
+            getImage: () => image
+        });
+        view.draw('lora', {
+            x: 0, y: 0, hp: 100, maxHp: 100, alive: true
+        }, {
+            fonts: { HEADING: '16px sans-serif' },
+            colors: {
+                Entity: {
+                    Shadow: '#shadow', LoraDark: '#lora-dark',
+                    Lora: '#lora', LoraAccent: '#lora-accent', LoraHair: '#lora-hair'
+                },
+                Effects: { Stabilize: '#stabilize' },
+                UI: {
+                    HpEmpty: '#hp-empty', HpFull: '#hp-full',
+                    Success: '#success', Danger: '#danger'
+                }
+            },
+            layout: {
+                isoOriginX: 100,
+                isoOriginY: 100,
+                gridAxisX: { x: 32, y: 16 },
+                gridAxisY: { x: -32, y: 16 },
+                tileWidth: 64,
+                tileHeight: 32,
+                tileElevation: 0,
+                tileSide: 40,
+                heights: [[0]],
+                shake: { x: 0, y: 0 }
+            },
+            world: {
+                presentation: { loraHp: 100, actionPulse: 0 },
+                spriteAnimations: {
+                    lora: {
+                        assetId: 'sprite.lora',
+                        layers: [{ x: 0, y: 0, w: 74, h: 74 }],
+                        logicalSize: { width: 32, height: 32 },
+                        anchor: { x: 0.5, y: 0.84 },
+                        scaleTileRatio: 0.94,
+                        fallbackEffect: 'breathing',
+                        progress,
+                        visible: true
+                    }
+                },
+                feedback: { flashSeconds: 0, stabilizeSeconds: 0 },
+                config: {
+                    actionLoraScale: 0.08,
+                    shadowProjection: SHADOW_PROJECTION,
+                    loraSprite: {
+                        BASE_SIZE_TILE_RATIO: 0.64,
+                        FLOAT_AMPLITUDE_TILE_RATIO: 0.08,
+                        FLASH_GLOW_SIZE_RATIO: 1.08,
+                        FLASH_GLOW_ALPHA: 0.34
+                    }
+                },
+                readability: {}
+            }
+        });
+        return commands;
+    };
+
+    const highCommands = drawAt(0.25);
+    const lowCommands = drawAt(0.75);
+    const highSprite = highCommands.find(
+        (command) => command.image === image && !command.vertices
+    );
+    const lowSprite = lowCommands.find(
+        (command) => command.image === image && !command.vertices
+    );
+    assert.equal(highSprite.w, lowSprite.w);
+    assert.equal(highSprite.h, lowSprite.h);
+    assert.ok(highSprite.y < lowSprite.y);
+
+    const highShadow = highCommands.find(
+        (command) => command.image === image && Array.isArray(command.vertices)
+    );
+    const lowShadow = lowCommands.find(
+        (command) => command.image === image && Array.isArray(command.vertices)
+    );
+    assert.deepEqual(highShadow.vertices, lowShadow.vertices);
 });

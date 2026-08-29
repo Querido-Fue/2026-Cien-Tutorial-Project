@@ -29,7 +29,7 @@ for (const [facing, row] of Object.entries(DIRECTIONS)) {
         ['melee', 4, 8, 2, false, 'attack'],
         ['area', 6, 10, 3, false, 'area'],
         ['hit', 4, 12, null, false, 'hit'],
-        ['unstable', 4, 4, null, true, 'breathing'],
+        ['unstable', 4, 2, null, true, 'breathing'],
         ['collapse', 4, 5, null, true, 'collapse'],
         ['death', 4, 8, null, false, 'death']
     ];

@@ -90,17 +90,23 @@ export class TutorialBattleActorView {
         const { colors, layout, world } = frame;
         const point = this.#projectTile(layout, lora.x, lora.y);
         const spriteLayout = world.config.loraSprite;
+        const animation = world.spriteAnimations?.lora || null;
+        const spritePoint = this.#resolveLoraSpritePoint(
+            point,
+            animation,
+            layout,
+            spriteLayout
+        );
         const actionScale = 1 + (
             world.presentation.actionPulse * world.config.actionLoraScale
         );
         const size = layout.tileSide * spriteLayout.BASE_SIZE_TILE_RATIO * actionScale;
-        const animation = world.spriteAnimations?.lora || null;
         const hpWidth = size * 1.08;
         const hpY = this.#resolveWorldHpY(
-            point,
+            spritePoint,
             animation,
             actionScale,
-            point.y - (size * 0.76),
+            spritePoint.y - (size * 0.76),
             hpWidth,
             frame
         );
@@ -113,39 +119,55 @@ export class TutorialBattleActorView {
         if (world.feedback.flashSeconds > 0) {
             this.#renderPort.renderGL('object', {
                 shape: 'circle',
-                x: point.x,
-                y: point.y,
+                x: spritePoint.x,
+                y: spritePoint.y,
                 w: size * spriteLayout.FLASH_GLOW_SIZE_RATIO,
                 h: size * spriteLayout.FLASH_GLOW_SIZE_RATIO,
                 fill: colors.Entity.LoraAccent,
                 alpha: spriteLayout.FLASH_GLOW_ALPHA * alpha
             });
         }
-        const spriteDrawn = this.#drawSprite(point, animation, actionScale, alpha, frame);
+        const spriteDrawn = this.#drawSprite(
+            spritePoint,
+            animation,
+            actionScale,
+            alpha,
+            frame
+        );
         if (!spriteDrawn) {
             this.#renderPort.renderGL('object', {
-                shape: 'circle', x: point.x, y: point.y, w: size, h: size,
+                shape: 'circle', x: spritePoint.x, y: spritePoint.y, w: size, h: size,
                 fill: colors.Entity.LoraDark, alpha
             });
             this.#renderPort.renderGL('object', {
-                shape: 'circle', x: point.x, y: point.y, w: size * 0.8, h: size * 0.8,
+                shape: 'circle', x: spritePoint.x, y: spritePoint.y,
+                w: size * 0.8, h: size * 0.8,
                 fill: world.feedback.flashSeconds > 0
                     ? colors.Entity.LoraAccent
                     : colors.Entity.Lora,
                 alpha
             });
             this.#renderPort.renderGL('object', {
-                shape: 'rect', x: point.x, y: point.y - (size * 0.23),
+                shape: 'rect',
+                x: spritePoint.x,
+                y: spritePoint.y - (size * 0.23),
                 w: size * 0.56, h: size * 0.22,
                 fill: colors.Entity.LoraHair
             });
-            this.#drawText('L', point.x, point.y, frame.fonts.HEADING, colors.Entity.LoraAccent, alpha);
+            this.#drawText(
+                'L',
+                spritePoint.x,
+                spritePoint.y,
+                frame.fonts.HEADING,
+                colors.Entity.LoraAccent,
+                alpha
+            );
         }
         if (world.feedback.stabilizeSeconds > 0) {
             this.#renderPort.renderGL('object', {
                 shape: 'circle',
-                x: point.x,
-                y: point.y,
+                x: spritePoint.x,
+                y: spritePoint.y,
                 w: size * (1.12 + (world.feedback.stabilizeSeconds * 0.2)),
                 h: size * (1.12 + (world.feedback.stabilizeSeconds * 0.2)),
                 fill: colors.Effects.Stabilize,
@@ -153,7 +175,7 @@ export class TutorialBattleActorView {
             });
         }
         this.#drawWorldHp(
-            point.x,
+            spritePoint.x,
             hpY,
             world.presentation.loraHp,
             lora.maxHp || 100,
@@ -164,6 +186,31 @@ export class TutorialBattleActorView {
                 : null,
             frame
         );
+    }
+
+    /**
+     * 불안정 대기 폴백을 원래 크기의 느린 상하 부유 위치로 변환합니다.
+     * @param {{x:number,y:number}} point - 타일 위 발 위치입니다.
+     * @param {object|null} animation - 현재 로라 스프라이트 애니메이션입니다.
+     * @param {object} layout - 전투 보드 레이아웃입니다.
+     * @param {object} spriteLayout - 로라 스프라이트 표시 규격입니다.
+     * @returns {{x:number,y:number}} 스프라이트 표시 기준점입니다.
+     * @private
+     */
+    #resolveLoraSpritePoint(point, animation, layout, spriteLayout) {
+        if (animation?.fallbackEffect !== 'breathing') {
+            return point;
+        }
+        const amplitude = Math.max(
+            0,
+            Number(spriteLayout.FLOAT_AMPLITUDE_TILE_RATIO) || 0
+        ) * Math.max(0, Number(layout.tileSide) || 0);
+        const progress = clampBattleViewNumber(animation.progress, 0, 1);
+        const liftRatio = 0.5 + (Math.sin(progress * Math.PI * 2) * 0.5);
+        return {
+            x: point.x,
+            y: point.y - Math.round(amplitude * liftRatio)
+        };
     }
 
     /** @param {object} mob @param {object} frame @private */
@@ -304,7 +351,7 @@ export class TutorialBattleActorView {
             attack: 1 + (pulse * 0.12),
             ranged: 1 + (pulse * 0.08),
             area: 1 + (pulse * 0.18),
-            breathing: 1 + (Math.sin(animation.progress * Math.PI * 2) * 0.045),
+            breathing: 1,
             collapse: 1 + (Math.sin(animation.progress * Math.PI * 4) * 0.075),
             hit: 1 + (pulse * 0.08),
             death: 1 - (clampBattleViewNumber(animation.progress, 0, 1) * 0.16)
