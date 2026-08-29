@@ -19,7 +19,7 @@ export const SOURCE_RESPONSIBILITY_POLICY = Object.freeze({
     }),
     legacyBudgets: Object.freeze({
         'project/engine/script/scene/tutorial/_tutorial_scene.js': Object.freeze({
-            maximumFileLines: 2054
+            maximumFileLines: 1983
         }),
         'project/engine/script/scene/tutorial/_tutorial_battle_model.js': Object.freeze({
             maximumFileLines: 2185

@@ -7,6 +7,7 @@ import { TutorialBattleSelectionController } from '../project/engine/script/scen
 import { TutorialInventoryPresenter } from '../project/engine/script/scene/tutorial/_tutorial_inventory_presenter.js';
 import { TutorialKeyboardEdgeTracker } from '../project/engine/script/scene/tutorial/_tutorial_keyboard_edge_tracker.js';
 import { TutorialKeyboardCommandMapper } from '../project/engine/script/scene/tutorial/_tutorial_keyboard_command_mapper.js';
+import { TutorialLoraTurnController } from '../project/engine/script/scene/tutorial/_tutorial_lora_turn_controller.js';
 import { TutorialMetaSession } from '../project/engine/script/scene/tutorial/_tutorial_meta_session.js';
 import { TutorialNonbattleViewModelFactory } from '../project/engine/script/scene/tutorial/_tutorial_nonbattle_view_model_factory.js';
 import { createDefaultTutorialMeta } from '../project/engine/script/scene/tutorial/_tutorial_meta_progress.js';
@@ -292,6 +293,56 @@ test('전투 명령 컨트롤러는 공격 선택과 실행 검증을 모델 밖
     }]);
     assert.deepEqual(actions, ['action']);
     assert.equal(selection.isAttackSelected(), false);
+});
+
+test('로라 턴 컨트롤러는 같은 세대에서 행동과 완료를 각각 한 번만 예약한다', () => {
+    const queued = [];
+    const changes = [];
+    const selectionCalls = [];
+    const model = {
+        turn: 'lora',
+        player: { x: 2, y: 3 },
+        performLoraTurn: () => ({ ok: true, stage: 'performed' }),
+        completeLoraTurn() {
+            this.turn = 'player';
+            return { ok: true, stage: 'completed' };
+        }
+    };
+    const turns = new TutorialLoraTurnController({
+        getModel: () => model,
+        getRevision: () => 7,
+        canApply: () => true,
+        canSchedule: () => true,
+        enqueueCommand: (command) => queued.push(command),
+        onModelChange: (result) => changes.push(result.stage),
+        selection: {
+            clearActionSelections: () => selectionCalls.push('clear'),
+            resetPath: (value) => selectionCalls.push(['reset', value.player])
+        },
+        beforeSeconds: 0.2,
+        showSeconds: 0.4
+    });
+
+    assert.equal(turns.armIfNeeded(), true);
+    turns.update(0.2);
+    turns.update(1);
+    assert.deepEqual(queued, [{
+        type: TUTORIAL_COMMANDS.PERFORM_LORA,
+        payload: { timelineRevision: 7 }
+    }]);
+
+    turns.applyAction({ timelineRevision: 6 });
+    assert.deepEqual(changes, []);
+    turns.applyAction({ timelineRevision: 7 });
+    turns.update(0.4);
+    assert.equal(queued[1].type, TUTORIAL_COMMANDS.COMPLETE_LORA);
+
+    turns.applyCompletion({ timelineRevision: 7 });
+    assert.deepEqual(changes, ['performed', 'completed']);
+    assert.deepEqual(selectionCalls, [
+        'clear',
+        ['reset', { x: 2, y: 3 }]
+    ]);
 });
 
 test('비전투 뷰 모델 팩토리는 장면 상태 없이 표시 데이터만 조립한다', () => {

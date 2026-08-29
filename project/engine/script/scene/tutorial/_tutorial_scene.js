@@ -76,6 +76,7 @@ import { TutorialBattleSelectionController } from './_tutorial_battle_selection_
 import { TutorialBattleViewModelFactory } from './_tutorial_battle_view_model_factory.js';
 import { TutorialFeedbackQueue } from './_tutorial_feedback_queue.js';
 import { TutorialInventoryPresenter } from './_tutorial_inventory_presenter.js';
+import { TutorialLoraTurnController } from './_tutorial_lora_turn_controller.js';
 import { TutorialSpriteAnimator } from './_tutorial_sprite_animator.js';
 import { TutorialSpriteClipResolver } from './_tutorial_sprite_clip_resolver.js';
 import { TutorialSpriteCueRouter } from './_tutorial_sprite_cue_router.js';
@@ -318,11 +319,22 @@ export class TutorialScene extends BaseScene {
             getVisibleFloorIndex: () => this.floorView?.index,
             cleanseActionSeconds: this.data.ANIMATION.SELECTION_SECONDS
         });
+        this.loraTurns = new TutorialLoraTurnController({
+            getModel: () => this.model,
+            getRevision: () => this.timelineRevision,
+            canApply: () => this.mode === MODES.BATTLE && !this.cutscenes.isOpen(),
+            canSchedule: () => this.mode === MODES.BATTLE
+                && !this.cutscenes.isOpen()
+                && !this.presentationTimeline.isLocked(),
+            enqueueCommand: (command) => enqueueSimulationCommand(command),
+            onModelChange: (result) => this.#afterModelChange(result),
+            selection: this.battleSelection,
+            beforeSeconds: this.data.ANIMATION.TURN_GATE_SECONDS,
+            showSeconds: this.data.ANIMATION.LORA_TURN_SECONDS
+        });
         this.assetPort.loadAll();
 
         this.elapsedSeconds = 0;
-        this.loraTurnState = null;
-
         this.uiActionHandled = false;
         this.keyboardEdges = new TutorialKeyboardEdgeTracker({
             watchedCodes: WATCHED_KEY_CODES,
@@ -392,7 +404,7 @@ export class TutorialScene extends BaseScene {
         this.#updateBattleCamera(deltaSeconds);
         this.#updatePointerState();
         this.#handlePointerInput();
-        this.#updateLoraTurn(deltaSeconds);
+        this.loraTurns.update(deltaSeconds);
         this.#syncSpriteRoster();
         this.spriteCueRouter.update(deltaSeconds);
         this.#enterResultIfNeeded();
@@ -559,10 +571,10 @@ export class TutorialScene extends BaseScene {
                     this.#applyGuideDismiss();
                     break;
                 case COMMANDS.PERFORM_LORA:
-                    this.#applyLoraAction(command.payload);
+                    this.loraTurns.applyAction(command.payload);
                     break;
                 case COMMANDS.COMPLETE_LORA:
-                    this.#applyLoraCompletion(command.payload);
+                    this.loraTurns.applyCompletion(command.payload);
                     break;
                 default:
                     break;
@@ -627,7 +639,7 @@ export class TutorialScene extends BaseScene {
         this.recordPopups.clear();
         this.battleFocus.reset();
         this.guidance.reset();
-        this.loraTurnState = null;
+        this.loraTurns.reset();
         this.floorView = null;
         this.floorActorView = null;
     }
@@ -818,7 +830,7 @@ export class TutorialScene extends BaseScene {
         this.resultRecorded = false;
         this.pauseIndex = 0;
         this.changelogPage = 0;
-        this.loraTurnState = null;
+        this.loraTurns.reset();
         this.inventoryPresenter.reset();
         this.battleSelection.reset();
         this.battleFocus.reset();
@@ -861,7 +873,7 @@ export class TutorialScene extends BaseScene {
         const openingCutsceneIds = this.cutsceneTriggers.beginRun(this.meta);
         this.battleSelection.reset(this.model);
         this.inventoryPresenter.reset();
-        this.loraTurnState = null;
+        this.loraTurns.reset();
         this.battleFocus.reset();
         this.guidance.beginRun({ seen: this.meta.combatGuideSeen === true });
         this.feedbackQueue.clear();
@@ -1047,48 +1059,6 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * 예약된 로라 행동을 모델에 적용합니다.
-     * @param {object} payload - 예약 당시 타임라인 버전입니다.
-     * @private
-     */
-    #applyLoraAction(payload) {
-        if (Number(payload?.timelineRevision) !== this.timelineRevision
-            || this.mode !== MODES.BATTLE
-            || this.cutscenes.isOpen()
-            || this.model?.turn !== 'lora'
-            || this.loraTurnState?.stage !== 'before') {
-            return;
-        }
-        const result = this.model.performLoraTurn();
-        this.loraTurnState = {
-            stage: 'show',
-            seconds: 0,
-            queued: false
-        };
-        this.#afterModelChange(result);
-    }
-
-    /**
-     * 로라 행동 연출 뒤 다음 플레이어 턴을 엽니다.
-     * @param {object} payload - 예약 당시 타임라인 버전입니다.
-     * @private
-     */
-    #applyLoraCompletion(payload) {
-        if (Number(payload?.timelineRevision) !== this.timelineRevision
-            || this.mode !== MODES.BATTLE
-            || this.cutscenes.isOpen()
-            || this.model?.turn !== 'lora'
-            || this.loraTurnState?.stage !== 'show') {
-            return;
-        }
-        const result = this.model.completeLoraTurn();
-        this.loraTurnState = null;
-        this.battleSelection.clearActionSelections();
-        this.battleSelection.resetPath(this.model);
-        this.#afterModelChange(result);
-    }
-
-    /**
      * 모델 결과의 이벤트, 지식, 컷씬, 종료 상태를 동기화합니다.
      * @param {object} result - 모델 메서드 반환값입니다.
      * @private
@@ -1150,15 +1120,7 @@ export class TutorialScene extends BaseScene {
             !== (Number(this.model?.floorIndex) || 0)) {
             this.#startFloorTransitionPresentation();
         }
-        if (this.mode === MODES.BATTLE
-            && this.model?.turn === 'lora'
-            && !this.loraTurnState) {
-            this.loraTurnState = {
-                stage: 'before',
-                seconds: 0,
-                queued: false
-            };
-        }
+        this.loraTurns.armIfNeeded();
     }
 
     /**
@@ -1342,39 +1304,6 @@ export class TutorialScene extends BaseScene {
             && !this.presentationTimeline.isLocked()
             && this.model?.turn === 'player'
             && !this.model?.result;
-    }
-
-    /**
-     * 로라 턴의 두 단계 명령을 시간에 맞춰 큐에 넣습니다.
-     * @param {number} deltaSeconds - 경과 초입니다.
-     * @private
-     */
-    #updateLoraTurn(deltaSeconds) {
-        if (!this.loraTurnState
-            || this.mode !== MODES.BATTLE
-            || this.cutscenes.isOpen()
-            || this.presentationTimeline.isLocked()
-            || this.loraTurnState.queued) {
-            return;
-        }
-        this.loraTurnState.seconds += deltaSeconds;
-        const beforeSeconds = Number(this.data.ANIMATION.TURN_GATE_SECONDS) || 0.22;
-        const showSeconds = Number(this.data.ANIMATION.LORA_TURN_SECONDS) || 1.15;
-        if (this.loraTurnState.stage === 'before'
-            && this.loraTurnState.seconds >= beforeSeconds) {
-            this.loraTurnState.queued = true;
-            enqueueSimulationCommand({
-                type: COMMANDS.PERFORM_LORA,
-                payload: { timelineRevision: this.timelineRevision }
-            });
-        } else if (this.loraTurnState.stage === 'show'
-            && this.loraTurnState.seconds >= showSeconds) {
-            this.loraTurnState.queued = true;
-            enqueueSimulationCommand({
-                type: COMMANDS.COMPLETE_LORA,
-                payload: { timelineRevision: this.timelineRevision }
-            });
-        }
     }
 
     /**
