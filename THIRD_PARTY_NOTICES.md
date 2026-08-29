@@ -24,6 +24,17 @@
 
 게임 런타임과 패키징 결과는 이 폰트를 사용한다.
 
+## 프로젝트 생성 아트
+
+- 파일: `project/asset/generated/tutorial/world/low-spike-barricade.png`
+- 런타임 복사본: `project/asset/tutorial/world/low-spike-barricade.png`
+- 출처: 2026-08-29 OpenAI 내장 `image_gen` 도구로 프로젝트 전용 생성
+- 후처리: 같은 도구로 기둥 높이 축소와 투명 배경 추출
+- 상태: 프로젝트 사용 가능
+
+외부 게임 에셋을 입력으로 사용하지 않았으며, 생성 과정과 적용 범위는
+`manifests/asset-provenance.json`의 `imagegen-low-spike-barricade` 항목에 기록한다.
+
 ## NW.js v0.108.0 Windows x64
 
 NW.js 바이너리는 저장소에 커밋하지 않는다. `package:nwjs`는 사용자가 별도로

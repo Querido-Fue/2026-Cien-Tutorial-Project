@@ -34,6 +34,7 @@ export const TUTORIAL_UI_ASSET_IDS = Object.freeze({
     waitIcon: 'ui.battle.wait-icon',
     healIcon: 'ui.battle.heal-icon',
     teleportMarker: 'ui.battle.teleport-marker',
+    wallBarrier: 'ui.battle.wall-barrier',
     dialogueBubble: 'ui.battle.dialogue-bubble',
     tutorialPaper: 'ui.battle.tutorial-paper',
     tutorialRodTop: 'ui.battle.tutorial-rod-top',
@@ -279,6 +280,16 @@ export const TUTORIAL_UI_ASSET_ENTRIES = Object.freeze([
         actualDimensions: { width: 512, height: 300 },
         sourceRect: { x: 16, y: 16, w: 59, h: 32 },
         usage: '월드 포탈 마커'
+    }),
+    createUiEntry({
+        id: TUTORIAL_UI_ASSET_IDS.wallBarrier,
+        runtimePath: '../asset/tutorial/world/low-spike-barricade.png',
+        sourceName: 'generated/tutorial/world/low-spike-barricade.png',
+        expectedDimensions: { width: 1536, height: 1024 },
+        actualDimensions: { width: 1536, height: 1024 },
+        sourceRect: { x: 14, y: 35, w: 1510, h: 918 },
+        layer: 'object',
+        usage: '뒤쪽 타일을 가리지 않는 낮은 파괴 가능 가시 울타리'
     }),
     createUiEntry({
         id: TUTORIAL_UI_ASSET_IDS.dialogueBubble,

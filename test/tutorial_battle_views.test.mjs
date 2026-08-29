@@ -159,6 +159,76 @@ test('이동 미리보기는 맵 타일의 두 투영 축으로 계산한 네 �
     assert.notEqual(preview.vertices[0], preview.vertices[4]);
 });
 
+test('벽은 글자 대신 뒤쪽 칸을 가리지 않는 낮은 가시 울타리 이미지를 그린다', () => {
+    const layoutController = createLayout();
+    layoutController.resize(VIEWPORTS[0]);
+    const floor = {
+        ...TUTORIAL_GAME_DATA.FLOORS[0],
+        walls: [{ id: 'wall-test', x: 4, y: 4, destroyed: false }],
+        items: [],
+        eventTiles: [],
+        teleports: [],
+        mobs: []
+    };
+    const layout = layoutController.createFrame({
+        floor,
+        elapsedSeconds: 0,
+        screenShakeSeconds: 0
+    });
+    const wallBarrier = { width: 1510, height: 918 };
+    const commands = [];
+    const view = new TutorialBattleWorldView({
+        render(layer, command) {
+            commands.push({ layer, ...command });
+        },
+        renderGL(layer, command) {
+            commands.push({ layer, ...command });
+        },
+        measureText(text) {
+            return String(text).length * 8;
+        }
+    }, {
+        getMapArtwork() {
+            return { layers: [] };
+        },
+        getUiAsset(key) {
+            return key === 'wallBarrier' ? wallBarrier : null;
+        }
+    });
+    view.draw({
+        snapshot: { phase: 'move', floorIndex: 0, player: null, lora: null },
+        floor,
+        layout,
+        fonts: { SMALL: '12px sans-serif', HEADING: '18px sans-serif' },
+        colors: {
+            BoardFrame: '#frame',
+            Tile: { Reachable: '#reachable', Teleport: '#teleport' },
+            UI: {}
+        },
+        world: {
+            presentation: { floorIndex: 0, pathProgress: 1 },
+            attackSelected: false,
+            cleanseSelected: false,
+            pathExtensions: [],
+            plannedPath: [],
+            hoveredTile: null,
+            readability: { loraIntent: { ok: false } },
+            floorActors: {},
+            itemMetadata: {},
+            elapsedSeconds: 0,
+            config: {}
+        }
+    });
+
+    const barrier = commands.find((command) => command.image === wallBarrier);
+    assert.ok(barrier);
+    assert.equal(barrier.layer, 'object');
+    assert.equal(barrier.smoothing, false);
+    assert.ok(barrier.w <= layout.tileWidth * 0.72);
+    assert.ok(barrier.h <= layout.tileHeight * 0.86);
+    assert.equal(commands.some((command) => command.text === '벽'), false);
+});
+
 test('세 화면비에서 HUD 영역은 UI 안에 있고 서로 겹치지 않는다', () => {
     for (const viewport of VIEWPORTS) {
         const layout = createLayout();

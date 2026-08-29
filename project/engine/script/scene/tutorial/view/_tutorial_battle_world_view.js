@@ -17,7 +17,7 @@ export class TutorialBattleWorldView {
 
     /**
      * @param {{render:Function,renderGL:Function}} renderPort - 렌더 명령 포트입니다.
-     * @param {{getMapArtwork?:Function,getItemIcon?:Function,getLoraSprite?:Function}} assetPort - 읽기 전용 에셋 포트입니다.
+     * @param {{getMapArtwork?:Function,getUiAsset?:Function,getItemIcon?:Function,getLoraSprite?:Function}} assetPort - 읽기 전용 에셋 포트입니다.
      */
     constructor(renderPort, assetPort = {}) {
         this.#renderPort = renderPort;
@@ -297,16 +297,49 @@ export class TutorialBattleWorldView {
     #drawWall(wall) {
         const { colors, layout } = this.#frame;
         const point = this.#projectTile(wall.x, wall.y);
-        const size = layout.tileSide * 0.58;
+        const barrier = this.#assetPort.getUiAsset?.('wallBarrier') || null;
+        if (barrier) {
+            const sourceWidth = Number(barrier.naturalWidth || barrier.width) || 1510;
+            const sourceHeight = Number(barrier.naturalHeight || barrier.height) || 918;
+            const aspectRatio = sourceHeight / sourceWidth;
+            let width = layout.tileWidth * 0.72;
+            let height = width * aspectRatio;
+            const maxHeight = layout.tileHeight * 0.86;
+            if (height > maxHeight) {
+                height = maxHeight;
+                width = height / aspectRatio;
+            }
+            this.#renderPort.renderGL('object', {
+                image: barrier,
+                x: Math.round(point.x - (width * 0.5)),
+                y: Math.round(point.y - (height * 0.64)),
+                w: Math.max(1, Math.round(width)),
+                h: Math.max(1, Math.round(height)),
+                smoothing: false
+            });
+            return;
+        }
+
+        const railWidth = layout.tileWidth * 0.58;
+        const railHeight = Math.max(2, layout.tileHeight * 0.08);
         this.#renderPort.renderGL('object', {
-            shape: 'rect', x: point.x, y: point.y, w: size, h: size,
+            shape: 'rect',
+            x: point.x,
+            y: point.y + (layout.tileHeight * 0.08),
+            w: railWidth,
+            h: railHeight,
             fill: colors.Entity.Wall
         });
-        this.#renderPort.renderGL('object', {
-            shape: 'rect', x: point.x, y: point.y, w: size * 0.88, h: size * 0.14,
-            fill: colors.Tile.Wall
-        });
-        this.#drawWorldGlyph('벽', point.x, point.y, colors.UI.Text);
+        for (const offset of [-0.24, 0, 0.24]) {
+            this.#renderPort.renderGL('object', {
+                shape: 'triangle',
+                x: point.x + (layout.tileWidth * offset),
+                y: point.y - (layout.tileHeight * 0.06),
+                w: layout.tileHeight * 0.22,
+                h: layout.tileHeight * 0.32,
+                fill: colors.Tile.Wall
+            });
+        }
     }
 
     /** 월드 아이템을 그립니다. @param {object} entry - 아이템 상태입니다. @private */

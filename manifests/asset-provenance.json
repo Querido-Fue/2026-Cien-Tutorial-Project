@@ -58,6 +58,18 @@
       "blocker": "아트 원본별 저작자, 라이선스 또는 양도·사용 허가 증빙이 필요합니다."
     },
     {
+      "id": "imagegen-low-spike-barricade",
+      "category": "project-generated-art",
+      "paths": [
+        "project/asset/generated/tutorial/world/low-spike-barricade.png",
+        "project/asset/tutorial/world/low-spike-barricade.png"
+      ],
+      "origin": "2026-08-29 OpenAI 내장 image_gen 도구로 생성하고 같은 도구로 높이 축소와 투명 배경 추출을 수행한 프로젝트 전용 픽셀 아트",
+      "originStatus": "project-generated",
+      "license": "OpenAI 서비스 약관이 적용되는 사용자 생성 출력물",
+      "releaseStatus": "approved"
+    },
+    {
       "id": "provided-audio-sources",
       "category": "audio",
       "paths": [
