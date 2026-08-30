@@ -5,6 +5,10 @@
  */
 export const TUTORIAL_CHANGELOG_CATALOG = Object.freeze([
     Object.freeze({
+        subject: 'feat: polish pickups and tutorial guidance',
+        summary: '아이템 도트·부유 그림자와 단계형 아웃포커스 안내를 개선하고 ESC 안내 조건을 단순화했습니다.'
+    }),
+    Object.freeze({
         subject: 'feat: add loading progress and seamless starter transition',
         summary: '실제 로딩 진행률을 표시하고 타이틀에서 무기 선택과 인게임으로 자연스럽게 이어지도록 개선했습니다.'
     }),

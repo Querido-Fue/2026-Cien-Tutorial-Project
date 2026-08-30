@@ -559,7 +559,7 @@ test('연결된 벽은 공통 변을 빼고 실제 타일 외곽에 낮은 석�
     assert.equal(commands.some((command) => command.text === '벽'), false);
 });
 
-test('월드 아이템은 절반 크기와 아이템별 시각 중심, 은은한 후광을 사용한다', () => {
+test('월드 아이템은 픽셀 크기·시각 중심을 지키며 후광 없이 부유한다', () => {
     const layoutController = createLayout();
     layoutController.resize(VIEWPORTS[0]);
     const floor = {
@@ -569,6 +569,7 @@ test('월드 아이템은 절반 크기와 아이템별 시각 중심, 은은한
             id: 'item-test', itemId: 'diamond-pickaxe', x: 4, y: 4,
             collected: false, identified: true
         }],
+        records: [],
         eventTiles: [],
         teleports: [],
         mobs: []
@@ -578,7 +579,7 @@ test('월드 아이템은 절반 크기와 아이템별 시각 중심, 은은한
         elapsedSeconds: 0,
         screenShakeSeconds: 0
     });
-    const itemIcon = { width: 16, height: 16 };
+    const itemIcon = { width: 32, height: 32 };
     const commands = [];
     const view = new TutorialBattleWorldView({
         render(layer, command) {
@@ -598,14 +599,14 @@ test('월드 아이템은 절반 크기와 아이템별 시각 중심, 은은한
             return itemId === 'diamond-pickaxe' ? itemIcon : null;
         }
     });
-    view.draw({
+    const viewModel = {
         snapshot: { phase: 'move', floorIndex: 0, player: null, lora: null },
         floor,
         layout,
         fonts: { SMALL: '12px sans-serif', HEADING: '18px sans-serif' },
         colors: {
             BoardFrame: '#frame',
-            Entity: { Item: '#item-halo' },
+            Entity: { Item: '#item-halo', Shadow: '#shadow' },
             Tile: { Item: '#item' },
             UI: { Text: '#text' }
         },
@@ -620,36 +621,142 @@ test('월드 아이템은 절반 크기와 아이템별 시각 중심, 은은한
             floorActors: {},
             itemMetadata: { 'diamond-pickaxe': {} },
             elapsedSeconds: 0,
-            config: { itemIcon: TUTORIAL_GAME_DATA.SPRITES.ITEM }
+            config: {
+                itemIcon: TUTORIAL_GAME_DATA.SPRITES.ITEM,
+                shadowProjection: TUTORIAL_GAME_DATA.LAYOUT.BOARD.SHADOW_PROJECTION
+            }
         }
-    });
+    };
+    view.draw(viewModel);
 
     const point = TutorialBattleLayout.projectTile(layout, 4, 4);
     const itemLayout = TUTORIAL_GAME_DATA.SPRITES.ITEM;
-    const halo = commands.find((command) => command.fill === '#item-halo');
-    const icon = commands.find((command) => command.image === itemIcon);
-    const iconSize = layout.tileSide * itemLayout.WORLD_ICON_SIZE_TILE_RATIO;
+    const icon = commands.find((command) => (
+        command.image === itemIcon && command.role === 'pickup-sprite'
+    ));
+    const shadow = commands.find((command) => (
+        command.image === itemIcon && command.role === 'pickup-shadow'
+    ));
+    const iconSize = Math.round(
+        layout.tileSide * itemLayout.WORLD_ICON_SIZE_TILE_RATIO
+    );
     const visualCenter = itemLayout.VISUAL_CENTERS['diamond-pickaxe'];
-    const bitmapItemIds = Object.keys(TUTORIAL_ASSET_MANIFEST.ITEMS)
-        .filter((itemId) => itemId !== 'tile-cleanser')
-        .sort();
+    const bitmapItemIds = Object.keys(TUTORIAL_ASSET_MANIFEST.ITEMS).sort();
     assert.deepEqual(Object.keys(itemLayout.VISUAL_CENTERS).sort(), bitmapItemIds);
     assert.deepEqual(visualCenter, { x: 0.5, y: 0.5 });
     assert.equal(itemLayout.WORLD_ICON_SIZE_TILE_RATIO, 0.64 * 0.5);
-    assert.equal(itemLayout.WORLD_HALO_SIZE_TILE_RATIO, 0.36);
-    assert.equal(halo.alpha, 0.24);
-    assert.equal(halo.w, layout.tileSide * itemLayout.WORLD_HALO_SIZE_TILE_RATIO);
-    assert.equal(halo.h, layout.tileSide * itemLayout.WORLD_HALO_SIZE_TILE_RATIO);
+    assert.equal(commands.some((command) => command.fill === '#item-halo'), false);
+    assert.ok(shadow);
+    const farCenterY = (shadow.vertices[1] + shadow.vertices[3]) * 0.5;
+    const nearCenterY = (shadow.vertices[5] + shadow.vertices[7]) * 0.5;
+    assert.equal(farCenterY > nearCenterY, true);
     assert.deepEqual(
-        { x: icon.x, y: icon.y, w: icon.w, h: icon.h, smoothing: icon.smoothing },
+        { x: icon.x, w: icon.w, h: icon.h, smoothing: icon.smoothing },
         {
             x: Math.round(point.x - (iconSize * visualCenter.x)),
-            y: Math.round(point.y - (iconSize * visualCenter.y)),
-            w: Math.round(iconSize),
-            h: Math.round(iconSize),
+            w: iconSize,
+            h: iconSize,
             smoothing: false
         }
     );
+    assert.equal(icon.layer, 'object');
+    assert.equal(icon.y + icon.h <= Math.round(point.y), true);
+    assert.equal(
+        icon.y >= Math.round(
+            point.y - iconSize
+                - (layout.tileSide * itemLayout.FLOAT_AMPLITUDE_TILE_RATIO)
+        ) - 1,
+        true
+    );
+
+    const firstIconY = icon.y;
+    const firstShadowVertices = shadow.vertices;
+    commands.length = 0;
+    viewModel.world.elapsedSeconds = itemLayout.FLOAT_PERIOD_SECONDS * 0.5;
+    view.draw(viewModel);
+    const laterIcon = commands.find((command) => (
+        command.image === itemIcon && command.role === 'pickup-sprite'
+    ));
+    const laterShadow = commands.find((command) => (
+        command.image === itemIcon && command.role === 'pickup-shadow'
+    ));
+    assert.notEqual(laterIcon.y, firstIconY);
+    assert.notDeepEqual(laterShadow.vertices, firstShadowVertices);
+});
+
+test('월드 기록은 생성된 일기 페이지 에셋과 같은 부유 그림자를 사용한다', () => {
+    const layoutController = createLayout();
+    layoutController.resize(VIEWPORTS[0]);
+    const floor = {
+        ...TUTORIAL_GAME_DATA.FLOORS[0],
+        walls: [],
+        items: [],
+        records: [{
+            id: 'record-test', recordId: 'lora-diary:1', x: 4, y: 4,
+            collected: false
+        }],
+        eventTiles: [],
+        teleports: [],
+        mobs: []
+    };
+    const layout = layoutController.createFrame({ floor, elapsedSeconds: 0 });
+    const recordIcon = { width: 32, height: 32 };
+    const commands = [];
+    const view = new TutorialBattleWorldView({
+        render(layer, command) {
+            commands.push({ layer, ...command });
+        },
+        renderGL(layer, command) {
+            commands.push({ layer, ...command });
+        },
+        measureText(text) {
+            return String(text).length * 8;
+        }
+    }, {
+        getMapArtwork() {
+            return { layers: [] };
+        },
+        getItemIcon(itemId) {
+            return itemId === 'record-page' ? recordIcon : null;
+        }
+    });
+    view.draw({
+        snapshot: { phase: 'move', floorIndex: 0, player: null, lora: null },
+        floor,
+        layout,
+        fonts: { SMALL: '12px sans-serif', HEADING: '18px sans-serif' },
+        colors: {
+            BoardFrame: '#frame',
+            Entity: { Shadow: '#shadow' },
+            Tile: {},
+            UI: { Accent: '#accent', Text: '#text', PanelStrong: '#panel' }
+        },
+        world: {
+            presentation: { floorIndex: 0, pathProgress: 1 },
+            attackSelected: false,
+            cleanseSelected: false,
+            pathExtensions: [],
+            plannedPath: [],
+            hoveredTile: null,
+            readability: { loraIntent: { ok: false } },
+            floorActors: {},
+            itemMetadata: {},
+            elapsedSeconds: 0,
+            config: {
+                recordIcon: TUTORIAL_GAME_DATA.SPRITES.RECORD,
+                shadowProjection: TUTORIAL_GAME_DATA.LAYOUT.BOARD.SHADOW_PROJECTION
+            }
+        }
+    });
+
+    assert.equal(TUTORIAL_ASSET_MANIFEST.ITEMS['record-page'], 'item.record-page');
+    assert.equal(commands.some((command) => command.fill === '#accent'), false);
+    assert.ok(commands.find((command) => (
+        command.image === recordIcon && command.role === 'pickup-shadow'
+    )));
+    assert.ok(commands.find((command) => (
+        command.image === recordIcon && command.role === 'pickup-sprite'
+    )));
 });
 
 test('세 화면비에서 HUD 영역은 UI 안에 있고 서로 겹치지 않는다', () => {
@@ -1293,18 +1400,49 @@ test('전투 조사 포커스는 마우스 직접 선택과 키보드 순환에�
 });
 
 test('첫 플레이 안내는 자동으로 열리고 확인 뒤 재플레이에서는 수동으로만 열린다', () => {
-    const guidance = new TutorialGuidanceController();
+    const guidance = new TutorialGuidanceController({
+        stepCount: 2,
+        transitionSeconds: 0.5
+    });
     guidance.beginRun({ seen: false });
     assert.equal(guidance.isOpen(), true);
-    assert.equal(guidance.dismiss(), true);
+    assert.equal(guidance.getSnapshot().phase, 'opening');
+    assert.equal(guidance.getSnapshot().messageAlpha, 0);
+    assert.equal(guidance.getSnapshot().blurProgress, 0);
+    assert.equal(guidance.advance(), false);
+    guidance.update(0.5);
+    assert.equal(guidance.getSnapshot().interactive, true);
+    assert.equal(guidance.getSnapshot().blurProgress, 1);
+    assert.equal(guidance.advance(), true);
+    assert.deepEqual(
+        {
+            stepIndex: guidance.getSnapshot().stepIndex,
+            previousStepIndex: guidance.getSnapshot().previousStepIndex,
+            focusProgress: guidance.getSnapshot().focusProgress,
+            messageAlpha: guidance.getSnapshot().messageAlpha
+        },
+        { stepIndex: 1, previousStepIndex: 0, focusProgress: 0, messageAlpha: 0 }
+    );
+    assert.equal(guidance.getSnapshot().blurProgress, 1);
+    guidance.update(0.25);
+    assert.equal(guidance.getSnapshot().focusProgress > 0.9, true);
+    assert.equal(guidance.getSnapshot().focusProgress < 1, true);
+    assert.equal(guidance.getSnapshot().blurProgress, 1);
+    guidance.update(0.25);
+    assert.equal(guidance.advance(), true);
+    assert.equal(guidance.getSnapshot().phase, 'closing');
+    guidance.update(0.5);
+    assert.equal(guidance.isOpen(), false);
     guidance.beginRun({ seen: true });
     assert.equal(guidance.isOpen(), false);
     guidance.show();
     assert.equal(guidance.isOpen(), true);
 });
 
-test('전투 안내는 6개 원본 팝업 위치와 Figma 하단 건너뛰기 영역을 사용한다', () => {
+test('전투 안내는 한 단계만 안전 폭에 그리고 화면 전체 클릭으로 다음 단계로 이동한다', () => {
     const commands = [];
+    const wrapRequests = [];
+    const backdropStates = [];
     const renderPort = {
         render(layer, command) {
             commands.push({ layer, ...command });
@@ -1312,14 +1450,35 @@ test('전투 안내는 6개 원본 팝업 위치와 Figma 하단 건너뛰기 �
         measureText(text) {
             return String(text).length * 8;
         },
-        wrapText(text) {
+        wrapText(text, font, maxWidth, maxLines) {
+            wrapRequests.push({ text, font, maxWidth, maxLines });
             return [String(text)];
         }
     };
     const layout = createLayout().resize(VIEWPORTS[0]);
-    const view = new TutorialBattleTutorialView(renderPort);
+    const view = new TutorialBattleTutorialView(renderPort, {}, {
+        backdropView: {
+            sync(state) {
+                backdropStates.push(state);
+            },
+            clear() {},
+            destroy() {}
+        }
+    });
     const viewModel = {
         open: true,
+        guidance: {
+            open: true,
+            interactive: true,
+            stepIndex: 2,
+            previousStepIndex: 1,
+            stepCount: 6,
+            phase: 'step',
+            messageAlpha: 0.55,
+            blurProgress: 0.65,
+            focusProgress: 0.4,
+            revision: 3
+        },
         viewport: VIEWPORTS[0],
         layout,
         fonts: { SMALL: '12px sans-serif' },
@@ -1327,7 +1486,7 @@ test('전투 안내는 6개 원본 팝업 위치와 Figma 하단 건너뛰기 �
             UI: {
                 CardShadow: '#000', Card: '#fff', Border: '#333',
                 Primary: '#a00', Text: '#111', Muted: '#777',
-                PrimaryHover: '#b00', OnPrimary: '#fff'
+                PrimaryHover: '#b00', OnPrimary: '#fff', PanelStrong: '#222'
             }
         },
         copy: {
@@ -1337,20 +1496,29 @@ test('전투 안내는 6개 원본 팝업 위치와 Figma 하단 건너뛰기 �
     };
     view.draw(viewModel);
     const paperCards = commands.filter((command) => command.shape === 'roundRect');
-    assert.equal(paperCards.length, 6);
-    const [dismiss] = view.getButtonSpecs(viewModel);
-    const skip = TUTORIAL_UI_LAYOUT_TOKENS.TUTORIAL.SKIP;
+    assert.equal(paperCards.length, 1);
+    assert.equal(paperCards[0].layer, 'top');
+    assert.equal(paperCards[0].alpha, 0.55);
+    assert.equal(commands.some((command) => command.text === '안내 3'), true);
+    assert.equal(commands.some((command) => command.text === '안내 1'), false);
+    assert.equal(wrapRequests.length, 1);
+    const callout = TUTORIAL_UI_LAYOUT_TOKENS.TUTORIAL.CALLOUTS[2];
+    const calloutWidth = Math.round(callout.w * VIEWPORTS[0].WW);
+    assert.equal(wrapRequests[0].maxWidth <= calloutWidth * 0.6 + 1, true);
+    assert.equal(backdropStates.length, 1);
+    assert.equal(backdropStates[0].visible, true);
+    assert.equal(backdropStates[0].blurProgress, 0.65);
+    assert.equal(backdropStates[0].focusRect.w > 0, true);
+
+    const [advance] = view.getButtonSpecs(viewModel);
     assert.deepEqual(
-        { x: dismiss.x, y: dismiss.y, w: dismiss.w, h: dismiss.h },
-        {
-            x: Math.round(skip.x * 1280),
-            y: Math.round(skip.y * 720),
-            w: Math.round(skip.w * 1280),
-            h: Math.round(skip.h * 720)
-        }
+        { x: advance.x, y: advance.y, w: advance.w, h: advance.h },
+        { x: 0, y: 0, w: 1280, h: 720 }
     );
-    assert.equal(dismiss.drawBackground, false);
-    assert.equal(dismiss.label, '');
+    assert.equal(advance.layer, 'top');
+    assert.equal(advance.drawBackground, false);
+    assert.equal(advance.label, '');
+    assert.deepEqual(advance.command, { type: TUTORIAL_COMMANDS.GUIDE_ADVANCE });
 });
 
 test('가독성 프레젠터는 모델 수치를 재계산하지 않고 현재→예상 표시값을 보존한다', () => {

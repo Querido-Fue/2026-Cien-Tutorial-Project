@@ -361,7 +361,7 @@ test('재포커스 클릭과 Escape는 게임 입력으로 전파되지 않는�
     handler.destroy();
 });
 
-test('가장자리 이탈 안내는 1%·1초 체류와 40도 이동 또는 정지 조건을 지원한다', () => {
+test('가장자리 이탈 안내는 이동 방향과 무관하게 1%·1초 체류만 판정한다', () => {
     const record = (
         detector,
         timeMilliseconds,
@@ -388,10 +388,10 @@ test('가장자리 이탈 안내는 1%·1초 체류와 40도 이동 또는 정�
     record(movingDetector, 1000, { degrees: 0 });
     assert.equal(movingDetector.getSnapshot().visible, true);
     assert.equal(movingDetector.getSnapshot().edge, 'right');
-    record(movingDetector, 1500, { degrees: 35 });
+    record(movingDetector, 1500, { degrees: 180 });
     assert.equal(movingDetector.getSnapshot().visible, true);
-    record(movingDetector, 1510, { degrees: 50 });
-    assert.equal(movingDetector.getSnapshot().visible, false);
+    record(movingDetector, 1510, { degrees: -90 });
+    assert.equal(movingDetector.getSnapshot().visible, true);
 
     const stationaryDetector = new PointerLockExitIntentDetector();
     record(stationaryDetector, 2000, { movementDistance: 0 });
@@ -400,21 +400,13 @@ test('가장자리 이탈 안내는 1%·1초 체류와 40도 이동 또는 정�
     stationaryDetector.update(3000);
     assert.equal(stationaryDetector.getSnapshot().visible, true);
 
-    const withinToleranceDetector = new PointerLockExitIntentDetector();
-    for (let time = 4000; time <= 5000; time += 100) {
-        record(withinToleranceDetector, time, {
-            degrees: (time / 100) % 2 === 0 ? -19 : 19
-        });
-    }
-    assert.equal(withinToleranceDetector.getSnapshot().visible, true);
-
-    const outsideToleranceDetector = new PointerLockExitIntentDetector();
+    const erraticMovementDetector = new PointerLockExitIntentDetector();
     for (let time = 6000; time <= 7000; time += 100) {
-        record(outsideToleranceDetector, time, {
-            degrees: (time / 100) % 2 === 0 ? -21 : 21
+        record(erraticMovementDetector, time, {
+            degrees: ((time / 100) * 137) % 360
         });
     }
-    assert.equal(outsideToleranceDetector.getSnapshot().visible, false);
+    assert.equal(erraticMovementDetector.getSnapshot().visible, true);
 
     const minimumVisibleDetector = new PointerLockExitIntentDetector();
     record(minimumVisibleDetector, 8000, { movementDistance: 0 });

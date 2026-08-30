@@ -182,14 +182,32 @@ export class TutorialNonbattleViewModelFactory {
         });
     }
 
-    /** @param {object|null} battleViewModel @param {boolean} open @returns {object|null} */
-    createBattleTutorial(battleViewModel, open) {
+    /** @param {object|null} battleViewModel @param {object} guidance @returns {object|null} */
+    createBattleTutorial(battleViewModel, guidance = {}) {
         if (!battleViewModel) {
             return null;
         }
         const copy = this.data.TEXT.TUTORIAL_GUIDE;
+        const guidanceSnapshot = Object.freeze({
+            open: guidance.open === true,
+            interactive: guidance.interactive === true,
+            stepIndex: Math.max(0, Math.trunc(Number(guidance.stepIndex)) || 0),
+            previousStepIndex: Number.isInteger(guidance.previousStepIndex)
+                ? guidance.previousStepIndex
+                : null,
+            stepCount: Math.max(
+                1,
+                Math.trunc(Number(guidance.stepCount)) || copy.SENTENCES.length
+            ),
+            phase: String(guidance.phase || 'closed'),
+            messageAlpha: Math.max(0, Math.min(1, Number(guidance.messageAlpha) || 0)),
+            blurProgress: Math.max(0, Math.min(1, Number(guidance.blurProgress) || 0)),
+            focusProgress: Math.max(0, Math.min(1, Number(guidance.focusProgress) || 0)),
+            revision: Math.max(0, Math.trunc(Number(guidance.revision)) || 0)
+        });
         return Object.freeze({
-            open,
+            open: guidanceSnapshot.open,
+            guidance: guidanceSnapshot,
             viewport: battleViewModel.viewport,
             layout: battleViewModel.layout,
             fonts: battleViewModel.fonts,

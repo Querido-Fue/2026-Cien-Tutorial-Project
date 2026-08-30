@@ -70,6 +70,21 @@ noscript {
     background-color: rgba(0, 0, 0, 0);
 }
 
+.tutorial-guidance-focus-backdrop {
+    position: fixed;
+    z-index: 45;
+    display: none;
+    overflow: hidden;
+    border-radius: 8px;
+    pointer-events: none;
+}
+
+.tutorial-guidance-focus-panel {
+    position: absolute;
+    pointer-events: none;
+    will-change: left, top, width, height, backdrop-filter;
+}
+
 #overlaylayerhost {
     z-index: 110;
     position: fixed;

@@ -106,6 +106,7 @@ import { TutorialTitleTransitionView } from './view/_tutorial_title_transition_v
 const TUTORIAL_GAME_DATA = getData('TUTORIAL_GAME_DATA');
 const TUTORIAL_CONTENT_DATA = getData('TUTORIAL_CONTENT_DATA');
 const TUTORIAL_ASSET_MANIFEST = getData('TUTORIAL_ASSET_MANIFEST');
+const TUTORIAL_GUIDANCE_PRESENTATION_DATA = getData('TUTORIAL_GUIDANCE_PRESENTATION_DATA');
 const TUTORIAL_RECORD_PRESENTATION_DATA = getData('TUTORIAL_RECORD_PRESENTATION_DATA');
 const TUTORIAL_SPRITE_CLIPS = getData('TUTORIAL_SPRITE_CLIPS');
 
@@ -172,7 +173,11 @@ export class TutorialScene extends BaseScene {
         this.runCutsceneIds = new Set();
         this.battleFocus = new TutorialBattleFocusController();
         this.battleSelection = new TutorialBattleSelectionController();
-        this.guidance = new TutorialGuidanceController();
+        this.guidance = new TutorialGuidanceController({
+            stepCount: this.data.TEXT.TUTORIAL_GUIDE.SENTENCES.length,
+            transitionSeconds: TUTORIAL_GUIDANCE_PRESENTATION_DATA.ANIMATION_SECONDS,
+            onComplete: () => this.metaSession.markCombatGuideSeen()
+        });
         this.pauseIndex = 0;
         this.destroyed = false;
         this.timelineRevision = 0;
@@ -227,7 +232,8 @@ export class TutorialScene extends BaseScene {
         this.cutsceneView = new TutorialCutsceneView(tutorialRenderPort);
         this.battleTutorialView = new TutorialBattleTutorialView(
             tutorialRenderPort,
-            this.assetPort
+            this.assetPort,
+            { config: TUTORIAL_GUIDANCE_PRESENTATION_DATA }
         );
         this.battleLayout = new TutorialBattleLayout({
             map: this.data.MAP,
@@ -421,6 +427,7 @@ export class TutorialScene extends BaseScene {
         const deltaSeconds = getDelta();
         this.elapsedSeconds += deltaSeconds;
         this.uiActionHandled = false;
+        this.guidance.update((this.cutscenes.isOpen() || this.#isPresentationLocked()) ? 0 : deltaSeconds);
 
         this.#ensureButtons();
         this.buttonHost.setPresentation(this.recordPopups.createButtonPresentation(
@@ -488,9 +495,9 @@ export class TutorialScene extends BaseScene {
             this.changelogView.draw(this.#createChangelogViewModel());
         } else if (view === 'battle' || view === 'pause') {
             if (view === 'battle') {
-                this.battleTutorialView.draw(
-                    this.#createBattleTutorialViewModel(battleViewModel)
-                );
+                this.battleTutorialView.draw(this.cutscenes.isOpen()
+                    ? null
+                    : this.#createBattleTutorialViewModel(battleViewModel));
             } else {
                 this.pauseView.draw(this.#createPauseViewModel());
             }
@@ -613,10 +620,9 @@ export class TutorialScene extends BaseScene {
                     this.battleCommands.applyCleanseEventTile(command.payload);
                     break;
                 case COMMANDS.GUIDE_SHOW:
-                    this.#applyGuideShow();
-                    break;
+                case COMMANDS.GUIDE_ADVANCE:
                 case COMMANDS.GUIDE_DISMISS:
-                    this.#applyGuideDismiss();
+                    this.#applyGuideCommand(command.type);
                     break;
                 case COMMANDS.PERFORM_LORA:
                     this.loraTurns.applyAction(command.payload);
@@ -689,6 +695,7 @@ export class TutorialScene extends BaseScene {
         this.recordPopups.destroy();
         this.battleFocus.reset();
         this.guidance.reset();
+        this.battleTutorialView.destroy();
         this.loraTurns.reset();
         this.battleOutcomes.reset();
         this.floorView = null;
@@ -867,6 +874,7 @@ export class TutorialScene extends BaseScene {
         this.battleSelection.reset();
         this.battleFocus.reset();
         this.guidance.reset();
+        this.battleTutorialView.clear();
         this.battleOutcomes.reset();
         this.feedbackQueue.clear();
         this.achievementBanner.clear();
@@ -1266,7 +1274,7 @@ export class TutorialScene extends BaseScene {
             mode: this.mode,
             presentationLocked: this.#isPresentationLocked(),
             cutsceneOpen: this.cutscenes.isOpen(),
-            guidanceOpen: this.guidance.isOpen(),
+            ...this.guidance.createKeyboardState(),
             pauseIndex: this.pauseIndex,
             canAcceptBattleInput: this.#canAcceptBattleInput(),
             ...this.battleSelection.createKeyboardState(),
@@ -1514,7 +1522,7 @@ export class TutorialScene extends BaseScene {
     #createBattleTutorialViewModel(battleViewModel) {
         return this.nonbattleViewModels.createBattleTutorial(
             battleViewModel,
-            this.guidance.isOpen()
+            this.guidance.getSnapshot()
         );
     }
 
@@ -1563,7 +1571,7 @@ export class TutorialScene extends BaseScene {
             ...this.battleSelection.getSignatureParts(),
             String(this.inventoryPresenter.getPage()),
             String(this.battleFocus.getFocusedKey()),
-            String(this.guidance.isOpen()),
+            String(this.guidance.getSnapshot().revision),
             String(this.#isPresentationLocked()),
             String(pointerLock.initialActivationPending),
             inventory
@@ -1694,22 +1702,16 @@ export class TutorialScene extends BaseScene {
         }
     }
 
-    /** 첫 플레이 또는 도움말 요청으로 전투 안내를 엽니다. @private */
-    #applyGuideShow() {
-        if (this.mode !== MODES.BATTLE || this.cutscenes.isOpen()) {
+    /** @param {string} commandType 전투 안내 명령입니다. @private */
+    #applyGuideCommand(commandType) {
+        const operation = commandType.slice('tutorial/guide-'.length);
+        if (this.mode !== MODES.BATTLE
+            || (operation === 'show' && this.cutscenes.isOpen())) {
             return;
         }
-        this.guidance.show();
-        this.buttonHost.invalidate();
-    }
-
-    /** 전투 안내를 닫고 메타 진행도에 확인 여부를 기록합니다. @private */
-    #applyGuideDismiss() {
-        if (this.mode !== MODES.BATTLE || !this.guidance.dismiss()) {
-            return;
+        if (this.guidance[operation]?.()) {
+            this.buttonHost.invalidate();
         }
-        this.metaSession.markCombatGuideSeen();
-        this.buttonHost.invalidate();
     }
 
     /** 포인터 진입 버튼을 조사 포커스로 맞춥니다. @param {string} key @private */

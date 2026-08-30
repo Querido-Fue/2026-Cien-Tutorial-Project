@@ -82,7 +82,8 @@
 | `script/scene/tutorial/view/_tutorial_battle_hud_view.js` | 전투 상태·미션·인벤토리 HUD를 그리고 커맨드 메뉴·인벤토리 버튼 사양을 조합하는 HUD 뷰 |
 | `script/scene/tutorial/view/_tutorial_battle_command_menu_view.js` | 이동 확정/초기화와 공격·회복·대기 배치, X축 플립·보조 버튼 이동/페이드, 동일 히트 영역을 소유하는 커맨드 메뉴 뷰 |
 | `script/scene/tutorial/view/_tutorial_battle_feedback_view.js` | 장면이 조립한 피드백 snapshot으로 입자와 떠오르는 텍스트를 그리는 피드백 뷰 |
-| `script/scene/tutorial/view/_tutorial_battle_tutorial_view.js` | 첫 플레이 전투 안내 오버레이와 다시 열기/닫기 버튼 사양만 그리는 안내 뷰 |
+| `script/scene/tutorial/view/_tutorial_battle_tutorial_view.js` | 현재 단계의 양피지 하나, 안전 폭 줄바꿈, 전체 화면 다음 단계 버튼과 이동 포커스 사각형을 조립하는 안내 뷰 |
+| `script/scene/tutorial/view/_tutorial_guidance_backdrop_view.js` | 안내 대상만 선명하게 비우고 나머지 게임·HUD를 최대 8px로 흐리는 네 패널 DOM backdrop 뷰 |
 | `script/scene/tutorial/view/_tutorial_achievement_view.js` | 판정된 업적 해금을 에셋 기반 배너로 표시하는 뷰 |
 | `script/scene/tutorial/view/_tutorial_asset_view_helpers.js` | 픽셀 UI 이미지를 비율 유지·정수 좌표·nearest 옵션으로 그리는 순수 함수 |
 | `script/scene/tutorial/view/_tutorial_battle_view_helpers.js` | 전투 뷰가 공유하는 텍스트·목록·숫자 처리 순수 함수 |
@@ -110,7 +111,7 @@
 | `script/scene/tutorial/_tutorial_player_action_previewer.js` | 공격·회복·아이템·대기 계획을 독립 상태에 적용해 HP·불안정도·소모·효과·추가 턴을 예측하는 클래스 |
 | `script/scene/tutorial/_tutorial_combat_readability_presenter.js` | 모델 의도·행동 미리보기를 다음 행동, 현재→예상 수치, 소모·지속 효과 표시값으로만 변환하는 클래스 |
 | `script/scene/tutorial/_tutorial_battle_focus_controller.js` | 마우스와 키보드가 공유하는 조사 가능한 전투 버튼 key와 순환 순서만 관리하는 클래스 |
-| `script/scene/tutorial/_tutorial_guidance_controller.js` | 첫 플레이 자동 안내와 재플레이 수동 다시 보기의 열림 상태만 관리하는 클래스 |
+| `script/scene/tutorial/_tutorial_guidance_controller.js` | 첫 플레이 자동 안내와 재플레이 다시 보기의 단일 단계·메시지 페이드·포커스 이동·닫기 전환을 관리하는 클래스 |
 | `script/scene/tutorial/_tutorial_battle_model.js` | 강제 이동→행동 단계, 행동 충전, 층별 `floorStates`, 인벤토리와 아이템·기록, 벽·이벤트 타일·짝 포탈·몹, 6회 층 전환과 12회 종료를 소유하고 전투 계산 클래스를 조합하는 순수 전투 모델 |
 | `script/scene/tutorial/_tutorial_cutscene_controller.js` | 고정 스크립트 컷씬의 카드 진행과 완료 ID를 관리하는 순수 컨트롤러 |
 | `script/scene/tutorial/_tutorial_meta_progress.js` | v5 `tutorialMeta`의 컷씬·업적·엔딩·기록 해금과 완료 횟수를 정규화하고 불변 갱신 함수·SaveSystem I/O를 제공하는 메타 진행도 모듈 |
@@ -127,6 +128,7 @@
 | `script/data/game/tutorial_game_data.js` | 가로 9×세로 8 두 층, 유닛, 공개 이벤트 타일·짝 포탈·기록 배치, `ITEMS[*].effects`·`EVENT_TILE_EFFECTS`, 활성 고정 컷씬, 규칙, 레이아웃과 문구를 제공하는 `TUTORIAL_GAME_DATA` |
 | `script/data/game/tutorial_content_data.js` | 확정 업적명·설명·사건 조건, 안정된 기록 ID와 본문, 엔딩 표시명, 갤러리 순서를 제공하는 `TUTORIAL_CONTENT_DATA` |
 | `script/data/game/tutorial_record_presentation_data.js` | 기록 책 진입·퇴장 시간, expo easing, 최소 배율과 backdrop 블러·감광 강도를 제공하는 정적 데이터 |
+| `script/data/game/tutorial_guidance_presentation_data.js` | 전투 안내 expo 시간, 8px 아웃포커스와 양피지 중앙 안전 영역을 제공하는 정적 데이터 |
 | `script/data/game/tutorial_changelog_data.js` | 실제 Git 커밋/제목과 사용자에게 표시할 한글 변경 요약을 연결하는 카탈로그 |
 | `script/data/game/tutorial_asset_manifest.js` | 맵·UI·아이템·정적 인물 에셋 선언과 실제 맵 격자 꼭짓점을 조합하는 단일 매니페스트 |
 | `script/data/game/tutorial_assets/` | 매니페스트 항목 생성을 맵·UI·아이템·레거시 도메인으로 분리한 데이터 모듈 |

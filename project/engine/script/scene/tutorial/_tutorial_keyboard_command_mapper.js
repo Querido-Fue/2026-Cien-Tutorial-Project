@@ -127,10 +127,15 @@ export class TutorialKeyboardCommandMapper {
             return null;
         }
         if (state.guidanceOpen) {
-            return wasPressed(KEY_CODES.GUIDE)
-                || wasPressed(KEY_CODES.CONFIRM)
-                || wasPressed(KEY_CODES.CANCEL)
-                ? { type: COMMANDS.GUIDE_DISMISS }
+            if (wasPressed(KEY_CODES.GUIDE) || wasPressed(KEY_CODES.CANCEL)) {
+                return { type: COMMANDS.GUIDE_DISMISS };
+            }
+            if (state.guidanceInteractive === false) {
+                return null;
+            }
+            return wasPressed(KEY_CODES.CONFIRM)
+                || wasPressed(KEY_CODES.ALTERNATE_CONFIRM)
+                ? { type: COMMANDS.GUIDE_ADVANCE }
                 : null;
         }
         if (wasPressed(KEY_CODES.GUIDE)) {

@@ -110,6 +110,17 @@
       "releaseStatus": "approved"
     },
     {
+      "id": "imagegen-tutorial-item-icons-v2",
+      "category": "project-generated-art",
+      "paths": [
+        "project/asset/generated/tutorial/items/**"
+      ],
+      "origin": "2026-08-30 OpenAI 내장 image_gen 도구로 기존 아이템 형태와 프로젝트 맵·캐릭터 도트를 참고해 생성한 뒤 투명 배경 32×32 제한 팔레트로 정리한 아이템·기록 페이지 픽셀 아트",
+      "originStatus": "project-generated",
+      "license": "OpenAI 서비스 약관이 적용되는 사용자 생성 출력물",
+      "releaseStatus": "approved"
+    },
+    {
       "id": "provided-audio-sources",
       "category": "audio",
       "paths": [
@@ -145,7 +156,15 @@
         "project/asset/tutorial/ui/items/diamond-pickaxe.png",
         "project/asset/tutorial/ui/items/mushroom.png",
         "project/asset/tutorial/ui/items/ocarina.png",
-        "project/asset/tutorial/ui/items/haste.png"
+        "project/asset/tutorial/ui/items/haste.png",
+        "project/asset/generated/tutorial/items/diamond-pickaxe-pixel-v2.png",
+        "project/asset/generated/tutorial/items/mushroom-pixel-v2.png",
+        "project/asset/generated/tutorial/items/ocarina-pixel-v2.png",
+        "project/asset/generated/tutorial/items/haste-pixel-v2.png",
+        "project/asset/tutorial/ui/items/diamond-pickaxe-pixel-v2.png",
+        "project/asset/tutorial/ui/items/mushroom-pixel-v2.png",
+        "project/asset/tutorial/ui/items/ocarina-pixel-v2.png",
+        "project/asset/tutorial/ui/items/haste-pixel-v2.png"
       ],
       "origin": "Minecraft, Mario, The Legend of Zelda, MapleStory를 파일명과 기획상 참조",
       "originStatus": "third-party-reference-unverified",

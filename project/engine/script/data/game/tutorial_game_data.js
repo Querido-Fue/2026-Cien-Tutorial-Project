@@ -48,6 +48,22 @@ function createTypographySpec(sizeUIWW, min, max, weight, family = DEFAULT_FONT_
 /** 9×8 타일의 기본 높이 데이터입니다. */
 const FLAT_HEIGHTS = Array.from({ length: 8 }, () => Array(9).fill(0));
 
+/** 월드 아이템과 기록 페이지가 공유하는 부유·투영 그림자 규격입니다. */
+const FLOATING_PICKUP_STYLE = {
+    FLOAT_AMPLITUDE_TILE_RATIO: 0.08,
+    FLOAT_PERIOD_SECONDS: 3.6,
+    SHADOW_LENGTH_ICON_RATIO: 0.62,
+    SHADOW_NEAR_WIDTH_ICON_RATIO: 0.42,
+    SHADOW_FAR_WIDTH_ICON_RATIO: 0.66,
+    SHADOW_ALPHA: 0.46,
+    SHADOW_PENUMBRA_ALPHA: 0.18,
+    SHADOW_PENUMBRA_SCALE: 1.16,
+    SHADOW_FLOAT_EXPANSION_RATIO: 0.16,
+    SHADOW_CONTACT_WIDTH_ICON_RATIO: 0.34,
+    SHADOW_CONTACT_HEIGHT_ICON_RATIO: 0.1,
+    SHADOW_CONTACT_ALPHA: 0.36
+};
+
 /** 로라의 불안정 상태별 행동 수치입니다. */
 const LORA_INSTABILITY_STATES = [
     { id: 'stable', label: '안정', min: 0, max: 10, meleeDamage: 0, areaDamage: 0 },
@@ -64,8 +80,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
     FEATURES: { CUTSCENES: true },
     SPRITES: {
         ITEM: {
-            WORLD_HALO_SIZE_TILE_RATIO: 0.36,
-            WORLD_HALO_ALPHA: 0.24,
+            ...FLOATING_PICKUP_STYLE,
             WORLD_ICON_SIZE_TILE_RATIO: 0.32,
             VISUAL_CENTERS: {
                 bow: { x: 0.4844, y: 0.5312 },
@@ -78,17 +93,17 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
                 mushroom: { x: 0.5, y: 0.5 },
                 ocarina: { x: 0.5, y: 0.5 },
                 haste: { x: 0.5156, y: 0.5 },
-                'memory-photo': { x: 0.5, y: 0.5625 }
+                'memory-photo': { x: 0.5, y: 0.5625 },
+                'tile-cleanser': { x: 0.5, y: 0.5 },
+                'record-page': { x: 0.5, y: 0.5 }
             },
             BUTTON_ICON_SIZE_RATIO: 0.66,
             BUTTON_ICON_GAP_UIWW: 0.25
         },
         RECORD: {
-            WORLD_HALO_SIZE_TILE_RATIO: 0.34,
-            WORLD_HALO_ALPHA: 0.18,
-            WORLD_COVER_WIDTH_TILE_RATIO: 0.24,
-            WORLD_COVER_HEIGHT_TILE_RATIO: 0.3,
-            WORLD_PAGE_INSET_RATIO: 0.16
+            ...FLOATING_PICKUP_STYLE,
+            WORLD_ICON_SIZE_TILE_RATIO: 0.32,
+            VISUAL_CENTER: { x: 0.5, y: 0.5 }
         },
         LORA: {
             BASE_SIZE_TILE_RATIO: 0.64,

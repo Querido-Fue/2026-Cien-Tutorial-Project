@@ -5,6 +5,7 @@ import {
     toBattleViewList
 } from './_tutorial_battle_view_helpers.js';
 import { TutorialBattleActorView } from './_tutorial_battle_actor_view.js';
+import { TutorialFloatingPickupView } from './_tutorial_floating_pickup_view.js';
 
 const WALL_FOOTPRINT_SCALE = 1;
 const WALL_HEIGHT_TILE_RATIO = 0.34;
@@ -18,6 +19,7 @@ export class TutorialBattleWorldView {
     #renderPort;
     #assetPort;
     #actorView;
+    #pickupView;
     #frame;
 
     /**
@@ -28,6 +30,7 @@ export class TutorialBattleWorldView {
         this.#renderPort = renderPort;
         this.#assetPort = assetPort;
         this.#actorView = new TutorialBattleActorView(renderPort, assetPort);
+        this.#pickupView = new TutorialFloatingPickupView(renderPort);
         this.#frame = null;
     }
 
@@ -431,58 +434,44 @@ export class TutorialBattleWorldView {
     #drawWorldItem(entry) {
         const { colors, layout, world } = this.#frame;
         const point = this.#projectTile(entry.x, entry.y);
-        const known = Boolean(world.itemMetadata[entry.itemId]) || entry.identified === true;
+        const known = Boolean(world.itemMetadata?.[entry.itemId])
+            || entry.identified === true;
         const glyph = known ? this.#getItemGlyph(entry.itemId) : '?';
         const itemIconLayout = world.config.itemIcon;
+        if (!itemIconLayout) {
+            return;
+        }
         const icon = known ? this.#assetPort.getItemIcon?.(entry.itemId) : null;
-        this.#renderPort.renderGL('object', {
-            shape: 'circle',
-            x: point.x,
-            y: point.y,
-            w: layout.tileSide * itemIconLayout.WORLD_HALO_SIZE_TILE_RATIO,
-            h: layout.tileSide * itemIconLayout.WORLD_HALO_SIZE_TILE_RATIO,
-            fill: colors.Entity.Item,
-            alpha: Number(itemIconLayout.WORLD_HALO_ALPHA) || 0.24
+        const iconSize = layout.tileSide
+            * itemIconLayout.WORLD_ICON_SIZE_TILE_RATIO;
+        const state = this.#pickupView.draw({
+            point,
+            image: icon,
+            size: iconSize,
+            visualCenter: itemIconLayout.VISUAL_CENTERS?.[entry.itemId],
+            elapsedSeconds: world.elapsedSeconds,
+            seed: entry.id,
+            layout,
+            config: itemIconLayout,
+            shadowProjection: world.config.shadowProjection,
+            shadowFill: colors.Entity.Shadow
         });
-        if (icon) {
-            const iconSize = layout.tileSide * itemIconLayout.WORLD_ICON_SIZE_TILE_RATIO;
-            const configuredCenter = itemIconLayout.VISUAL_CENTERS?.[entry.itemId];
-            const centerX = Math.max(0, Math.min(
-                1,
-                Number.isFinite(Number(configuredCenter?.x))
-                    ? Number(configuredCenter.x)
-                    : 0.5
-            ));
-            const centerY = Math.max(0, Math.min(
-                1,
-                Number.isFinite(Number(configuredCenter?.y))
-                    ? Number(configuredCenter.y)
-                    : 0.5
-            ));
-            this.#renderPort.render('texteffect', {
-                shape: 'image',
-                image: icon,
-                x: Math.round(point.x - (iconSize * centerX)),
-                y: Math.round(point.y - (iconSize * centerY)),
-                w: Math.round(iconSize),
-                h: Math.round(iconSize),
-                smoothing: false
-            });
+        if (state.drawn) {
             return;
         }
         this.#renderPort.renderGL('object', {
             shape: 'rect',
-            x: point.x,
-            y: point.y,
-            w: layout.tileSide * 0.14,
-            h: layout.tileSide * 0.14,
+            x: state.center.x,
+            y: state.center.y,
+            w: iconSize * 0.44,
+            h: iconSize * 0.44,
             fill: colors.Tile.Item
         });
         this.#drawText(
             'texteffect',
             glyph,
-            point.x,
-            point.y,
+            state.center.x,
+            state.center.y,
             this.#frame.fonts.SMALL,
             colors.UI.Text,
             'center'
@@ -497,23 +486,30 @@ export class TutorialBattleWorldView {
         if (!config) {
             return;
         }
-        const haloSize = layout.tileSide * config.WORLD_HALO_SIZE_TILE_RATIO;
-        const coverWidth = layout.tileSide * config.WORLD_COVER_WIDTH_TILE_RATIO;
-        const coverHeight = layout.tileSide * config.WORLD_COVER_HEIGHT_TILE_RATIO;
-        const inset = Math.max(1, coverWidth * config.WORLD_PAGE_INSET_RATIO);
-        this.#renderPort.renderGL('object', {
-            shape: 'circle',
-            x: point.x,
-            y: point.y,
-            w: haloSize,
-            h: haloSize,
-            fill: colors.UI.Accent,
-            alpha: Number(config.WORLD_HALO_ALPHA) || 0.18
+        const icon = this.#assetPort.getItemIcon?.('record-page') || null;
+        const iconSize = layout.tileSide * config.WORLD_ICON_SIZE_TILE_RATIO;
+        const state = this.#pickupView.draw({
+            point,
+            image: icon,
+            size: iconSize,
+            visualCenter: config.VISUAL_CENTER,
+            elapsedSeconds: world.elapsedSeconds,
+            seed: entry.id,
+            layout,
+            config,
+            shadowProjection: world.config.shadowProjection,
+            shadowFill: colors.Entity.Shadow
         });
+        if (state.drawn) {
+            return;
+        }
+        const coverWidth = iconSize * 0.72;
+        const coverHeight = iconSize;
+        const inset = Math.max(1, coverWidth * 0.16);
         this.#renderPort.renderGL('object', {
             shape: 'rect',
-            x: point.x,
-            y: point.y,
+            x: state.center.x,
+            y: state.center.y,
             w: coverWidth,
             h: coverHeight,
             fill: colors.UI.Accent,
@@ -521,8 +517,8 @@ export class TutorialBattleWorldView {
         });
         this.#renderPort.renderGL('object', {
             shape: 'rect',
-            x: point.x + (inset * 0.35),
-            y: point.y,
+            x: state.center.x + (inset * 0.35),
+            y: state.center.y,
             w: Math.max(1, coverWidth - (inset * 1.45)),
             h: Math.max(1, coverHeight - (inset * 1.2)),
             fill: colors.UI.Text,
@@ -530,8 +526,8 @@ export class TutorialBattleWorldView {
         });
         this.#renderPort.renderGL('object', {
             shape: 'rect',
-            x: point.x - (coverWidth * 0.32),
-            y: point.y,
+            x: state.center.x - (coverWidth * 0.32),
+            y: state.center.y,
             w: Math.max(1, inset * 0.62),
             h: coverHeight,
             fill: colors.UI.PanelStrong,
