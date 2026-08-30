@@ -30,6 +30,19 @@ function formatChangelogVersion(value, fallback) {
     return `${Number(month)}/${Number(day)} ${hour}:${minute}`;
 }
 
+/** @param {string} font @param {object} viewport @returns {number} */
+function resolveChangelogSummaryLineHeight(font, viewport) {
+    const match = /(\d+(?:\.\d+)?)px/.exec(String(font || ''));
+    const fontPixels = Number(match?.[1]);
+    const fontBasedHeight = Number.isFinite(fontPixels)
+        ? fontPixels * 1.3
+        : 0;
+    return Math.max(
+        toTutorialUiHeight(viewport, 2.2),
+        fontBasedHeight
+    );
+}
+
 /**
  * @class TutorialChangelogView
  * @description 빌드 매니페스트의 한글 Git 변경 기록을 책 형태로 표시합니다.
@@ -177,7 +190,10 @@ export class TutorialChangelogView {
                 row.w,
                 2
             );
-            const lineHeight = toTutorialUiHeight(viewModel.viewport, 2.2);
+            const lineHeight = resolveChangelogSummaryLineHeight(
+                viewModel.fonts.SMALL,
+                viewModel.viewport
+            );
             summaryLines.forEach((line, lineIndex) => drawTutorialText(this.#renderPort, {
                 text: line,
                 x: row.x,
