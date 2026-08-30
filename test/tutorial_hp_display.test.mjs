@@ -36,8 +36,8 @@ test('HP 표시값은 작은 장식 슬롯 중앙에 반올림한 실제 수치�
         layer: 'ui',
         shape: 'text',
         text: '75',
-        x: 111,
-        y: 46,
+        x: 112,
+        y: 45,
         font: '500 9px LanaPixel, monospace',
         fill: '#2b2025',
         align: 'center',
@@ -72,18 +72,18 @@ test('HP 3자리·2자리·1자리 수치는 동일한 시각 중심 좌표를 �
         align,
         baseline
     })), [
-        { text: '100', x: 111, y: 46, align: 'center', baseline: 'middle' },
-        { text: '70', x: 111, y: 46, align: 'center', baseline: 'middle' },
-        { text: '7', x: 111, y: 46, align: 'center', baseline: 'middle' }
+        { text: '100', x: 112, y: 45, align: 'center', baseline: 'middle' },
+        { text: '70', x: 112, y: 45, align: 'center', baseline: 'middle' },
+        { text: '7', x: 112, y: 45, align: 'center', baseline: 'middle' }
     ]);
 });
 
-test('플레이어와 로라 HP 값은 원본 패널의 실측 노치 중심에 놓인다', () => {
+test('플레이어와 로라 HP 값은 현재 보정된 패널 슬롯 중심에 놓인다', () => {
     const playerRect = TUTORIAL_GAME_DATA.LAYOUT.INVENTORY.PLAYER_PANEL.HP_VALUE;
     const loraRect = LORA_STATUS_PANEL_LAYOUT.HP_VALUE;
 
-    assert.equal(playerRect.X + (playerRect.WIDTH * 0.5), 121);
-    assert.equal(loraRect.X + (loraRect.WIDTH * 0.5), 135);
+    assert.equal(playerRect.X + (playerRect.WIDTH * 0.5), 118);
+    assert.equal(loraRect.X + (loraRect.WIDTH * 0.5), 133);
 });
 
 test('HP 감소 표시값은 0.3초 easeOutExpo 표현 타임라인을 사용한다', () => {
