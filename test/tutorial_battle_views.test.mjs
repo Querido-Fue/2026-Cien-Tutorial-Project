@@ -1239,8 +1239,17 @@ test('로라·플레이어 상태와 아이템 설명은 원본 패널 내부에
                 true
             );
         });
-    assert.equal(itemText.find((command) => command.text === '인형탈 ×1').x, 62);
-    assert.equal(itemText.find((command) => command.text === '사용 가능').x, 62);
+    const itemTitle = itemText.find((command) => command.text === '인형탈 ×1');
+    const itemStatus = itemText.find((command) => command.text === '사용 가능');
+    const itemPanelCenterX = itemPanel.x + (itemPanel.w * 0.5);
+    assert.equal(itemTitle.align, 'center');
+    assert.equal(itemStatus.align, 'center');
+    assert.equal(Math.abs(itemTitle.x - itemPanelCenterX) <= 0.5, true);
+    assert.equal(Math.abs(itemStatus.x - itemPanelCenterX) <= 0.5, true);
+    assert.equal(
+        itemStatus.y > itemPanel.y + (itemPanel.h * (24 / 128)),
+        true
+    );
     const pageText = itemText.find((command) => command.text === '1/1');
     assert.deepEqual(
         { x: pageText.x, y: pageText.y, align: pageText.align },
@@ -1392,6 +1401,7 @@ test('전투 뷰는 장면·모델·저장·명령 큐를 직접 import하지 �
         '_tutorial_battle_layout.js',
         '_tutorial_battle_world_view.js',
         '_tutorial_battle_hud_view.js',
+        '_tutorial_item_description_view.js',
         '_tutorial_battle_command_menu_view.js',
         '_tutorial_battle_feedback_view.js',
         '_tutorial_achievement_view.js',

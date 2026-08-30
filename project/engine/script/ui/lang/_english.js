@@ -16,6 +16,10 @@ export const english = Object.freeze({
     "exit_no": "No",
     "external_link_warning_title": "Warning",
     "external_link_warning_body": "Following link will open in external browser. Continue?",
+    "browser_compatibility_warning_title": "Browser compatibility",
+    "browser_compatibility_warning_body_first": "This game may not work correctly",
+    "browser_compatibility_warning_body_second": "outside Chromium-based browsers.",
+    "browser_compatibility_warning_confirm": "OK",
 
     // Settings
     "settings_theme_light": "Light",

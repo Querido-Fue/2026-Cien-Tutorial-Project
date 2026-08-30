@@ -5,11 +5,13 @@ import { runtimeTool } from 'util/runtime_tool.js';
 import { OverlaySession } from './_overlay_session.js';
 import { ExitOverlay } from './_exit_overlay.js';
 import { ExternalLinkWarningOverlay } from './_external_link_warning_overlay.js';
+import { BrowserCompatibilityWarningOverlay } from './_browser_compatibility_warning_overlay.js';
 import { DiagnosticTestOverlay, DIAGNOSTIC_TEST_TYPES } from './_diagnostic_test_overlay.js';
 
 const OVERLAY_MANAGER_KEYS = Object.freeze({
     EXIT_CONFIRM: 'exitConfirm',
     EXTERNAL_LINK_WARNING: 'externalLinkWarning',
+    BROWSER_COMPATIBILITY_WARNING: 'browserCompatibilityWarning',
     DIAGNOSTIC_FILE: 'diagnosticFile',
     DIAGNOSTIC_DISPLAY: 'diagnosticDisplay',
     DIAGNOSTIC_INPUT: 'diagnosticInput',
@@ -156,6 +158,19 @@ export class OverlayManager {
         return this.openOverlay(new ExternalLinkWarningOverlay(normalizedURL), {
             key: OVERLAY_MANAGER_KEYS.EXTERNAL_LINK_WARNING
         });
+    }
+
+    /**
+     * 비권장 브라우저 호환성 안내 overlay를 엽니다.
+     * @returns {string|null} 생성된 overlay id입니다.
+     */
+    openBrowserCompatibilityWarningOverlay() {
+        const key = OVERLAY_MANAGER_KEYS.BROWSER_COMPATIBILITY_WARNING;
+        if (this.keyToIdMap.has(key)) {
+            return this.keyToIdMap.get(key);
+        }
+
+        return this.openOverlay(new BrowserCompatibilityWarningOverlay(), { key });
     }
 
     /**

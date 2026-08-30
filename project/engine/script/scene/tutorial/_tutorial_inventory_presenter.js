@@ -107,7 +107,7 @@ export class TutorialInventoryPresenter {
                     statusLabel: item.movementConsumable === true
                         ? '이동'
                         : item.passive === true && item.useOnce !== true
-                            ? '자동'
+                            ? '자동 적용'
                             : item.consumable === true || item.useOnce === true
                                 ? '사용'
                                 : '보유'

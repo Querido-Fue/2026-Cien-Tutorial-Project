@@ -75,3 +75,19 @@ export function truncateBattleViewText(port, text, font, maxWidth) {
 export function wrapBattleViewText(port, text, font, maxWidth, maxLines) {
     return port.wrapText(String(text ?? ''), font, maxWidth, maxLines);
 }
+
+/**
+ * Canvas 글꼴 문자열에서 픽셀 크기를 읽어 안전한 폴백과 함께 반환합니다.
+ * @param {string} font - Canvas 글꼴 문자열입니다.
+ * @param {number} fallback - 크기를 찾지 못했을 때 사용할 값입니다.
+ * @returns {number} 양수 픽셀 크기입니다.
+ */
+export function getBattleViewFontPixelSize(font, fallback = 16) {
+    const match = String(font || '').match(/([0-9]+(?:\.[0-9]+)?)px/i);
+    const parsed = Number(match?.[1]);
+    if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed;
+    }
+    const safeFallback = Number(fallback);
+    return Number.isFinite(safeFallback) && safeFallback > 0 ? safeFallback : 16;
+}

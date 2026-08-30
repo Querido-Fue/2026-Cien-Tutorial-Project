@@ -6,6 +6,7 @@ import { MathUtil } from 'util/math_util.js';
 import { ColorUtil } from 'util/color_util.js';
 import { RuntimeTool } from 'util/runtime_tool.js';
 import { WebReleaseManager } from 'engine/release/_web_release_manager.js';
+import { BrowserCompatibilityWarningGate } from 'engine/app/_browser_compatibility_warning_gate.js';
 
 let systemHandler;
 let tutorialGame;
@@ -43,6 +44,11 @@ const initializeTutorialRuntime = async () => {
         window.Game = tutorialGame;
         window.TutorialGame = tutorialGame;
         tutorialGame.start();
+        new BrowserCompatibilityWarningGate({
+            windowRef: window,
+            navigatorRef: navigator,
+            overlayPort: systemHandler.overlayManager
+        }).arm();
     } catch (error) {
         console.warn('로라 전술 튜토리얼 초기화 중 오류가 발생했습니다.\n', error);
     }

@@ -43,11 +43,11 @@ export const LORA_STATUS_PANEL_LAYOUT = Object.freeze({
 export const ITEM_DESCRIPTION_PANEL_LAYOUT = Object.freeze({
     SOURCE: Object.freeze({ WIDTH: 86, HEIGHT: 128 }),
     TITLE: Object.freeze({ X: 10, Y: 2, WIDTH: 66, HEIGHT: 10 }),
-    STATUS: Object.freeze({ X: 10, Y: 16, WIDTH: 66, HEIGHT: 10 }),
+    TOP_ORNAMENT_BOTTOM_Y: 24,
+    STATUS: Object.freeze({ X: 10, Y: 25, WIDTH: 66, HEIGHT: 10 }),
     DESCRIPTION: Object.freeze({ X: 14, Y: 29, WIDTH: 58, HEIGHT: 64 }),
     PAGE: Object.freeze({ X: 22, Y: 94, WIDTH: 42, HEIGHT: 8 }),
     MAX_DESCRIPTION_LINES: 5,
-    LINE_HEIGHT_WH: 2.1,
-    MIN_LINE_HEIGHT_PX: 14,
-    MAX_LINE_HEIGHT_PX: 17
+    STATUS_DESCRIPTION_GAP_MULTIPLIER: 1.6,
+    DESCRIPTION_LINE_HEIGHT_MULTIPLIER: 1.3
 });

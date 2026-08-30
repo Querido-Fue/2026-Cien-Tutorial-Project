@@ -2,9 +2,7 @@ import { TUTORIAL_COMMANDS } from '../_tutorial_scene_constants.js';
 import {
     clampBattleViewNumber,
     drawBattleViewText,
-    toBattleViewList,
-    truncateBattleViewText,
-    wrapBattleViewText
+    toBattleViewList
 } from './_tutorial_battle_view_helpers.js';
 import { drawBattleHpValue } from './_tutorial_battle_hp_value_view.js';
 import {
@@ -12,10 +10,8 @@ import {
     fitTutorialAssetRect
 } from './_tutorial_asset_view_helpers.js';
 import { TutorialBattleCommandMenuView } from './_tutorial_battle_command_menu_view.js';
-import {
-    ITEM_DESCRIPTION_PANEL_LAYOUT,
-    LORA_STATUS_PANEL_LAYOUT
-} from './_tutorial_battle_hud_layout.js';
+import { LORA_STATUS_PANEL_LAYOUT } from './_tutorial_battle_hud_layout.js';
+import { TutorialItemDescriptionView } from './_tutorial_item_description_view.js';
 
 /**
  * @class TutorialBattleHudView
@@ -25,6 +21,7 @@ export class TutorialBattleHudView {
     #renderPort;
     #assetPort;
     #commandMenuView;
+    #itemDescriptionView;
     #frame;
 
     /**
@@ -35,6 +32,10 @@ export class TutorialBattleHudView {
         this.#renderPort = renderPort;
         this.#assetPort = assetPort;
         this.#commandMenuView = new TutorialBattleCommandMenuView(
+            renderPort,
+            assetPort
+        );
+        this.#itemDescriptionView = new TutorialItemDescriptionView(
             renderPort,
             assetPort
         );
@@ -76,7 +77,7 @@ export class TutorialBattleHudView {
         try {
             this.#drawLoraStatusCard();
             this.#drawPlayerStatus();
-            this.#drawInventoryCard();
+            this.#itemDescriptionView.draw(viewModel);
             this.#commandMenuView.draw(viewModel);
         } finally {
             this.#frame = null;
@@ -388,108 +389,6 @@ export class TutorialBattleHudView {
         });
     }
 
-    /** 픽셀 설명 패널의 실제 내부 안전 영역에 아이템 정보를 그립니다. @private */
-    #drawInventoryCard() {
-        const { colors, fonts, hud, layout } = this.#frame;
-        const rect = layout.hudRects.INVENTORY_CARD;
-        const inspectedItem = hud.readability?.inspectedItem || null;
-        if (!inspectedItem) {
-            return;
-        }
-        const panelImage = this.#assetPort.getUiAsset?.('itemPanel');
-        const panelRect = this.#resolveSourcePanelRect(
-            rect,
-            ITEM_DESCRIPTION_PANEL_LAYOUT.SOURCE,
-            panelImage
-        );
-        drawTutorialPixelAsset(this.#renderPort, {
-            layer: 'ui',
-            image: panelImage,
-            rect: panelRect,
-            mode: 'exact',
-            alpha: 1
-        });
-        const titleRect = this.#resolveSourcePanelPart(
-            panelRect,
-            ITEM_DESCRIPTION_PANEL_LAYOUT.TITLE,
-            ITEM_DESCRIPTION_PANEL_LAYOUT.SOURCE
-        );
-        const statusRect = this.#resolveSourcePanelPart(
-            panelRect,
-            ITEM_DESCRIPTION_PANEL_LAYOUT.STATUS,
-            ITEM_DESCRIPTION_PANEL_LAYOUT.SOURCE
-        );
-        const descriptionRect = this.#resolveSourcePanelPart(
-            panelRect,
-            ITEM_DESCRIPTION_PANEL_LAYOUT.DESCRIPTION,
-            ITEM_DESCRIPTION_PANEL_LAYOUT.SOURCE
-        );
-        const pageRect = this.#resolveSourcePanelPart(
-            panelRect,
-            ITEM_DESCRIPTION_PANEL_LAYOUT.PAGE,
-            ITEM_DESCRIPTION_PANEL_LAYOUT.SOURCE
-        );
-        if (!titleRect || !statusRect || !descriptionRect || !pageRect) {
-            return;
-        }
-        this.#drawText(
-            'ui',
-            truncateBattleViewText(
-                this.#renderPort,
-                String(inspectedItem.label || 'ITEM') + ' ×'
-                    + String(inspectedItem.count || 0),
-                fonts.SMALL,
-                titleRect.w
-            ),
-            titleRect.x,
-            titleRect.y + (titleRect.h * 0.5),
-            fonts.SMALL,
-            colors.UI.Text
-        );
-        this.#drawText(
-            'ui',
-            truncateBattleViewText(
-                this.#renderPort,
-                String(inspectedItem.statusLabel || ''),
-                fonts.SMALL,
-                statusRect.w
-            ),
-            statusRect.x,
-            statusRect.y + (statusRect.h * 0.5),
-            fonts.SMALL,
-            colors.UI.Accent
-        );
-        const lines = wrapBattleViewText(
-            this.#renderPort,
-            String(inspectedItem.description || ''),
-            fonts.SMALL,
-            descriptionRect.w,
-            ITEM_DESCRIPTION_PANEL_LAYOUT.MAX_DESCRIPTION_LINES
-        );
-        const lineHeight = Math.min(
-            clampBattleViewNumber(
-                this.#uwh(ITEM_DESCRIPTION_PANEL_LAYOUT.LINE_HEIGHT_WH),
-                ITEM_DESCRIPTION_PANEL_LAYOUT.MIN_LINE_HEIGHT_PX,
-                ITEM_DESCRIPTION_PANEL_LAYOUT.MAX_LINE_HEIGHT_PX
-            ),
-            descriptionRect.h / ITEM_DESCRIPTION_PANEL_LAYOUT.MAX_DESCRIPTION_LINES
-        );
-        lines.forEach((line, index) => {
-            this.#drawText(
-                'ui', line, descriptionRect.x,
-                descriptionRect.y + (lineHeight * (index + 0.5)),
-                fonts.SMALL, colors.UI.Text
-            );
-        });
-        this.#drawText(
-            'ui', String(hud.inventory.page + 1) + '/'
-                + String(hud.inventory.pageCount),
-            pageRect.x + (pageRect.w * 0.5),
-            pageRect.y + (pageRect.h * 0.5),
-            fonts.SMALL, colors.UI.Muted, 'center'
-        );
-    }
-
     /**
      * 플레이어 패널 원본 비율을 유지한 실제 렌더 사각형을 계산합니다.
      * @param {object} container - HUD가 예약한 플레이어 패널 영역입니다.
@@ -743,16 +642,6 @@ export class TutorialBattleHudView {
                 alpha: 0.32
             });
         }
-    }
-
-    /** UI 기준 너비 백분율을 픽셀로 변환합니다. @private */
-    #uww(value) {
-        return this.#frame.layout.designSpace.w * (Number(value) / 100);
-    }
-
-    /** 화면 높이 백분율을 픽셀로 변환합니다. @private */
-    #uwh(value) {
-        return this.#frame.layout.designSpace.h * (Number(value) / 100);
     }
 
     /** 공통 텍스트 렌더 명령을 실행합니다. @private */
