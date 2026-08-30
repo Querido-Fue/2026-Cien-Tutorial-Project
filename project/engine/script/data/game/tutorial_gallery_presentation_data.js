@@ -1,15 +1,14 @@
-import { TUTORIAL_GAME_DATA } from './tutorial_game_data.js';
-
 /**
  * 갤러리 책장 넘김의 시간·GPU 표면·종이 재질 표현을 정의합니다.
- * 기존 선택 전환 0.24초의 정확히 두 배를 갤러리 전용 시간으로 사용합니다.
+ * 책과 실제 내용을 함께 넘기는 갤러리 전용 시간을 사용합니다.
  * @type {Readonly<object>}
  */
 export const TUTORIAL_GALLERY_PRESENTATION_DATA = Object.freeze({
-    PAGE_TURN_SECONDS: TUTORIAL_GAME_DATA.ANIMATION.SELECTION_SECONDS * 2,
+    PAGE_TURN_SECONDS: 0.7,
     EASING: 'easeInOutCubic',
     CONTENT_SWAP_PROGRESS: 0.5,
     SURFACE_ORDER: 90,
+    MAX_TEXTURE_SIZE: 4096,
     EFFECT_TYPE: 'pageTurn',
     CURL_STRENGTH: 0.5,
     DEPTH_RATIO: 0.56,

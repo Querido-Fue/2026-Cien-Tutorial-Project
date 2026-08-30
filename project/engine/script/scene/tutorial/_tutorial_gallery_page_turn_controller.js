@@ -30,7 +30,8 @@ export class TutorialGalleryPageTurnController {
     }
 
     /**
-     * 이전 페이지를 캡처하고 전환 진행도를 0에서 1로 재생합니다.
+     * 이전 내용만 보관하고 전환 진행도를 0에서 1로 재생합니다.
+     * UI가 지워진 입력 단계에서는 캡처하지 않고 실제 draw 단계까지 지연합니다.
      * @param {object} options - 이전 갤러리 상태·방향·WebGL 사용 여부입니다.
      * @returns {boolean} 전환 시작 여부입니다.
      */
@@ -40,14 +41,12 @@ export class TutorialGalleryPageTurnController {
         }
         const generation = ++this.#generation;
         this.#surfacePort.clear?.();
-        const webglAvailable = useWebGL === true
-            && this.#surfacePort.capture?.('ui') === true;
         this.#state = {
             active: true,
             progress: 0,
             direction: Number(direction) < 0 ? -1 : 1,
             previousGallery,
-            webglAvailable,
+            webglAvailable: useWebGL === true,
             revision: this.#state.revision + 1
         };
         this.#onChange();
@@ -90,13 +89,14 @@ export class TutorialGalleryPageTurnController {
     /**
      * 현재 캡처 텍스처를 포함해 WebGL 페이지 명령을 제출합니다.
      * @param {object} command - 페이지 컬 명령입니다.
+     * @param {object} frames - 이전·다음 내용을 그리는 포트와 뷰포트입니다.
      * @returns {boolean} WebGL 명령 제출 여부입니다.
      */
-    renderPageTurn(command) {
+    renderPageTurn(command, frames) {
         if (!this.#state.active || !this.#state.webglAvailable) {
             return false;
         }
-        const submitted = this.#surfacePort.submit?.(command) === true;
+        const submitted = this.#surfacePort.submit?.(command, frames) === true;
         if (!submitted) {
             this.#state.webglAvailable = false;
             this.#state.revision += 1;

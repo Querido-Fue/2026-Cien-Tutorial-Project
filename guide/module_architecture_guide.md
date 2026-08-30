@@ -67,7 +67,7 @@ background(WebGL)
 
 - `background`, `object`, `effect`는 WebGL surface입니다.
 - `world-postprocess`는 세 월드 레이어를 후처리한 합성 WebGL surface입니다. 공격 충돌의 `spatialDistortion` 명령은 여기에서만 소비되어 full-resolution nearest 중간 텍스처에 방사형 굴절을 적용합니다.
-- 메뉴 갤러리 페이지 전환은 `ui`보다 위이면서 `top`보다 아래인 동적 WebGL effect surface를 필요할 때 한 번 획득합니다. 전환 시작 직전의 `ui` canvas 복제본만 텍스처로 올리고 종료 시 캡처를 버리며, 장면 파괴 시 surface를 풀로 반환합니다.
+- 메뉴 갤러리 페이지 전환은 `ui`보다 위이면서 `top`보다 아래인 동적 WebGL effect surface를 필요할 때 한 번 획득합니다. `TutorialGalleryContentView`가 draw 단계에서 이전·다음 책과 실제 내용을 임시 `DrawHandler2D` 레이어에 그립니다. 네이티브 2D 해상도를 유지하되 텍스처 한도(4096 및 GPU 한도) 안으로 제한하고 같은 전환·해상도에서는 두 래스터를 재사용합니다. 평면 2D 책·본문은 GPU 제출 성공 시 생략하며, 장면 파괴 시 surface와 텍스처를 회수합니다.
 - `texteffect`, `ui`, `vignette`, `top`은 2D Canvas surface입니다.
 - `tutorial-guidance-focus-backdrop`은 `ui`와 `top` 사이에서 네 패널로 포커스 구멍을 만들며, 안내 대상 밖에만 최대 8px CSS backdrop blur를 적용합니다.
 - 오버레이는 필요에 따라 `dimSurface`(2D), `effectSurface`(WebGL), `uiSurface`(2D)를 동적으로 점유합니다.
@@ -87,7 +87,7 @@ background(WebGL)
 - `_tutorial_meta_progress.js`의 순수 함수는 입력 메타를 변경하지 않고 v3 새 객체를 반환합니다. `combatGuideSeen`이 첫 플레이 자동 안내와 재플레이 수동 다시 보기를, `openingWatched`가 오프닝 자동 재생과 갤러리 재생을 구분합니다. 컷씬·업적·엔딩 ID는 중복 없이 저장하며 실제 I/O는 지연 SaveSystem 접근을 쓰는 `loadTutorialMeta()`와 `saveTutorialMeta()`로 제한합니다. 미확정 점수는 v2 호환 값만 읽고 새 결과로 갱신하지 않습니다.
 - 모드·명령 상수, 키 바인딩, 값 유틸은 서로와 씬을 import하지 않습니다. 모드 정책만 상수를 import하고 `TutorialScene`이 이 seam들을 소비하므로 의존 방향은 항상 씬 쪽으로 향합니다.
 - `TutorialAchievementEvaluator`는 `TUTORIAL_CONTENT_DATA`의 임시 조건과 모델 사건을 대조하고, `TutorialAchievementBanner`는 판정된 알림 수명만 관리합니다. `TutorialGalleryController`는 업적·일기·엔딩·컷씬 섹션의 선택과 메타 기반 열람·재생 상태만 소유합니다. 이 세 클래스는 모델이나 장면을 역참조하지 않습니다.
-- `TutorialGalleryNavigationController`는 선택 전후 스냅샷과 진행 방향만 `TutorialGalleryPageTurnController`에 전달합니다. 페이지 전환은 기존 0.24초 선택 연출과 분리된 0.48초 `easeInOutCubic`이며, 이전 `ui` canvas를 실제 WebGL 텍스처로 휘게 그립니다. WebGL surface나 캡처가 실패하면 같은 진행도로 `endingBook1..4` PNG 프레임을 사용합니다.
+- `TutorialGalleryNavigationController`는 선택 전후 스냅샷과 진행 방향만 `TutorialGalleryPageTurnController`에 전달합니다. 페이지 전환은 기존 0.24초 선택 연출과 분리된 0.7초 `easeInOutCubic`입니다. `frame.clear` 뒤의 입력 단계에서는 화면을 캡처하지 않고 draw 단계의 완성된 콘텐츠를 GPU 양면 텍스처로 사용합니다. `TutorialGalleryPageTurnView`는 이전 출발 면과 다음 목적 면을 같은 책등으로 연결하고, `PageTurnEffectPass`는 고정 면과 곡면을 함께 그립니다. WebGL surface·래스터화 실패 또는 context loss에서는 같은 프레임에 `endingBook1..4` PNG 폴백을 그립니다.
 - 로딩·메뉴·스타터·책 기반 갤러리·책 기반 체인지로그·책 기반 결과·컷씬 뷰는 파일 하나에 클래스 하나이며 직렬화 가능한 읽기 전용 view model과 작은 render/asset port만 받습니다. 체인지로그는 정규화된 릴리스 snapshot만 받아 페이지를 나누고 Git이나 네트워크를 직접 참조하지 않습니다. 모델·메타 저장·명령 큐·`TutorialScene`을 역으로 import하지 않습니다. 결과 화면은 내부 엔딩 ID와 표시명을 분리하며 점수를 표시하지 않습니다.
 - 전투 월드·HUD·피드백·발견 업적·안내 뷰도 같은 단방향 규칙을 따릅니다. `TutorialBattleCommandMenuView`는 이동 단계의 초기화/동적 `n칸 이동 확정`과 행동 단계의 공격·회복·대기 배치, 정·역순 expo 플립 표현과 동일 히트 영역만 소유하고 HUD 뷰가 이를 조합합니다. `TutorialCombatReadabilityPresenter`는 모델 의도·행동 미리보기의 표시값만 만들고, `TutorialBattleFocusController`는 공통 조사 포커스를, `TutorialGuidanceController`는 한 번에 한 안내만 보이는 단계·`easeOutExpo` 페이드/포커스 전환을 맡습니다. `TutorialGuidanceBackdropView`는 대상 사각형을 제외한 네 DOM 패널만 흐리고 양피지는 `top`에서 선명하게 유지합니다. `TutorialScene`이 이 결과를 하나의 읽기 전용 BattleViewModel로 조립하고 이미지 객체만 `TutorialAssetPort`로 제공합니다.
 - `TutorialBattleLayout`이 보드·HUD 기하와 타일 투영·히트테스트를 소유합니다. 에셋 맵에서는 매니페스트의 970×580 원본 격자 네 꼭짓점으로 두 타일 축을 구하고 aspect-fit된 맵 사각형에 투영합니다. 월드 렌더링과 입력 판정은 같은 layout frame을 사용합니다.

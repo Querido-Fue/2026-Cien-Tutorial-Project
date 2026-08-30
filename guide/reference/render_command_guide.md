@@ -64,7 +64,7 @@ WebGL batch 레이어는 기본 도형/이미지 명령을 배치 렌더러로 �
 
 `background`, `object`, `effect` 명령은 프레임 끝에 그 순서로 공유 FBO에 지연 실행됩니다. 절차적 `flameParticles`, `magneticShield`, `ambientDust` 명령은 선택적 `pixelSize`를 받으며 기본값은 2픽셀입니다. `ambientDust`는 `bounds` 안에서만 소수의 WebGL point sprite를 그리며 `particleCount`, `pointSize`, `time`, `warmColor`, `coolColor`를 선택적으로 받습니다. `sceneLighting`은 월드 노출·암부 색상과 화면 좌표 점광원 배열을 받고, 광원별 scissor 원형 감쇠를 스크린 합성한 뒤 같은 불꽃 위상의 미세 떨림과 느린 호흡을 적용합니다. `spatialDistortion`은 `effect` surface에 제출하되 일반 배치 렌더러가 그리지 않는 월드 후처리 전용 명령입니다. 화면 좌표 `x`/`y`, `radius`, `ringWidth`, `strength`를 받고 한 프레임에 최대 4개만 full-resolution 굴절 패스에서 소비합니다. 명령이 없으면 패스를 건너뛰고, WebGL 폴백은 이 명령만 생략하므로 기존 월드 렌더링은 유지됩니다. 후처리 원본과 왜곡 중간 텍스처는 nearest-neighbor이고 Bloom 보조 텍스처만 linear filtering을 사용합니다.
 
-동적 `effect` surface의 `pageTurn` 명령은 `image`로 전달한 이전 UI canvas, `pageRect`, 0~1 `progress`, `direction`을 필수 표현값으로 사용합니다. 전용 패스가 페이지를 세분화한 3D 메시로 휘고 뒷면 종이색·가장자리 하이라이트·낙하 그림자를 합성합니다. 갤러리 뷰는 이 surface가 준비되지 않거나 context를 잃으면 같은 진행도의 책 PNG 프레임으로 폴백합니다.
+동적 `effect` surface의 `pageTurn` 명령은 책·실제 내용을 함께 래스터화한 이전 `image`와 다음 `backImage`, 같은 책등에 접하는 `pageRect`·`backPageRect`, 0~1 `progress`, `direction`을 사용합니다. 사각형은 `WW`×`WH` 렌더 좌표이고 두 캔버스는 전체 뷰포트의 정규화 UV를 공유하므로 네이티브 2D 해상도가 달라도 내용 좌표가 유지됩니다. 전용 패스는 이전 목적 면과 새 출발 면을 고정 합성하고, 이전 출발 면/다음 목적 면을 세분화한 양면 3D 메시로 휘어 원근 보정·깊이 검사·낙하 그림자와 함께 그립니다. 글·그림을 단색 뒷면이나 고정 2D 본문으로 대체하지 않습니다. 갤러리 뷰는 WebGL 제출 성공 때 평면 책·본문을 생략하고, 초기화·래스터화 실패나 context loss 때는 같은 프레임에 책 PNG 폴백을 복구합니다.
 
 맵 투영처럼 축 정렬 사각형으로 표현할 수 없는 경우에는 `vertices` 옵션으로 `[좌상 x, 좌상 y, 우상 x, 우상 y, 우하 x, 우하 y, 좌하 x, 좌하 y]` 순서의 네 꼭짓점을 전달할 수 있습니다. 유효한 `vertices` 값은 `x`/`y`/`w`/`h` 기하보다 우선합니다.
 

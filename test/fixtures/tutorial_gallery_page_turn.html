@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="ko">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <base href="/project/engine/">
+    <title>갤러리 실제 콘텐츠 WebGL 검증</title>
+    <style>
+        @font-face { font-family: PFStardust; src: url('../asset/font/PFStardustS.ttf'); }
+        * { box-sizing: border-box; }
+        body { margin: 0; background: #151a20; color: #ece5db; font: 14px system-ui; }
+        header { padding: 12px 18px; }
+        h1 { margin: 0 0 8px; font-size: 18px; }
+        nav { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        button, select { padding: 6px 10px; font: inherit; }
+        #stage { position: relative; width: min(1280px, 100%); aspect-ratio: 16 / 9; margin: auto; }
+        canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+        #metrics { display: block; padding-top: 10px; font-variant-numeric: tabular-nums; }
+    </style>
+    <script type="importmap">
+    {
+        "imports": {
+            "engine/": "./script/", "core/": "./script/core/",
+            "display/": "./script/display/", "scene/": "./script/scene/",
+            "simulation/": "./script/simulation/", "ui/": "./script/ui/",
+            "util/": "./script/util/", "animation/": "./script/animation/",
+            "input/": "./script/input/", "sound/": "./script/sound/",
+            "save/": "./script/save/", "data/": "./script/data/",
+            "object/": "./script/object/", "debug/": "./script/debug/",
+            "overlay/": "./script/overlay/"
+        }
+    }
+    </script>
+</head>
+<body>
+    <header>
+        <h1>갤러리 실제 콘텐츠 WebGL 검증</h1>
+        <nav aria-label="검증 조작">
+            <label>내용 <select id="section">
+                <option value="cutscenes">컷씬</option>
+                <option value="lora-diary">로라의 일기</option>
+                <option value="achievements">업적</option>
+            </select></label>
+            <button id="direction">방향: 다음</button>
+            <button data-progress="0">0%</button>
+            <button data-progress="0.35">35%</button>
+            <button data-progress="0.5">50%</button>
+            <button data-progress="0.65">65%</button>
+            <button data-progress="1">100%</button>
+            <button id="play">0.7초 재생</button>
+            <label>해상도 <select id="resolution">
+                <option value="1280,720,1">1280×720</option>
+                <option value="1538,900,1">1538×900</option>
+                <option value="2560,1080,1">2560×1080</option>
+                <option value="960,540,1.3333333333333333">1280×720 / 75%</option>
+            </select></label>
+            <label><input type="checkbox" id="fallback"> PNG 폴백</label>
+        </nav>
+        <output id="metrics" aria-live="polite">실제 런타임 에셋을 준비하고 있습니다.</output>
+    </header>
+    <main id="stage" aria-label="책 페이지 3D 미리보기">
+        <canvas id="ui" width="1280" height="720"></canvas>
+        <canvas id="page-gl" width="1280" height="720"></canvas>
+    </main>
+    <script type="module">
+        import { DrawHandler2D } from 'display/_draw_handler_2d.js';
+        import { WebGLHandler } from 'display/webgl/_webgl_handler.js';
+        import { TutorialAssetLoader } from 'scene/tutorial/_tutorial_asset_loader.js';
+        import { TutorialAssetPort } from 'scene/tutorial/_tutorial_asset_port.js';
+        import { TutorialGalleryController } from 'scene/tutorial/_tutorial_gallery_controller.js';
+        import { TutorialGalleryPageTurnSurface } from 'scene/tutorial/_tutorial_gallery_page_turn_surface.js';
+        import { TutorialGalleryPageTurnView } from 'scene/tutorial/view/_tutorial_gallery_page_turn_view.js';
+        import { TutorialGalleryView } from 'scene/tutorial/view/_tutorial_gallery_view.js';
+        import { TUTORIAL_ASSET_MANIFEST } from 'data/game/tutorial_asset_manifest.js';
+        import { TUTORIAL_CONTENT_DATA } from 'data/game/tutorial_content_data.js';
+        import { TUTORIAL_GAME_DATA } from 'data/game/tutorial_game_data.js';
+        import { TUTORIAL_GALLERY_PRESENTATION_DATA } from 'data/game/tutorial_gallery_presentation_data.js';
+        import { wrapTextByCharacters } from 'util/font_util.js';
+
+        const ui = document.querySelector('#ui');
+        const canvas = document.querySelector('#page-gl');
+        const metrics = document.querySelector('#metrics');
+        const gl = canvas.getContext('webgl', { alpha: true, preserveDrawingBuffer: false });
+        if (!gl) throw new Error('WebGL 컨텍스트를 생성할 수 없습니다.');
+        const webgl = new WebGLHandler();
+        webgl.resize(canvas.width, canvas.height);
+        const drawHandler = new DrawHandler2D({ ui: ui.getContext('2d') });
+        const selection = new TutorialGalleryController({
+            content: TUTORIAL_CONTENT_DATA, cutscenes: TUTORIAL_GAME_DATA.CUTSCENES
+        });
+        const catalog = selection.getUnlockCatalog();
+        const meta = {
+            unlockedAchievementIds: catalog.achievementIds,
+            unlockedRecordIds: catalog.recordIds,
+            unlockedCutsceneIds: catalog.cutsceneIds,
+            endingIds: catalog.endingIds,
+            openingWatched: true
+        };
+        const loader = new TutorialAssetLoader();
+        const uiIds = new Set(Object.values(TUTORIAL_ASSET_MANIFEST.UI));
+        loader.loadManifest({
+            ENTRIES: TUTORIAL_ASSET_MANIFEST.ENTRIES.filter((entry) => uiIds.has(entry.id))
+        });
+        const assetPort = new TutorialAssetPort(loader, TUTORIAL_ASSET_MANIFEST);
+        let rasterCount = 0;
+        let flatCommands = 0;
+        let gpuCommands = 0;
+        const surface = new TutorialGalleryPageTurnSurface({
+            displaySystem: {
+                drawHandler: {
+                    registerLayer(...args) { rasterCount++; drawHandler.registerLayer(...args); },
+                    unregisterLayer: (...args) => drawHandler.unregisterLayer(...args),
+                    render: (...args) => drawHandler.render(...args),
+                    measureText: (...args) => drawHandler.measureText(...args)
+                },
+                getSurface: () => ({ canvas: ui }),
+                createDynamicSurface() {
+                    const id = 'dynamic:webgl:fixture';
+                    webgl.registerLayer(id, gl, { mode: 'effect' });
+                    return { id, canvas, context: gl };
+                },
+                releaseDynamicSurface: (id) => webgl.unregisterLayer(id)
+            },
+            renderGL(layer, command) {
+                gpuCommands++;
+                webgl.render(layer, command);
+            },
+            config: TUTORIAL_GALLERY_PRESENTATION_DATA
+        });
+        const renderPort = {
+            render(layer, command) { flatCommands++; drawHandler.render(layer, command); },
+            renderGL(_layer, command) {
+                drawHandler.render('ui', { ...command, x: command.x - command.w / 2, y: command.y - command.h / 2 });
+            },
+            measureText: (...args) => drawHandler.measureText(...args),
+            wrapText: (text, font, maxWidth, maxLines) => wrapTextByCharacters(text, {
+                maxWidth, maxLines, measureWidth: (value) => drawHandler.measureText(value, font)
+            })
+        };
+        const view = new TutorialGalleryView(renderPort, assetPort, {
+            pageTurnView: new TutorialGalleryPageTurnView({
+                renderPageTurn: (...args) => surface.submit(...args)
+            }, TUTORIAL_GALLERY_PRESENTATION_DATA)
+        });
+        let pair = [];
+        let direction = 1;
+        let progress = 0;
+        let animation = 0;
+        let elapsed = 0;
+
+        /** 실제 카탈로그에서 연속된 두 책 상태를 구성합니다. */
+        function selectContent() {
+            cancelAnimationFrame(animation);
+            selection.reset();
+            selection.selectSection(document.querySelector('#section').value);
+            const previous = selection.getSnapshot(meta);
+            selection.shiftEntry(1, meta);
+            pair = [previous, selection.getSnapshot(meta)];
+            surface.clear();
+            rasterCount = 0;
+            draw(progress);
+        }
+
+        /** 엔진과 같이 화면 clear 후 이전·다음 내용을 draw 단계에서 만듭니다. */
+        function draw(value) {
+            progress = value;
+            drawHandler.clearAll();
+            webgl.clearAll();
+            flatCommands = 0;
+            gpuCommands = 0;
+            const previous = pair[direction > 0 ? 0 : 1];
+            const next = pair[direction > 0 ? 1 : 0];
+            const width = canvas.width;
+            const height = canvas.height;
+            const uiWidth = Math.min(width, height * 16 / 9);
+            view.draw({
+                ...next,
+                viewport: { WW: width, WH: height, UIWW: uiWidth, UIOffsetX: (width - uiWidth) / 2 },
+                fonts: { SMALL: `${Math.max(14, height * 0.022)}px PFStardust` },
+                colors: { UI: { PanelStrong: '#30241a', Text: '#392819', Muted: '#6c5140' } },
+                selectionProgress: 1,
+                pageTurn: {
+                    active: true, progress, direction, previousGallery: previous,
+                    webglAvailable: !document.querySelector('#fallback').checked
+                }
+            });
+            webgl.flushAll();
+            const error = gl.getError();
+            metrics.textContent = `진행 ${Math.round(progress * 100)}% · GPU ${gpuCommands}회 · 고정 2D ${flatCommands}회 · 콘텐츠 래스터 ${rasterCount}회 · GL 오류 ${error} · 재생 ${Math.round(elapsed)}ms / ${TUTORIAL_GALLERY_PRESENTATION_DATA.PAGE_TURN_SECONDS * 1000}ms`;
+        }
+
+        document.querySelectorAll('[data-progress]').forEach((button) => {
+            button.addEventListener('click', () => {
+                cancelAnimationFrame(animation);
+                draw(Number(button.dataset.progress));
+            });
+        });
+        document.querySelector('#direction').addEventListener('click', (event) => {
+            direction *= -1;
+            event.target.textContent = direction > 0 ? '방향: 다음' : '방향: 이전';
+            selectContent();
+        });
+        document.querySelector('#section').addEventListener('change', selectContent);
+        document.querySelector('#fallback').addEventListener('change', selectContent);
+        document.querySelector('#resolution').addEventListener('change', (event) => {
+            const [width, height, nativeScale] = event.target.value.split(',').map(Number);
+            canvas.width = width;
+            canvas.height = height;
+            ui.width = Math.round(width * nativeScale);
+            ui.height = Math.round(height * nativeScale);
+            drawHandler.setLayerTransform('ui', nativeScale, nativeScale);
+            webgl.resize(width, height);
+            document.querySelector('#stage').style.aspectRatio = `${width} / ${height}`;
+            selectContent();
+        });
+        document.querySelector('#play').addEventListener('click', () => {
+            cancelAnimationFrame(animation);
+            surface.clear();
+            rasterCount = 0;
+            const start = performance.now();
+            const duration = TUTORIAL_GALLERY_PRESENTATION_DATA.PAGE_TURN_SECONDS * 1000;
+            const step = (now) => {
+                elapsed = Math.min(duration, now - start);
+                const time = elapsed / duration;
+                draw(time < 0.5 ? 4 * time ** 3 : 1 - (-2 * time + 2) ** 3 / 2);
+                if (time < 1) animation = requestAnimationFrame(step);
+            };
+            animation = requestAnimationFrame(step);
+        });
+        await document.fonts.load('16px PFStardust');
+        await new Promise((resolve) => {
+            const check = () => loader.getProgress().pending === 0
+                ? resolve() : requestAnimationFrame(check);
+            check();
+        });
+        selectContent();
+        window.addEventListener('pagehide', () => {
+            cancelAnimationFrame(animation);
+            surface.destroy();
+            loader.destroy();
+        }, { once: true });
+    </script>
+</body>
+</html>

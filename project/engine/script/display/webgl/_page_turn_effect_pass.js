@@ -6,164 +6,18 @@ import {
     createProgram,
     FULLSCREEN_VERTEX_SHADER
 } from './_shader_utils.js';
+import {
+    PAGE_VERTEX_SHADER,
+    PAGE_FRAGMENT_SHADER,
+    SHADOW_FRAGMENT_SHADER,
+    SPREAD_FRAGMENT_SHADER
+} from './_page_turn_effect_shaders.js';
 
 const PAGE_TURN_CONSTANTS = getData('EFFECT_RENDER_CONSTANTS').PAGE_TURN;
 
-const PAGE_VERTEX_SHADER = `
-    precision highp float;
-
-    attribute vec2 a_unit;
-
-    uniform vec2 u_resolution;
-    uniform vec4 u_pageRect;
-    uniform float u_progress;
-    uniform float u_direction;
-    uniform float u_curlStrength;
-    uniform float u_depthRatio;
-    uniform float u_perspectiveRatio;
-
-    varying vec2 v_sourceUv;
-    varying float v_light;
-    varying float v_back;
-    varying float v_edge;
-
-    void main() {
-        const float PI = 3.14159265359;
-        float progress = clamp(u_progress, 0.0, 1.0);
-        float pageWidth = max(1.0, u_pageRect.z);
-        float pageHeight = max(1.0, u_pageRect.w);
-        float spineX = u_direction > 0.0
-            ? u_pageRect.x
-            : u_pageRect.x + pageWidth;
-        float radius = a_unit.x * pageWidth;
-        float turnAngle = progress * PI;
-        float turnActivity = sin(progress * PI);
-        float curl = sin(a_unit.x * PI)
-            * turnActivity
-            * u_curlStrength
-            * (0.68 - a_unit.x);
-        float localAngle = turnAngle + curl;
-        float localX = u_direction * radius * cos(localAngle);
-        float depth = radius * sin(localAngle) * u_depthRatio;
-        float vertical = (a_unit.y - 0.5) * pageHeight;
-        vertical += sin(a_unit.x * PI)
-            * turnActivity
-            * (a_unit.y - 0.5)
-            * pageHeight
-            * 0.075;
-
-        float perspective = pageWidth * u_perspectiveRatio;
-        float perspectiveScale = perspective
-            / max(pageWidth * 0.8, perspective - depth);
-        vec2 projected = vec2(
-            spineX + (localX * perspectiveScale),
-            u_pageRect.y + (pageHeight * 0.5) + (vertical * perspectiveScale)
-        );
-        vec2 clipSpace = ((projected / u_resolution) * 2.0) - 1.0;
-        gl_Position = vec4(clipSpace * vec2(1.0, -1.0), 0.0, 1.0);
-
-        float sourceX = spineX + (u_direction * radius);
-        float sourceY = u_pageRect.y + (a_unit.y * pageHeight);
-        v_sourceUv = vec2(sourceX, sourceY) / u_resolution;
-        float grazing = 1.0 - abs(cos(localAngle));
-        v_light = 1.0 - (turnActivity * ((grazing * 0.34) + (a_unit.x * 0.08)));
-        v_back = smoothstep(0.47, 0.53, progress);
-        float edgeDistance = min(
-            min(a_unit.x, 1.0 - a_unit.x),
-            min(a_unit.y, 1.0 - a_unit.y)
-        );
-        v_edge = 1.0 - smoothstep(0.0, 0.035, edgeDistance);
-    }
-`;
-
-const PAGE_FRAGMENT_SHADER = `
-    precision highp float;
-
-    varying vec2 v_sourceUv;
-    varying float v_light;
-    varying float v_back;
-    varying float v_edge;
-
-    uniform sampler2D u_pageTexture;
-    uniform float u_progress;
-    uniform float u_alpha;
-    uniform vec3 u_backColor;
-    uniform vec3 u_edgeColor;
-
-    void main() {
-        vec4 sampled = texture2D(u_pageTexture, v_sourceUv);
-        if (sampled.a <= 0.002) {
-            discard;
-        }
-        float finishFade = 1.0 - smoothstep(0.86, 0.985, u_progress);
-        float alpha = sampled.a * u_alpha * finishFade;
-        vec3 front = sampled.rgb * max(0.42, v_light);
-        float paperGrain = 0.985 + (0.015 * sin(
-            (v_sourceUv.x * 1733.0) + (v_sourceUv.y * 977.0)
-        ));
-        vec3 back = u_backColor * paperGrain;
-        vec3 surfaceColor = mix(front, back, v_back * 0.92);
-        surfaceColor = mix(surfaceColor, u_edgeColor, v_edge * 0.38);
-        gl_FragColor = vec4(surfaceColor * alpha, alpha);
-    }
-`;
-
-const SHADOW_FRAGMENT_SHADER = `
-    precision highp float;
-
-    varying vec2 v_uv;
-
-    uniform vec2 u_resolution;
-    uniform vec4 u_pageRect;
-    uniform float u_progress;
-    uniform float u_direction;
-    uniform float u_shadowAlpha;
-    uniform vec3 u_shadowColor;
-
-    void main() {
-        const float PI = 3.14159265359;
-        vec2 point = vec2(
-            v_uv.x * u_resolution.x,
-            (1.0 - v_uv.y) * u_resolution.y
-        );
-        float pageWidth = max(1.0, u_pageRect.z);
-        float pageHeight = max(1.0, u_pageRect.w);
-        float spineX = u_direction > 0.0
-            ? u_pageRect.x
-            : u_pageRect.x + pageWidth;
-        float activity = sin(clamp(u_progress, 0.0, 1.0) * PI);
-        float edgeX = spineX + (
-            u_direction * pageWidth * cos(u_progress * PI)
-        );
-        float shadowWidth = pageWidth * (0.025 + (activity * 0.12));
-        float edgeDistance = (point.x - edgeX) / max(1.0, shadowWidth);
-        float edgeShadow = exp(-(edgeDistance * edgeDistance) * 1.8);
-        float spineDistance = abs(point.x - spineX) / max(1.0, shadowWidth * 1.4);
-        float spineShadow = exp(-(spineDistance * spineDistance) * 1.35) * 0.34;
-        float top = u_pageRect.y - (pageHeight * 0.12);
-        float bottom = u_pageRect.y + pageHeight + (pageHeight * 0.12);
-        float verticalMask = smoothstep(top, top + (pageHeight * 0.08), point.y)
-            * (1.0 - smoothstep(bottom - (pageHeight * 0.08), bottom, point.y));
-        float horizontalMask = 1.0 - smoothstep(
-            pageWidth * 1.02,
-            pageWidth * 1.32,
-            abs(point.x - spineX)
-        );
-        float alpha = (edgeShadow + spineShadow)
-            * activity
-            * verticalMask
-            * horizontalMask
-            * u_shadowAlpha;
-        if (alpha <= 0.002) {
-            discard;
-        }
-        gl_FragColor = vec4(u_shadowColor * alpha, alpha);
-    }
-`;
-
 /**
  * @class PageTurnEffectPass
- * @description 이전 UI 프레임의 실제 페이지 픽셀을 3D 곡면 메시와 낙하 그림자로 넘깁니다.
+ * @description 이전·다음 콘텐츠를 고정 페이지와 양면 3D 곡면 메시로 나누어 넘깁니다.
  */
 export class PageTurnEffectPass {
     /** @param {WebGLRenderingContext} gl - 대상 WebGL 컨텍스트입니다. */
@@ -171,32 +25,33 @@ export class PageTurnEffectPass {
         this.gl = gl;
         this.pageProgram = this.#createPageProgram();
         this.shadowProgram = this.#createShadowProgram();
+        this.spreadProgram = this.#createSpreadProgram();
         this.mesh = this.#createPageMesh();
         this.fullscreenBuffer = this.#createFullscreenBuffer();
-        this.sourceImage = null;
-        this.sourceTexture = null;
+        this.textureSlots = new Map();
         this.colorCache = new Map();
     }
 
     /**
-     * 페이지 스냅샷 한 장을 방향·진행도에 맞춰 GPU에서 변형합니다.
+     * 이전·다음 책 스냅샷의 양면을 방향·진행도에 맞춰 GPU에서 변형합니다.
      * @param {object} command - 페이지 영역과 재질 명령입니다.
      * @param {number} width - 현재 surface 너비입니다.
      * @param {number} height - 현재 surface 높이입니다.
      */
     draw(command, width, height) {
         const pageRect = this.#resolvePageRect(command?.pageRect);
-        const texture = this.#syncTexture(command?.image);
-        if (!pageRect || !texture) {
+        const backPageRect = this.#resolvePageRect(command?.backPageRect);
+        const textures = {
+            front: this.#syncTexture(command?.image, 'front'),
+            back: this.#syncTexture(command?.backImage, 'back')
+        };
+        if (!pageRect || !backPageRect || !textures.front || !textures.back) {
             return;
         }
         const gl = this.gl;
         const renderWidth = Math.max(1, gl.drawingBufferWidth || width);
         const renderHeight = Math.max(1, gl.drawingBufferHeight || height);
         const progress = clamp01(Number(command?.progress) || 0);
-        if (progress <= 0 || progress >= 1) {
-            return;
-        }
         const direction = Number(command?.direction) < 0 ? -1 : 1;
         const scissor = this.#createScissorRect(pageRect, renderWidth, renderHeight);
         if (!scissor) {
@@ -205,10 +60,19 @@ export class PageTurnEffectPass {
 
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+        gl.disable(gl.DEPTH_TEST);
+        gl.disable(gl.CULL_FACE);
+        gl.disable(gl.SCISSOR_TEST);
+        this.#drawSpread(command, pageRect, textures, direction, renderWidth, renderHeight);
         gl.enable(gl.SCISSOR_TEST);
         gl.scissor(scissor.x, renderHeight - scissor.y - scissor.h, scissor.w, scissor.h);
         this.#drawShadow(command, pageRect, progress, direction, renderWidth, renderHeight);
-        this.#drawPage(command, pageRect, texture, progress, direction, renderWidth, renderHeight);
+        gl.enable(gl.DEPTH_TEST);
+        gl.depthMask(true);
+        gl.depthFunc(gl.LEQUAL);
+        gl.clear(gl.DEPTH_BUFFER_BIT);
+        this.#drawPage(command, pageRect, backPageRect, textures, progress, direction, renderWidth, renderHeight);
+        gl.disable(gl.DEPTH_TEST);
         gl.disable(gl.SCISSOR_TEST);
     }
 
@@ -218,12 +82,30 @@ export class PageTurnEffectPass {
         gl.deleteBuffer(this.mesh?.vertexBuffer);
         gl.deleteBuffer(this.mesh?.indexBuffer);
         gl.deleteBuffer(this.fullscreenBuffer);
-        gl.deleteTexture(this.sourceTexture);
+        for (const slot of this.textureSlots.values()) {
+            gl.deleteTexture(slot.texture);
+        }
+        this.textureSlots.clear();
         gl.deleteProgram(this.pageProgram?.program);
         gl.deleteProgram(this.shadowProgram?.program);
-        this.sourceImage = null;
-        this.sourceTexture = null;
+        gl.deleteProgram(this.spreadProgram?.program);
         this.colorCache.clear();
+    }
+
+    /** 고정 면은 이전 목적 페이지와 새 출발 페이지를 각각 한 번만 합성합니다. @private */
+    #drawSpread(command, rect, textures, direction, width, height) {
+        const gl = this.gl;
+        const info = this.spreadProgram;
+        gl.useProgram(info.program);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.fullscreenBuffer);
+        gl.enableVertexAttribArray(info.attributes.a_position);
+        gl.vertexAttribPointer(info.attributes.a_position, 2, gl.FLOAT, false, 0, 0);
+        gl.uniform2f(info.uniforms.u_resolution, width, height);
+        gl.uniform4f(info.uniforms.u_pageRect, rect.x, rect.y, rect.w, rect.h);
+        gl.uniform1f(info.uniforms.u_direction, direction);
+        gl.uniform1f(info.uniforms.u_alpha, this.#resolveAlpha(command));
+        this.#bindTextures(info, textures);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
 
     /** @private */
@@ -249,7 +131,7 @@ export class PageTurnEffectPass {
     }
 
     /** @private */
-    #drawPage(command, rect, texture, progress, direction, width, height) {
+    #drawPage(command, rect, backRect, textures, progress, direction, width, height) {
         const gl = this.gl;
         const info = this.pageProgram;
         gl.useProgram(info.program);
@@ -259,6 +141,7 @@ export class PageTurnEffectPass {
         gl.vertexAttribPointer(info.attributes.a_unit, 2, gl.FLOAT, false, 0, 0);
         gl.uniform2f(info.uniforms.u_resolution, width, height);
         gl.uniform4f(info.uniforms.u_pageRect, rect.x, rect.y, rect.w, rect.h);
+        gl.uniform4f(info.uniforms.u_backPageRect, backRect.x, backRect.y, backRect.w, backRect.h);
         gl.uniform1f(info.uniforms.u_progress, progress);
         gl.uniform1f(info.uniforms.u_direction, direction);
         gl.uniform1f(info.uniforms.u_curlStrength, Math.min(
@@ -277,9 +160,7 @@ export class PageTurnEffectPass {
                     || PAGE_TURN_CONSTANTS.MIN_PERSPECTIVE_RATIO
             )
         ));
-        gl.uniform1f(info.uniforms.u_alpha, clamp01(
-            Number.isFinite(Number(command?.alpha)) ? Number(command.alpha) : 1
-        ));
+        gl.uniform1f(info.uniforms.u_alpha, this.#resolveAlpha(command));
         gl.uniform3fv(info.uniforms.u_backColor, this.#resolveColor(
             command?.backColor,
             [0.906, 0.725, 0.471]
@@ -288,18 +169,16 @@ export class PageTurnEffectPass {
             command?.edgeColor,
             [1, 0.878, 0.659]
         ));
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, texture);
-        gl.uniform1i(info.uniforms.u_pageTexture, 0);
+        this.#bindTextures(info, textures);
         gl.drawElements(gl.TRIANGLES, this.mesh.indexCount, gl.UNSIGNED_SHORT, 0);
     }
 
     /** @private */
     #createPageProgram() {
         return this.#createProgramInfo(PAGE_VERTEX_SHADER, PAGE_FRAGMENT_SHADER, [
-            'u_resolution', 'u_pageRect', 'u_progress', 'u_direction',
+            'u_resolution', 'u_pageRect', 'u_backPageRect', 'u_progress', 'u_direction',
             'u_curlStrength', 'u_depthRatio', 'u_perspectiveRatio', 'u_pageTexture',
-            'u_alpha', 'u_backColor', 'u_edgeColor'
+            'u_backTexture', 'u_alpha', 'u_backColor', 'u_edgeColor'
         ], ['a_unit']);
     }
 
@@ -309,6 +188,30 @@ export class PageTurnEffectPass {
             'u_resolution', 'u_pageRect', 'u_progress', 'u_direction',
             'u_shadowAlpha', 'u_shadowColor'
         ], ['a_position']);
+    }
+
+    /** @private */
+    #createSpreadProgram() {
+        return this.#createProgramInfo(FULLSCREEN_VERTEX_SHADER, SPREAD_FRAGMENT_SHADER, [
+            'u_resolution', 'u_pageRect', 'u_direction', 'u_alpha',
+            'u_pageTexture', 'u_backTexture'
+        ], ['a_position']);
+    }
+
+    /** @private */
+    #bindTextures(info, textures) {
+        const gl = this.gl;
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, textures.front);
+        gl.uniform1i(info.uniforms.u_pageTexture, 0);
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, textures.back);
+        gl.uniform1i(info.uniforms.u_backTexture, 1);
+    }
+
+    /** @param {object} command @returns {number} 정규화된 불투명도입니다. @private */
+    #resolveAlpha(command) {
+        return clamp01(Number.isFinite(Number(command?.alpha)) ? Number(command.alpha) : 1);
     }
 
     /** @private */
@@ -384,23 +287,26 @@ export class PageTurnEffectPass {
     }
 
     /** @private */
-    #syncTexture(image) {
+    #syncTexture(image, slotName) {
         const width = Number(image?.naturalWidth || image?.width);
         const height = Number(image?.naturalHeight || image?.height);
         if (!(width > 0) || !(height > 0)) {
             return null;
         }
-        if (image === this.sourceImage && this.sourceTexture) {
-            return this.sourceTexture;
+        const slot = this.textureSlots.get(slotName);
+        if (image === slot?.image && slot.texture) {
+            return slot.texture;
         }
         const gl = this.gl;
-        gl.deleteTexture(this.sourceTexture);
+        gl.deleteTexture(slot?.texture || null);
         const texture = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, texture);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
         gl.texImage2D(
             gl.TEXTURE_2D,
             0,
@@ -409,8 +315,7 @@ export class PageTurnEffectPass {
             gl.UNSIGNED_BYTE,
             image
         );
-        this.sourceImage = image;
-        this.sourceTexture = texture;
+        this.textureSlots.set(slotName, { image, texture });
         return texture;
     }
 
@@ -424,6 +329,8 @@ export class PageTurnEffectPass {
         };
         return Number.isFinite(rect.x)
             && Number.isFinite(rect.y)
+            && Number.isFinite(rect.w)
+            && Number.isFinite(rect.h)
             && rect.w >= PAGE_TURN_CONSTANTS.MIN_PAGE_SIZE
             && rect.h >= PAGE_TURN_CONSTANTS.MIN_PAGE_SIZE
             ? rect

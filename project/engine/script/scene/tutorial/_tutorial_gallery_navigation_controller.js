@@ -112,9 +112,9 @@ export class TutorialGalleryNavigationController {
         return this.#pageTurns.getSnapshot();
     }
 
-    /** @param {object} command @returns {boolean} WebGL 페이지 명령 제출 여부입니다. */
-    renderPageTurn(command) {
-        return this.#pageTurns.renderPageTurn(command);
+    /** @param {object} command @param {object} frames @returns {boolean} WebGL 페이지 명령 제출 여부입니다. */
+    renderPageTurn(command, frames) {
+        return this.#pageTurns.renderPageTurn(command, frames);
     }
 
     /** @returns {boolean} 페이지 전환 입력 잠금 여부입니다. */
