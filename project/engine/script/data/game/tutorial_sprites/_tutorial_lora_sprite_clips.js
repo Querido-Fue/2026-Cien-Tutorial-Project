@@ -5,10 +5,10 @@ import {
 } from './_tutorial_sprite_clip_entry.js';
 
 const DIRECTION_SOURCES = Object.freeze({
-    right: Object.freeze({ row: 0, flipX: false, footFacing: 'right' }),
-    left: Object.freeze({ row: 0, flipX: true, footFacing: 'right' }),
-    up: Object.freeze({ row: 2, flipX: false, footFacing: 'up' }),
-    down: Object.freeze({ row: 3, flipX: false, footFacing: 'down' })
+    right: Object.freeze({ row: 0, flipX: true, footFacing: 'right' }),
+    left: Object.freeze({ row: 0, flipX: false, footFacing: 'right' }),
+    up: Object.freeze({ row: 2, flipX: true, footFacing: 'up' }),
+    down: Object.freeze({ row: 3, flipX: true, footFacing: 'down' })
 });
 const SHADOW_FOOT_PIXELS = Object.freeze({
     right: [[35, 60], [40, 61]],

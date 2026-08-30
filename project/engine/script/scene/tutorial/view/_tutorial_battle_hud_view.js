@@ -1,7 +1,6 @@
 import { TUTORIAL_COMMANDS } from '../_tutorial_scene_constants.js';
 import {
     clampBattleViewNumber,
-    drawBattleViewText,
     toBattleViewList
 } from './_tutorial_battle_view_helpers.js';
 import { drawBattleHpValue } from './_tutorial_battle_hp_value_view.js';
@@ -12,6 +11,7 @@ import {
 import { TutorialBattleCommandMenuView } from './_tutorial_battle_command_menu_view.js';
 import { LORA_STATUS_PANEL_LAYOUT } from './_tutorial_battle_hud_layout.js';
 import { TutorialItemDescriptionView } from './_tutorial_item_description_view.js';
+import { resolveTutorialLoraPortraitPresentation } from './_tutorial_lora_portrait_presentation.js';
 
 /**
  * @class TutorialBattleHudView
@@ -220,9 +220,10 @@ export class TutorialBattleHudView {
             LORA_STATUS_PANEL_LAYOUT.PORTRAIT_VIEWPORT,
             LORA_STATUS_PANEL_LAYOUT.SOURCE
         );
-        const portrait = this.#assetPort.getUiAsset?.('loraPortraitIcon')
-            || this.#assetPort.getLoraPortrait?.()
-            || null;
+        const portraitPresentation = resolveTutorialLoraPortraitPresentation(
+            this.#assetPort, hud.instabilityState?.id, LORA_STATUS_PANEL_LAYOUT
+        );
+        const portrait = portraitPresentation.image;
         if (portrait && portraitViewport) {
             const portraitWidth = Math.max(1, Math.round(
                 portraitViewport.w * LORA_STATUS_PANEL_LAYOUT.PORTRAIT_SCALE
@@ -230,7 +231,7 @@ export class TutorialBattleHudView {
             const portraitHeight = Math.max(1, Math.round(
                 portraitViewport.h * LORA_STATUS_PANEL_LAYOUT.PORTRAIT_SCALE
             ));
-            const visualCenter = LORA_STATUS_PANEL_LAYOUT.PORTRAIT_VISUAL_CENTER;
+            const visualCenter = portraitPresentation.visualCenter;
             this.#renderPort.render('ui', {
                 shape: 'image', image: portrait,
                 x: Math.round(
@@ -644,10 +645,4 @@ export class TutorialBattleHudView {
         }
     }
 
-    /** 공통 텍스트 렌더 명령을 실행합니다. @private */
-    #drawText(layer, text, x, y, font, fill, align = 'left', alpha = 1) {
-        drawBattleViewText(this.#renderPort, {
-            layer, text, x, y, font, fill, align, alpha
-        });
-    }
 }

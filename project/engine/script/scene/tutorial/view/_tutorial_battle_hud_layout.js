@@ -3,6 +3,7 @@ export const LORA_STATUS_PANEL_LAYOUT = Object.freeze({
     PORTRAIT_VIEWPORT: Object.freeze({ X: 0, Y: 0, WIDTH: 55, HEIGHT: 56 }),
     PORTRAIT_SCALE: 1.22,
     PORTRAIT_VISUAL_CENTER: Object.freeze({ X: 0.55, Y: 0.4 }),
+    PORTRAIT_MOOD_VISUAL_CENTER: Object.freeze({ X: 0.55, Y: 0.45 }),
     PORTRAIT_CLIP: Object.freeze([
         Object.freeze({ X: 25, Y: 6 }),
         Object.freeze({ X: 49, Y: 27 }),

@@ -132,8 +132,8 @@ test('원본이 없는 Range·Breathing·로라 액션은 순환 없는 명시�
         actorType: 'lora', animationId: 'idle', facing: 'left'
     });
     assert.deepEqual(loraWest.frames, loraEast.frames);
-    assert.equal(loraEast.flipX, false);
-    assert.equal(loraWest.flipX, true);
+    assert.equal(loraEast.flipX, true);
+    assert.equal(loraWest.flipX, false);
     assert.deepEqual(
         loraWest.shadowFootFrames[0].map(({ x, y }) => ({ x: 1 - x, y })).reverse(),
         loraEast.shadowFootFrames[0]

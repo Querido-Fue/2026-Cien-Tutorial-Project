@@ -51,7 +51,7 @@ test('로라는 플레이어 위치를 따라 전면 좌우 방향만 선택한�
     }
 });
 
-test('로라의 동·서 방향은 같은 전면 프레임을 사용하고 서쪽만 좌우 반전한다', () => {
+test('로라의 동·서 방향은 같은 전면 프레임을 사용하고 기존 방향을 좌우 반전한다', () => {
     const animator = createAnimator();
     animator.syncActors([{
         id: 'lora', actorType: 'lora', x: 4, y: 0,
@@ -65,8 +65,8 @@ test('로라의 동·서 방향은 같은 전면 프레임을 사용하고 서�
     const west = animator.getSnapshot().lora;
 
     assert.deepEqual(west.layers, east.layers);
-    assert.equal(east.flipX, false);
-    assert.equal(west.flipX, true);
+    assert.equal(east.flipX, true);
+    assert.equal(west.flipX, false);
     assert.notDeepEqual(west.shadowFootAnchors, east.shadowFootAnchors);
 });
 
