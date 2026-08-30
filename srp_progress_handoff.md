@@ -3,8 +3,8 @@
 작성 기준: 2026-08-30 KST  
 브랜치: `main`  
 원격: `origin/main`  
-마지막 기능 체크포인트: `44d312a feat: polish pickups and tutorial guidance`
-현재 SRP 체크포인트: `refactor: extract tutorial cutscene session` 작업 블록
+마지막 기능 체크포인트: `bf09787 fix: 체인지로그 본문 줄간격 보정`
+현재 SRP 체크포인트: `d1f9626 refactor: extract tutorial cutscene session`
 
 ## 1. 작업 목표와 현재 상태
 
@@ -53,7 +53,7 @@ God context 대신 작은 포트/읽기 전용 snapshot 주입이다. 기존 부
 | `e329b6f` | 로라 턴 대기·행동·완료 예약 수명주기 분리 |
 | `460676e` | 종료 판정·엔딩 표시·엔딩 컷씬 대기 상태 분리 |
 | `fb9e572` | 모델 결과의 cue·진행도·기록·컷씬 배포 흐름 분리 |
-| 현재 블록 | 컷씬 런 중복 방지·대기열·복귀 모드 세션 분리 |
+| `d1f9626` | 컷씬 런 중복 방지·대기열·복귀 모드 세션 분리 |
 
 새 모듈은 모두 파일당 클래스 하나이며 현재 권장 500줄 아래다.
 
@@ -61,10 +61,10 @@ God context 대신 작은 포트/읽기 전용 snapshot 주입이다. 기존 부
 | --- | ---: | --- |
 | `_tutorial_keyboard_edge_tracker.js` | 93 | 키 상승 에지 정규화 |
 | `_tutorial_meta_session.js` | 178 | 런 staging·순차 저장·쓰기 차단 |
-| `_tutorial_keyboard_command_mapper.js` | 212 | 키 상태를 명령 사양으로 변환 |
-| `_tutorial_nonbattle_view_model_factory.js` | 115 | 비전투 표시 데이터 조립 |
+| `_tutorial_keyboard_command_mapper.js` | 217 | 키 상태를 명령 사양으로 변환 |
+| `_tutorial_nonbattle_view_model_factory.js` | 223 | 비전투 표시 데이터 조립 |
 | `_tutorial_inventory_presenter.js` | 154 | 인벤토리 페이지·공개/사용 가능 표시 |
-| `_tutorial_battle_view_model_factory.js` | 279 | 최종 전투 뷰 모델 조립 |
+| `_tutorial_battle_view_model_factory.js` | 289 | 최종 전투 뷰 모델 조립 |
 | `_tutorial_battle_selection_controller.js` | 406 | 경로·대상·호버 선택 상태와 입력 명령 파생 |
 | `_tutorial_battle_command_controller.js` | 219 | 플레이어 전투 명령 검증·모델 호출·연출 시작 |
 | `_tutorial_lora_turn_controller.js` | 127 | 로라 턴 2단계 예약 수명주기 |
@@ -75,6 +75,22 @@ God context 대신 작은 포트/읽기 전용 snapshot 주입이다. 기존 부
 집중 회귀는 `test/tutorial_scene_collaborators.test.mjs`와
 `test/tutorial_cutscene_session.test.mjs`에 추가했다. 소스 seam과 단방향 의존은
 `test/tutorial_scene_seams.test.mjs`가 계속 검사한다.
+
+### 원본 인계서 이후 diff 재감사
+
+원본 인계 갱신 커밋 `57bd8a6` 이후 현재 기능 체크포인트까지 소스·테스트·가이드 87개 파일에
+6,458줄 추가, 1,446줄 삭제가 있었다. 로딩/타이틀 전환, 기록 팝업, 커맨드 메뉴, HP·갤러리,
+아이템 설명, 브라우저 호환성, 로라 방향·먼지, 부유 아이템·튜토리얼 아웃포커스가 신설 또는
+확장된 변경을 다시 감사했다.
+
+- `TutorialScene`은 `57bd8a6`의 1,838줄에서 기능 추가 뒤 `44d312a` 기준 1,929줄까지 늘었고,
+  컷씬 세션 분리로 1,889줄까지 다시 줄였다.
+- `TutorialBattleHudView`는 커맨드 메뉴 분리 덕분에 1,040줄에서 653줄로 줄었다.
+- 새 목표 부채는 `TutorialBattleWorldView` 672줄, `TutorialBattleCommandMenuView` 662줄,
+  `TutorialBattlePresenter` 618줄, `TutorialGalleryView` 539줄이다. 모두 절대 상한 700줄 아래지만
+  권장 500줄을 넘으므로 후속 뷰 분리 후보에 포함한다.
+- 기존 `legacyBudgets` 11개는 늘지 않았고 자동 책임 감사도 통과한다.
+- 브라우저 전체 검증 결과와 수정·잔여 위험은 루트 `bug_report.md`에 정리했다.
 
 ## 4. 현재 장문 부채
 
@@ -154,13 +170,15 @@ God context 대신 작은 포트/읽기 전용 snapshot 주입이다. 기존 부
 
 ## 7. 마지막 검증 기준선
 
-현재 컷씬 세션 분리 블록 검증 결과:
+현재 컷씬 세션 분리와 전체 QA 블록 검증 결과:
 
-- Node 테스트: 228/228 통과
+- Node 테스트: 232/232 통과
 - `check:assets`: PNG 84개, MP3 26개, 경고 0
 - `check:repo`: 오류 0, 경고 0
-- `check:responsibilities`: 소스 283개, 기존 부채 11개
+- `check:responsibilities`: 소스 284개, 기존 부채 11개
 - `check:release`: 구조 검사 성공
+- 브라우저: 1280×720, 1024×768, 1600×720 주요 흐름 통과, console 오류 0
+- 밸런스 시뮬레이션: 8개 시나리오, 구조 실패 0, preview 불일치 0
 
 `fb9e572` 기준 전체 검증 결과:
 
@@ -186,5 +204,6 @@ God context 대신 작은 포트/읽기 전용 snapshot 주입이다. 기존 부
 
 ## 9. 현재 작업 상태
 
-기술적 차단은 없다. 컷씬 세션 분리와 전체 Node 회귀는 완료됐고, 같은 goal의 브라우저 기능
-검증과 루트 `bug_report.md` 작성이 이어진다. 다음 SRP 블록은 비전투 화면 흐름 경계다.
+기술적 차단은 없다. 컷씬 세션 분리, 전체 Node·브라우저 회귀와 루트 `bug_report.md` 작성까지
+완료했다. 다음 SRP 블록은 비전투 화면 흐름 경계다. 공개 배포는 `check:release`의 권리 증빙
+5건이 해결되기 전까지 계속 차단한다.
