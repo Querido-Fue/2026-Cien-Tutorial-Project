@@ -42,6 +42,7 @@ export const TUTORIAL_MODEL_EVENT_TYPES = Object.freeze([
 export const TUTORIAL_PRESENTATION_CUE_TYPES = Object.freeze({
     EVENT_LOG: 'event-log',
     FLOATING_TEXT: 'floating-text',
+    HUD_NOTICE: 'hud-notice',
     HEALTH_TRANSITION: 'health-transition',
     INSTABILITY_TRANSITION: 'instability-transition',
     ACTOR_ANIMATION: 'actor-animation',

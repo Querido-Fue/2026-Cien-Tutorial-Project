@@ -104,6 +104,25 @@ export class TutorialButtonHost {
         }
     }
 
+    /**
+     * 지정 버튼의 애니메이션된 호버 배율을 읽기 전용 표시값으로 반환합니다.
+     * 눌림 배율은 제외하여 외부 콘텐츠에는 호버 확대만 전달합니다.
+     * @param {string} key - 버튼 사양 키입니다.
+     * @returns {number} 1부터 버튼별 호버 목표 배율 사이의 현재 값입니다.
+     */
+    getHoverScale(key) {
+        const item = this.#buttons[key]?.item;
+        if (!item || !this.#presentation.interactive) {
+            return 1;
+        }
+        const hoverValue = Math.max(0, Math.min(1, Number(item.hoverValue) || 0));
+        const targetScale = Number(item.hoverScaleMultiplier);
+        if (!Number.isFinite(targetScale)) {
+            return 1;
+        }
+        return 1 + ((targetScale - 1) * hoverValue);
+    }
+
     /** 소유한 풀 요소를 반납하고 호스트를 초기화합니다. */
     destroy() {
         this.#releaseButtons();
@@ -190,11 +209,19 @@ export class TutorialButtonHost {
             onClick: () => {
                 if (enabled) {
                     this.#activate(spec);
+                } else if (typeof spec.disabledCommand?.type === 'string') {
+                    this.#onCommand(
+                        spec.disabledCommand.type,
+                        spec.disabledCommand.payload
+                    );
                 }
             }
         });
         button.clickAble = inspectable;
-        button.hoverScaleMultiplier = style.hoverScale;
+        const requestedHoverScale = Number(spec.hoverScale);
+        button.hoverScaleMultiplier = Number.isFinite(requestedHoverScale)
+            ? Math.max(1, Math.min(2, requestedHoverScale))
+            : style.hoverScale;
         button.pressScaleMultiplier = style.pressScale;
         this.#buttons[spec.key] = {
             item: button,

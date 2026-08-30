@@ -21,6 +21,7 @@ export const TUTORIAL_UI_LAYOUT_TOKENS = Object.freeze({
         RIGHT_CARD: rect(0.5117, 0.4667, 0.145, 0.3433),
         ENTRY_OFFSET_Y: 0.045,
         ENTRY_MIN_SCALE: 0.84,
+        CARD_HOVER_SCALE: 1.1,
         CARD_TITLE_CENTER_Y: 0.11,
         CARD_ICON_BACKGROUND: rect(0.217, 0.184, 0.566, 0.451),
         CARD_DESCRIPTION: rect(0.11, 0.685, 0.78, 0.255),

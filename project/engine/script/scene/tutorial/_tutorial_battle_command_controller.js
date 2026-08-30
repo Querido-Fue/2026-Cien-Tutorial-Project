@@ -159,9 +159,20 @@ export class TutorialBattleCommandController {
 
     /** 인벤토리 아이템을 사용합니다. */
     applyUseItem(payload) {
-        const model = this.#getReadyActionModel();
+        const model = this.#getReadyModel();
         const itemId = payload?.itemId;
         if (!model || typeof itemId !== 'string') {
+            return;
+        }
+        if (model.phase === 'move') {
+            this.onModelChange({
+                ok: false,
+                reason: 'movement-command-required',
+                events: []
+            });
+            return;
+        }
+        if (model.phase !== 'action' || model.actionUsed) {
             return;
         }
         const result = model.useItem(itemId);

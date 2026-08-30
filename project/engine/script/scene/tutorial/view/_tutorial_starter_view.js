@@ -29,6 +29,36 @@ function projectStarterCardRegion(cardRect, region) {
 }
 
 /**
+ * 카드 중심을 유지한 채 내부 사각형을 같은 배율로 변환합니다.
+ * @param {object} rect - 기본 크기에서 계산한 사각형입니다.
+ * @param {{x:number,y:number}} center - 카드 변환 중심입니다.
+ * @param {number} scale - 카드 전체 표시 배율입니다.
+ * @returns {object} 카드와 함께 변환된 사각형입니다.
+ */
+function scaleStarterRectAround(rect, center, scale) {
+    return {
+        x: center.x + ((rect.x - center.x) * scale),
+        y: center.y + ((rect.y - center.y) * scale),
+        w: rect.w * scale,
+        h: rect.h * scale
+    };
+}
+
+/**
+ * 카드 중심을 기준으로 내부 점을 같은 배율로 변환합니다.
+ * @param {{x:number,y:number}} point - 기본 크기의 내부 좌표입니다.
+ * @param {{x:number,y:number}} center - 카드 변환 중심입니다.
+ * @param {number} scale - 카드 전체 표시 배율입니다.
+ * @returns {{x:number,y:number}} 카드와 함께 변환된 좌표입니다.
+ */
+function scaleStarterPointAround(point, center, scale) {
+    return {
+        x: center.x + ((point.x - center.x) * scale),
+        y: center.y + ((point.y - center.y) * scale)
+    };
+}
+
+/**
  * 카드 설명처럼 제한된 영역에서 사용할 글꼴 크기만 비례 축소합니다.
  * @param {string} font - Canvas 글꼴 문자열입니다.
  * @param {number} scale - 글꼴 크기 배율입니다.
@@ -86,13 +116,18 @@ export class TutorialStarterView {
         const { colors, fonts } = viewModel;
         viewModel.choices.forEach((choice, index) => {
             const presentation = this.#resolveCardPresentation(viewModel, layout, index);
-            const { alpha, rect: scaledRect } = presentation;
+            const { alpha, center, rect: scaledRect, scale } = presentation;
             const cardImage = this.#assetPort.getUiAsset?.('starterCard');
-            const frameRect = fitTutorialAssetRect(cardImage, scaledRect)
-                || scaledRect;
-            const iconBackground = projectStarterCardRegion(
-                frameRect,
+            const baseFrameRect = fitTutorialAssetRect(cardImage, presentation.baseRect)
+                || presentation.baseRect;
+            const baseIconBackground = projectStarterCardRegion(
+                baseFrameRect,
                 TUTORIAL_UI_LAYOUT_TOKENS.STARTER.CARD_ICON_BACKGROUND
+            );
+            const iconBackground = scaleStarterRectAround(
+                baseIconBackground,
+                center,
+                scale
             );
             this.#renderPort.render('ui', {
                 shape: 'rect',
@@ -111,55 +146,67 @@ export class TutorialStarterView {
             });
             if (!(viewModel.titleTransition?.phase === 'starter-morph'
                 && viewModel.titleTransition?.selectedItemId === choice.id)) {
+                const baseIconRect = this.#resolveChoiceIconRect(
+                    baseFrameRect,
+                    choice.id
+                );
                 drawTutorialPixelAsset(this.#renderPort, {
                     layer: 'ui',
                     image: this.#assetPort.getItemIcon?.(choice.id),
-                    rect: this.#resolveChoiceIconRect(frameRect, choice.id),
+                    rect: scaleStarterRectAround(baseIconRect, center, scale),
                     mode: 'exact',
                     alpha
                 });
             }
+            const titlePoint = scaleStarterPointAround({
+                x: baseFrameRect.x + (baseFrameRect.w * 0.5),
+                y: baseFrameRect.y + (
+                    baseFrameRect.h
+                    * TUTORIAL_UI_LAYOUT_TOKENS.STARTER.CARD_TITLE_CENTER_Y
+                )
+            }, center, scale);
             drawTutorialText(this.#renderPort, {
                 text: choice.label,
-                x: frameRect.x + (frameRect.w * 0.5),
-                y: frameRect.y + (
-                    frameRect.h
-                    * TUTORIAL_UI_LAYOUT_TOKENS.STARTER.CARD_TITLE_CENTER_Y
-                ),
-                font: fonts.BODY,
+                x: titlePoint.x,
+                y: titlePoint.y,
+                font: scaleStarterFont(fonts.BODY, scale),
                 fill: colors.UI.PanelStrong,
                 align: 'center',
                 alpha
             });
-            const descriptionRect = projectStarterCardRegion(
-                frameRect,
+            const baseDescriptionRect = projectStarterCardRegion(
+                baseFrameRect,
                 TUTORIAL_UI_LAYOUT_TOKENS.STARTER.CARD_DESCRIPTION
             );
-            const descriptionFont = scaleStarterFont(
+            const baseDescriptionFont = scaleStarterFont(
                 fonts.SMALL,
                 TUTORIAL_UI_LAYOUT_TOKENS.STARTER.CARD_DESCRIPTION_FONT_SCALE
             );
             const lines = wrapTutorialText(
                 this.#renderPort,
                 choice.description,
-                descriptionFont,
-                descriptionRect.w,
+                baseDescriptionFont,
+                baseDescriptionRect.w,
                 TUTORIAL_UI_LAYOUT_TOKENS.STARTER.CARD_DESCRIPTION_MAX_LINES
             );
-            const lineHeight = Math.max(
+            const baseLineHeight = Math.max(
                 15,
-                frameRect.h
+                baseFrameRect.h
                     * TUTORIAL_UI_LAYOUT_TOKENS.STARTER.CARD_DESCRIPTION_LINE_HEIGHT
             );
-            const firstLineY = descriptionRect.y
-                + (descriptionRect.h * 0.5)
-                - (((lines.length - 1) * lineHeight) * 0.5);
+            const baseFirstLineY = baseDescriptionRect.y
+                + (baseDescriptionRect.h * 0.5)
+                - (((lines.length - 1) * baseLineHeight) * 0.5);
             lines.forEach((line, lineIndex) => {
+                const linePoint = scaleStarterPointAround({
+                    x: baseDescriptionRect.x + (baseDescriptionRect.w * 0.5),
+                    y: baseFirstLineY + (lineIndex * baseLineHeight)
+                }, center, scale);
                 drawTutorialText(this.#renderPort, {
                     text: line,
-                    x: descriptionRect.x + (descriptionRect.w * 0.5),
-                    y: firstLineY + (lineIndex * lineHeight),
-                    font: descriptionFont,
+                    x: linePoint.x,
+                    y: linePoint.y,
+                    font: scaleStarterFont(baseDescriptionFont, scale),
                     fill: colors.UI.PanelStrong,
                     align: 'center',
                     alpha
@@ -182,9 +229,13 @@ export class TutorialStarterView {
         const layout = this.getLayout(viewModel);
         const presentation = this.#resolveCardPresentation(viewModel, layout, index);
         const cardImage = this.#assetPort.getUiAsset?.('starterCard');
-        const frameRect = fitTutorialAssetRect(cardImage, presentation.rect)
-            || presentation.rect;
-        return this.#resolveChoiceIconRect(frameRect, itemId);
+        const baseFrameRect = fitTutorialAssetRect(cardImage, presentation.baseRect)
+            || presentation.baseRect;
+        return scaleStarterRectAround(
+            this.#resolveChoiceIconRect(baseFrameRect, itemId),
+            presentation.center,
+            presentation.scale
+        );
     }
 
     /**
@@ -200,6 +251,7 @@ export class TutorialStarterView {
             label: '',
             tooltip: `${choice.label}: ${choice.description}`,
             drawBackground: false,
+            hoverScale: TUTORIAL_UI_LAYOUT_TOKENS.STARTER.CARD_HOVER_SCALE,
             active: index === viewModel.selectedIndex,
             command: {
                 type: TUTORIAL_COMMANDS.CHOOSE_STARTER,
@@ -226,19 +278,32 @@ export class TutorialStarterView {
             : 1;
         const entryScale = TUTORIAL_UI_LAYOUT_TOKENS.STARTER.ENTRY_MIN_SCALE
             + ((1 - TUTORIAL_UI_LAYOUT_TOKENS.STARTER.ENTRY_MIN_SCALE) * entryProgress);
-        const scale = selectionScale * entryScale;
+        const choiceId = viewModel.choices[index]?.id;
+        const requestedHoverScale = Number(viewModel.cardHoverScales?.[choiceId]);
+        const hoverScale = Number.isFinite(requestedHoverScale)
+            ? Math.max(1, Math.min(2, requestedHoverScale))
+            : 1;
+        const scale = selectionScale * entryScale * hoverScale;
         const card = layout.cards[index];
         const offsetY = layout.space.h
             * TUTORIAL_UI_LAYOUT_TOKENS.STARTER.ENTRY_OFFSET_Y
             * (1 - entryProgress);
+        const baseRect = Object.freeze({
+            x: card.x,
+            y: card.y + offsetY,
+            w: card.w,
+            h: card.h
+        });
+        const center = Object.freeze({
+            x: baseRect.x + (baseRect.w * 0.5),
+            y: baseRect.y + (baseRect.h * 0.5)
+        });
         return Object.freeze({
             alpha: entryProgress * (1 - morphProgress),
-            rect: Object.freeze({
-                x: card.x + ((card.w - (card.w * scale)) * 0.5),
-                y: card.y + ((card.h - (card.h * scale)) * 0.5) + offsetY,
-                w: card.w * scale,
-                h: card.h * scale
-            })
+            baseRect,
+            center,
+            scale,
+            rect: Object.freeze(scaleStarterRectAround(baseRect, center, scale))
         });
     }
 

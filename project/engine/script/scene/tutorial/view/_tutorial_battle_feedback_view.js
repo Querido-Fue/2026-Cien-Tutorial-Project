@@ -1,7 +1,14 @@
 import {
     clampBattleViewNumber,
-    drawBattleViewText
+    drawBattleViewText,
+    toBattleViewList
 } from './_tutorial_battle_view_helpers.js';
+
+/** @param {number} value @returns {number} 0..1 easeOutExpo 보간값입니다. */
+function easeOutExpo(value) {
+    const ratio = clampBattleViewNumber(value, 0, 1);
+    return ratio >= 1 ? 1 : 1 - (2 ** (-10 * ratio));
+}
 
 /**
  * @class TutorialBattleFeedbackView
@@ -60,5 +67,52 @@ export class TutorialBattleFeedbackView {
                 alpha: 1 - ratio
             });
         }
+        for (const notice of toBattleViewList(viewModel.feedback.notices)) {
+            this.#drawNotice(viewModel, notice);
+        }
+    }
+
+    /** 전투 HUD 위에 짧은 입력 거절 안내를 그립니다. @private */
+    #drawNotice(viewModel, notice) {
+        const viewport = viewModel.layout.viewport;
+        const elapsed = Math.max(0, Number(notice.seconds) || 0);
+        const duration = Math.max(0.01, Number(notice.duration) || 1.6);
+        const fadeIn = easeOutExpo(elapsed / 0.16);
+        const fadeOut = easeOutExpo(Math.max(0, duration - elapsed) / 0.24);
+        const alpha = Math.min(fadeIn, fadeOut);
+        if (alpha <= 0) {
+            return;
+        }
+        const uiWidth = Math.max(1, Number(viewport.UIWW) || Number(viewport.WW) || 1);
+        const uiOffsetX = Number(viewport.UIOffsetX) || 0;
+        const viewportHeight = Math.max(1, Number(viewport.WH) || 1);
+        const width = clampBattleViewNumber(uiWidth * 0.3, 260, 430);
+        const height = clampBattleViewNumber(viewportHeight * 0.052, 34, 48);
+        const centerX = uiOffsetX + (uiWidth * 0.5);
+        const centerY = viewportHeight * 0.82
+            + ((1 - fadeIn) * Math.min(10, viewportHeight * 0.014));
+        const colors = viewModel.colors.UI;
+        this.#renderPort.render('texteffect', {
+            shape: 'roundRect',
+            x: centerX - (width * 0.5),
+            y: centerY - (height * 0.5),
+            w: width,
+            h: height,
+            radius: height * 0.24,
+            fill: colors.ButtonIdle || '#18131d',
+            stroke: colors.Danger || colors.Border,
+            lineWidth: Math.max(1, Math.round(height * 0.045)),
+            alpha: alpha * 0.94
+        });
+        drawBattleViewText(this.#renderPort, {
+            layer: 'ui',
+            text: notice.message,
+            x: centerX,
+            y: centerY,
+            font: viewModel.fonts.SMALL || viewModel.fonts.BODY,
+            fill: colors.Text,
+            align: 'center',
+            alpha
+        });
     }
 }

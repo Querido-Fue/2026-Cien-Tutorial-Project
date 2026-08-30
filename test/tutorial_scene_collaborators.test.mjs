@@ -297,6 +297,49 @@ test('전투 명령 컨트롤러는 공격 선택과 실행 검증을 모델 밖
     assert.equal(selection.isAttackSelected(), false);
 });
 
+test('전투 명령 컨트롤러는 이동 단계 아이템 사용을 모델 호출 전에 거절한다', () => {
+    const modelChanges = [];
+    const itemCalls = [];
+    const actionPresentations = [];
+    const model = {
+        phase: 'move',
+        actionUsed: false,
+        useItem(itemId) {
+            itemCalls.push(itemId);
+            return { ok: true, events: [] };
+        }
+    };
+    const commands = new TutorialBattleCommandController({
+        selection: { clearAttack() {} },
+        focus: { focus() {} },
+        presentation: {
+            startSelection() {},
+            startAction: () => actionPresentations.push('action'),
+            startPlayerPath() {}
+        },
+        getModel: () => model,
+        canAcceptInput: () => true,
+        onModelChange: (result) => modelChanges.push(result),
+        getVisibleFloorIndex: () => 0
+    });
+
+    commands.applyUseItem({ itemId: 'ocarina' });
+
+    assert.deepEqual(itemCalls, []);
+    assert.deepEqual(actionPresentations, []);
+    assert.deepEqual(modelChanges, [{
+        ok: false,
+        reason: 'movement-command-required',
+        events: []
+    }]);
+
+    model.phase = 'action';
+    commands.applyUseItem({ itemId: 'ocarina' });
+    assert.deepEqual(itemCalls, ['ocarina']);
+    assert.deepEqual(actionPresentations, ['action']);
+    assert.deepEqual(modelChanges[1], { ok: true, events: [] });
+});
+
 test('로라 턴 컨트롤러는 같은 세대에서 행동과 완료를 각각 한 번만 예약한다', () => {
     const queued = [];
     const changes = [];
@@ -529,6 +572,11 @@ test('인벤토리 프레젠터와 전투 뷰 모델 팩토리는 페이지·표
                 label: '활',
                 description: '원거리 공격',
                 passive: true
+            },
+            ocarina: {
+                label: '시간의 오카리나',
+                description: '여분의 행동을 얻습니다.',
+                useOnce: true
             }
         },
         LAYOUT: {
@@ -585,7 +633,7 @@ test('인벤토리 프레젠터와 전투 뷰 모델 팩토리는 페이지·표
         lora: { hp: 100, instability: 0 }
     };
     const model = {
-        inventory: new Map([['bow', 1]]),
+        inventory: new Map([['bow', 1], ['ocarina', 1]]),
         phase: 'move',
         result: null,
         getSnapshot: () => snapshot,
@@ -631,7 +679,10 @@ test('인벤토리 프레젠터와 전투 뷰 모델 팩토리는 페이지·표
     });
 
     assert.equal(viewModel.hud.inventory.entries[0].itemId, 'bow');
+    assert.equal(viewModel.hud.inventory.entries[1].itemId, 'ocarina');
+    assert.equal(viewModel.hud.inventory.entries[1].usable, false);
+    assert.equal(viewModel.hud.inventory.entries[1].blockedByMovementPhase, true);
     assert.equal(viewModel.hud.controls.hasBow, true);
-    assert.deepEqual(battleFocus.keys, ['item-bow']);
+    assert.deepEqual(battleFocus.keys, ['item-bow', 'item-ocarina']);
     assert.equal(Object.isFrozen(viewModel), true);
 });

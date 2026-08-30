@@ -8,6 +8,7 @@ import { TutorialBattleCamera } from '../project/engine/script/scene/tutorial/_t
 import { TutorialAssetLoader } from '../project/engine/script/scene/tutorial/_tutorial_asset_loader.js';
 import { TutorialBattlePresenter } from '../project/engine/script/scene/tutorial/_tutorial_battle_presenter.js';
 import { TutorialFeedbackQueue } from '../project/engine/script/scene/tutorial/_tutorial_feedback_queue.js';
+import { TutorialBattleFeedbackView } from '../project/engine/script/scene/tutorial/view/_tutorial_battle_feedback_view.js';
 import {
     TUTORIAL_AUDIO_CUE_IDS,
     TUTORIAL_MODEL_EVENT_TYPES,
@@ -173,6 +174,72 @@ test('피드백 큐는 cue 순서와 수명을 소유하고 오디오를 별도�
     assert.equal(queue.getSnapshot().particles.length, 0);
     queue.clear();
     assert.equal(queue.getSnapshot().eventLog.length, 0);
+});
+
+test('이동 단계 아이템 거절은 정확한 HUD 안내로 노출되고 수명 후 사라진다', () => {
+    const presenter = new TutorialBattlePresenter({
+        animation: TUTORIAL_GAME_DATA.ANIMATION
+    });
+    const cues = presenter.createCues({
+        previousSnapshot: createSnapshot(),
+        nextSnapshot: createSnapshot(),
+        failureReason: 'movement-command-required'
+    });
+    const noticeCue = cues.find((cue) => (
+        cue.type === TUTORIAL_PRESENTATION_CUE_TYPES.HUD_NOTICE
+    ));
+    assert.equal(noticeCue.message, '이동 명령 후 사용해주세요');
+    assert.equal(cues.some((cue) => (
+        cue.type === TUTORIAL_PRESENTATION_CUE_TYPES.FLOATING_TEXT
+    )), false);
+
+    const queue = new TutorialFeedbackQueue();
+    queue.enqueue(cues);
+    assert.deepEqual(
+        queue.getSnapshot().notices.map(({ message }) => message),
+        ['이동 명령 후 사용해주세요']
+    );
+    queue.update(noticeCue.duration);
+    assert.equal(queue.getSnapshot().notices.length, 0);
+});
+
+test('HUD 안내 텍스트는 배경보다 위의 UI 레이어에 그린다', () => {
+    const commands = [];
+    const view = new TutorialBattleFeedbackView({
+        render: (layer, command) => commands.push({ layer, ...command }),
+        renderGL() {}
+    });
+    view.draw({
+        snapshot: { floorIndex: 0 },
+        world: { presentation: { floorIndex: 0 } },
+        feedback: {
+            particles: [],
+            floatingTexts: [],
+            notices: [{
+                message: '이동 명령 후 사용해주세요',
+                seconds: 0.3,
+                duration: 1.6
+            }]
+        },
+        layout: {
+            viewport: { WW: 1280, WH: 720, UIWW: 1280, UIOffsetX: 0 }
+        },
+        colors: {
+            UI: {
+                ButtonIdle: '#173650',
+                Danger: '#ff6979',
+                Border: '#52dbff',
+                Text: '#e9f7fb'
+            },
+            Effects: { Move: '#5ce5ff' }
+        },
+        fonts: { SMALL: '16px sans-serif', BODY: '18px sans-serif' }
+    });
+
+    assert.deepEqual(commands.map(({ layer, shape }) => [layer, shape]), [
+        ['texteffect', 'roundRect'],
+        ['ui', 'text']
+    ]);
 });
 
 test('플레이어·로라 공격 cue는 피해 대상 연출에 impact 동기화 정보를 전달한다', () => {

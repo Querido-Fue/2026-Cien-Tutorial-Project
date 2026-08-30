@@ -115,19 +115,30 @@ export class TutorialBattlePresenter {
             }));
         }
         if (failureReason) {
+            const message = this.formatFailureReason(failureReason);
             cues.push(freezeCue({
                 type: CUE_TYPES.EVENT_LOG,
-                message: this.formatFailureReason(failureReason),
+                message,
                 sourceEventType: 'action-failed'
             }));
-            cues.push(freezeCue({
-                type: CUE_TYPES.FLOATING_TEXT,
-                actorId: 'player',
-                text: '무효',
-                tone: 'danger',
-                duration: toFiniteNumber(this.#animation.HEAL_TEXT_SECONDS, 0.62),
-                sourceEventType: 'action-failed'
-            }));
+            if (failureReason === 'movement-command-required') {
+                cues.push(freezeCue({
+                    type: CUE_TYPES.HUD_NOTICE,
+                    message,
+                    tone: 'danger',
+                    duration: toFiniteNumber(this.#animation.NOTICE_SECONDS, 1.6),
+                    sourceEventType: 'action-failed'
+                }));
+            } else {
+                cues.push(freezeCue({
+                    type: CUE_TYPES.FLOATING_TEXT,
+                    actorId: 'player',
+                    text: '무효',
+                    tone: 'danger',
+                    duration: toFiniteNumber(this.#animation.HEAL_TEXT_SECONDS, 0.62),
+                    sourceEventType: 'action-failed'
+                }));
+            }
         }
         const eventList = toEventList(events);
         for (let index = 0; index < eventList.length; index++) {
@@ -156,6 +167,7 @@ export class TutorialBattlePresenter {
             'action-used': '이번 턴 행동을 이미 사용했습니다.',
             'movement-unavailable': '이번 턴 이동을 사용할 수 없습니다.',
             'action-unavailable': '이번 턴 행동을 사용할 수 없습니다.',
+            'movement-command-required': '이동 명령 후 사용해주세요',
             'unreachable-destination': '그 타일까지 도달할 수 없습니다.',
             'invalid-path': '그 경로로 이동할 수 없습니다.',
             'path-cost-exceeded': '남은 이동력이 부족합니다.',

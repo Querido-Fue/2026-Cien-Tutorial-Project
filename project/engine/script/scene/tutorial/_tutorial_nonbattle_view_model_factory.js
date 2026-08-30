@@ -100,7 +100,8 @@ export class TutorialNonbattleViewModelFactory {
     createStarter(frame, {
         selectedIndex,
         selectionProgress,
-        titleTransition = null
+        titleTransition = null,
+        cardHoverScales = {}
     }) {
         return Object.freeze({
             ...frame,
@@ -112,6 +113,17 @@ export class TutorialNonbattleViewModelFactory {
             selectedIndex,
             selectionProgress: Number(selectionProgress) || 0,
             selectionMinScale: Number(this.data.ANIMATION.SELECTION_MIN_SCALE) || 0.72,
+            cardHoverScales: Object.freeze(Object.fromEntries(
+                this.data.STARTER_CHOICES.map((choice) => {
+                    const requestedScale = Number(cardHoverScales?.[choice.id]);
+                    return [
+                        choice.id,
+                        Number.isFinite(requestedScale)
+                            ? Math.max(1, Math.min(2, requestedScale))
+                            : 1
+                    ];
+                })
+            )),
             titleTransition: createTitleTransitionSnapshot(titleTransition)
         });
     }

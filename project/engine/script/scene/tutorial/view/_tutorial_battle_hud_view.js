@@ -137,11 +137,11 @@ export class TutorialBattleHudView {
                     idleColor: colors.UI.CardHeader,
                     hoverColor: colors.UI.ButtonHover,
                     command: {
-                        type: entry.movementConsumable
-                            ? TUTORIAL_COMMANDS.SELECT_CLEANSE
+                        type: entry.movementConsumable ? TUTORIAL_COMMANDS.SELECT_CLEANSE
                             : TUTORIAL_COMMANDS.USE_ITEM,
                         payload: { itemId: entry.itemId }
-                    }
+                    },
+                    disabledCommand: entry.blockedByMovementPhase ? { type: TUTORIAL_COMMANDS.USE_ITEM, payload: { itemId: entry.itemId } } : null
                 });
             });
 

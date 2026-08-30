@@ -120,6 +120,10 @@ export class TutorialInventoryPresenter {
             entries: Object.freeze(paging.entries.map((entry) => {
                 const metadata = itemMetadata[entry.itemId] || {};
                 const movementConsumable = metadata.movementConsumable === true;
+                const blockedByMovementPhase = !movementConsumable
+                    && ready
+                    && snapshot.phase === 'move'
+                    && metadata.usable === true;
                 return Object.freeze({
                     itemId: entry.itemId,
                     count: Number(entry.count) || 0,
@@ -131,6 +135,7 @@ export class TutorialInventoryPresenter {
                     known: metadata.known === true,
                     hasIcon: metadata.hasIcon === true,
                     movementConsumable,
+                    blockedByMovementPhase,
                     usable: movementConsumable
                         ? ready && snapshot.phase === 'move' && cleanseTargetCount > 0
                         : actionReady && metadata.usable === true

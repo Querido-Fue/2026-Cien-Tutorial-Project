@@ -291,6 +291,12 @@ test('스타터 카드와 Pause 메뉴는 보이는 영역 자체를 클릭 계�
     );
     assert.equal(starterButtons.every((button) => button.drawBackground === false), true);
     assert.equal(starterButtons.every((button) => button.label === ''), true);
+    assert.equal(
+        starterButtons.every((button) => (
+            button.hoverScale === TUTORIAL_UI_LAYOUT_TOKENS.STARTER.CARD_HOVER_SCALE
+        )),
+        true
+    );
 
     const pause = new TutorialPauseView(NOOP_RENDER_PORT);
     const pauseButtons = pause.getButtonSpecs(createViewModel(VIEWPORTS[0], {
@@ -310,6 +316,7 @@ test('스타터 카드는 별도 버튼 패널 없이 불투명 프레임과 흰
     const mascotIcon = { width: 48, height: 48 };
     const renderCommands = [];
     const renderGlCommands = [];
+    const wrapRequests = [];
     const renderPort = {
         render(layer, command) {
             renderCommands.push({ layer, command });
@@ -317,7 +324,8 @@ test('스타터 카드는 별도 버튼 패널 없이 불투명 프레임과 흰
         renderGL(layer, command) {
             renderGlCommands.push({ layer, command });
         },
-        wrapText() {
+        wrapText(text, font, maxWidth, maxLines) {
+            wrapRequests.push({ text, font, maxWidth, maxLines });
             return ['첫째 줄', '둘째 줄', '셋째 줄'];
         }
     };
@@ -359,6 +367,7 @@ test('스타터 카드는 별도 버튼 패널 없이 불투명 프레임과 흰
     assert.equal(iconCommands.every(({ command }) => command.alpha === 1), true);
 
     const firstFrame = frameCommands[0].command;
+    const secondFrame = frameCommands[1].command;
     const descriptionToken = TUTORIAL_UI_LAYOUT_TOKENS.STARTER.CARD_DESCRIPTION;
     const descriptionTop = firstFrame.y + (firstFrame.h * descriptionToken.y);
     const descriptionBottom = descriptionTop + (firstFrame.h * descriptionToken.h);
@@ -369,6 +378,51 @@ test('스타터 카드는 별도 버튼 패널 없이 불투명 프레임과 흰
     assert.equal(firstDescriptionLines.length, 3);
     assert.ok(firstDescriptionLines[0].y >= descriptionTop);
     assert.ok(firstDescriptionLines[2].y <= descriptionBottom);
+
+    renderCommands.length = 0;
+    view.draw({
+        ...viewModel,
+        cardHoverScales: Object.freeze({
+            bow: TUTORIAL_UI_LAYOUT_TOKENS.STARTER.CARD_HOVER_SCALE,
+            'mascot-costume': 1
+        })
+    });
+    const hoveredFrames = renderCommands.filter(({ command }) => (
+        command.image === starterCard
+    ));
+    const hoveredFirstFrame = hoveredFrames[0].command;
+    const hoveredSecondFrame = hoveredFrames[1].command;
+    assert.ok(Math.abs(
+        (hoveredFirstFrame.w / firstFrame.w)
+        - TUTORIAL_UI_LAYOUT_TOKENS.STARTER.CARD_HOVER_SCALE
+    ) < 0.01);
+    const firstFrameCenter = {
+        x: firstFrame.x + (firstFrame.w * 0.5),
+        y: firstFrame.y + (firstFrame.h * 0.5)
+    };
+    const hoveredFirstFrameCenter = {
+        x: hoveredFirstFrame.x + (hoveredFirstFrame.w * 0.5),
+        y: hoveredFirstFrame.y + (hoveredFirstFrame.h * 0.5)
+    };
+    assert.ok(Math.abs(
+        hoveredFirstFrameCenter.x - firstFrameCenter.x
+    ) <= 1);
+    assert.ok(Math.abs(
+        hoveredFirstFrameCenter.y - firstFrameCenter.y
+    ) <= 1);
+    assert.deepEqual(hoveredSecondFrame, secondFrame);
+    assert.deepEqual(
+        wrapRequests.slice(2).map(({ font, maxWidth, maxLines }) => ({
+            font,
+            maxWidth,
+            maxLines
+        })),
+        wrapRequests.slice(0, 2).map(({ font, maxWidth, maxLines }) => ({
+            font,
+            maxWidth,
+            maxLines
+        }))
+    );
 });
 
 test('갤러리 책갈피와 결과 버튼은 Figma 관찰 좌표와 책 내부 흐름을 따른다', () => {

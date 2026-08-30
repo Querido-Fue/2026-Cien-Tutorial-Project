@@ -141,6 +141,9 @@ export class TutorialBattleViewModelFactory {
             achievement: input.achievement,
             feedback: Object.freeze({
                 floatingTexts: input.feedback.floatingTexts,
+                notices: Object.freeze(toList(input.feedback.notices).map(
+                    (notice) => Object.freeze(cloneValue(notice))
+                )),
                 particles: input.feedback.particles
             })
         });

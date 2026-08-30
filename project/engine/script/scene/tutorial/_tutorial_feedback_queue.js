@@ -22,6 +22,7 @@ export class TutorialFeedbackQueue {
     #sequence;
     #eventLog;
     #floatingTexts;
+    #notices;
     #particles;
     #audioCues;
     #delayedCues;
@@ -39,6 +40,7 @@ export class TutorialFeedbackQueue {
         this.#sequence = 0;
         this.#eventLog = [];
         this.#floatingTexts = [];
+        this.#notices = [];
         this.#particles = [];
         this.#audioCues = [];
         this.#delayedCues = [];
@@ -124,10 +126,16 @@ export class TutorialFeedbackQueue {
         for (const entry of this.#floatingTexts) {
             entry.seconds += delta;
         }
+        for (const notice of this.#notices) {
+            notice.seconds += delta;
+        }
         for (const particle of this.#particles) {
             particle.seconds += delta;
         }
         this.#floatingTexts = this.#floatingTexts.filter(
+            (entry) => entry.seconds < entry.duration
+        );
+        this.#notices = this.#notices.filter(
             (entry) => entry.seconds < entry.duration
         );
         this.#particles = this.#particles.filter(
@@ -154,6 +162,9 @@ export class TutorialFeedbackQueue {
             floatingTexts: Object.freeze(this.#floatingTexts.map(
                 (entry) => Object.freeze({ ...entry })
             )),
+            notices: Object.freeze(this.#notices.map(
+                (entry) => Object.freeze({ ...entry })
+            )),
             particles: Object.freeze(this.#particles.map(
                 (entry) => Object.freeze({ ...entry })
             )),
@@ -167,6 +178,7 @@ export class TutorialFeedbackQueue {
     /** resize에서 화면 좌표에 묶인 피드백만 제거합니다. */
     clearTransient() {
         this.#floatingTexts = [];
+        this.#notices = [];
         this.#particles = [];
         this.#screenShakeSeconds = 0;
         this.#stabilizeSeconds = 0;
@@ -194,6 +206,9 @@ export class TutorialFeedbackQueue {
             break;
         case CUE_TYPES.FLOATING_TEXT:
             this.#enqueueFloatingText(cue, context);
+            break;
+        case CUE_TYPES.HUD_NOTICE:
+            this.#enqueueNotice(cue);
             break;
         case CUE_TYPES.SCREEN_SHAKE:
             this.#screenShakeSeconds = Math.max(
@@ -248,6 +263,21 @@ export class TutorialFeedbackQueue {
             seconds: 0,
             duration: Math.max(0.01, toFiniteNumber(cue.duration, 0.62))
         });
+    }
+
+    /** 같은 목적의 짧은 HUD 안내는 중첩하지 않고 가장 최근 입력으로 교체합니다. @private */
+    #enqueueNotice(cue) {
+        const message = String(cue.message ?? '').trim();
+        if (!message) {
+            return;
+        }
+        this.#notices = [{
+            sequence: cue.sequence,
+            message,
+            tone: cue.tone || 'accent',
+            seconds: 0,
+            duration: Math.max(0.01, toFiniteNumber(cue.duration, 1.6))
+        }];
     }
 
     /** @param {object} cue @param {object} context @private */

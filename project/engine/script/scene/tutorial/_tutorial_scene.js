@@ -1367,8 +1367,8 @@ export class TutorialScene extends BaseScene {
             this.#createNonbattleViewFrame(),
             {
                 selectedIndex: this.titleFlow.getSelectedIndex(),
-                selectionProgress:
-                    this.presentationTimeline.getState().menuSelectionProgress,
+                selectionProgress: this.presentationTimeline.getState().menuSelectionProgress,
+                cardHoverScales: Object.fromEntries(this.data.STARTER_CHOICES.map(({ id }) => [id, this.buttonHost.getHoverScale('starter-' + id)])),
                 titleTransition: this.titleFlow.getSnapshot()
             }
         );
