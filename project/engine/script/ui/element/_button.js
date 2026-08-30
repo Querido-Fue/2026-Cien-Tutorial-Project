@@ -6,6 +6,7 @@ import { ColorSchemes } from "display/_theme_handler.js";
 import { shadowOn, shadowOff, measureText } from "display/display_system.js";
 import { DropdownElement } from "./_dropdown.js";
 import { createFontString } from "util/font_util.js";
+import { isUiInputFocused } from "./_ui_input_focus_policy.js";
 
 /**
  * @class ButtonElement
@@ -96,7 +97,7 @@ export class ButtonElement extends BaseUIElement {
     update() {
         if (!this.visible) return;
 
-        if (!getMouseFocus().includes(this.layer)) {
+        if (!isUiInputFocused(this.layer, getMouseFocus())) {
             return;
         }
 
