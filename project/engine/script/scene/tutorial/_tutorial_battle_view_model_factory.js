@@ -111,6 +111,9 @@ export class TutorialBattleViewModelFactory {
                 attackWeapon: selection.attackWeapon,
                 cleanseSelected: selection.cleanseSelected,
                 focusedControlKey,
+                buttonHoverScales: Object.freeze({
+                    ...(input.buttonHoverScales || {})
+                }),
                 instabilityState: Object.freeze(cloneValue(
                     model.getInstabilityState?.() || {}
                 )),

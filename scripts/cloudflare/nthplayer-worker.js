@@ -1,4 +1,5 @@
-const PUBLIC_PATH_PREFIX = '/game/nthplayer';
+const GAME_PATH_PREFIX = '/game/nthplayer';
+const PRESENTATION_PATH_PREFIX = '/ppt/nthplayer';
 const UPSTREAM_ORIGIN = 'https://querido-fue.github.io';
 const UPSTREAM_PATH_PREFIX = '/2026-Cien-Tutorial-Project';
 const LANDING_PAGE_HTML = `<!DOCTYPE html>
@@ -67,7 +68,7 @@ export const resolvePublicCacheControl = (publicUrl) => {
  * @returns {URL} GitHub Pages 업스트림 URL입니다.
  */
 export const createUpstreamUrl = (publicUrl) => {
-    const suffix = publicUrl.pathname.slice(PUBLIC_PATH_PREFIX.length);
+    const suffix = publicUrl.pathname.slice(GAME_PATH_PREFIX.length);
     const upstreamUrl = new URL(UPSTREAM_ORIGIN);
     upstreamUrl.pathname = `${UPSTREAM_PATH_PREFIX}${suffix}`;
     upstreamUrl.search = publicUrl.search;
@@ -97,7 +98,7 @@ const rewriteRedirectLocation = (location, publicUrl) => {
     }
 
     const rewrittenUrl = new URL(publicUrl.origin);
-    rewrittenUrl.pathname = `${PUBLIC_PATH_PREFIX}${locationUrl.pathname.slice(UPSTREAM_PATH_PREFIX.length)}`;
+    rewrittenUrl.pathname = `${GAME_PATH_PREFIX}${locationUrl.pathname.slice(UPSTREAM_PATH_PREFIX.length)}`;
     rewrittenUrl.search = locationUrl.search;
     rewrittenUrl.hash = locationUrl.hash;
     return rewrittenUrl.href;
@@ -121,8 +122,59 @@ const createLandingPageResponse = (requestMethod) => new Response(
     },
 );
 
+/**
+ * 발표 셸 정적 자산에 경로별 캐시와 브라우저 보안 헤더를 적용합니다.
+ * @param {Request} request - 원본 공개 요청입니다.
+ * @param {object} environment - Cloudflare Worker 바인딩입니다.
+ * @returns {Promise<Response>} 발표 셸 또는 안전한 오류 응답입니다.
+ */
+const createPresentationResponse = async (request, environment) => {
+    const assetBinding = environment?.PRESENTATION_ASSETS;
+    if (!assetBinding || typeof assetBinding.fetch !== 'function') {
+        return new Response('Presentation assets unavailable', {
+            status: 503,
+            headers: {
+                'cache-control': 'no-store',
+                'content-type': 'text/plain; charset=utf-8',
+            },
+        });
+    }
+
+    const assetResponse = await assetBinding.fetch(request);
+    const responseHeaders = new Headers(assetResponse.headers);
+    const contentType = responseHeaders.get('content-type') || '';
+    const isDocument = contentType.includes('text/html');
+
+    responseHeaders.set(
+        'cache-control',
+        isDocument ? 'no-store, max-age=0' : 'public, max-age=300, must-revalidate'
+    );
+    responseHeaders.set('referrer-policy', 'no-referrer');
+    responseHeaders.set('x-content-type-options', 'nosniff');
+    responseHeaders.set('cross-origin-resource-policy', 'same-origin');
+
+    if (isDocument) {
+        responseHeaders.set(
+            'content-security-policy',
+            "default-src 'none'; script-src 'self'; style-src 'self'; frame-src 'self'; "
+                + "connect-src 'self'; img-src 'self' data:; font-src 'self'; "
+                + "base-uri 'none'; form-action 'none'; frame-ancestors 'self'"
+        );
+        responseHeaders.set(
+            'permissions-policy',
+            'camera=(), microphone=(), geolocation=(), payment=(), usb=()'
+        );
+    }
+
+    return new Response(assetResponse.body, {
+        status: assetResponse.status,
+        statusText: assetResponse.statusText,
+        headers: responseHeaders,
+    });
+};
+
 export default {
-    async fetch(request) {
+    async fetch(request, environment) {
         const publicUrl = new URL(request.url);
 
         if (request.method !== 'GET' && request.method !== 'HEAD') {
@@ -132,12 +184,21 @@ export default {
             });
         }
 
-        if (publicUrl.pathname === PUBLIC_PATH_PREFIX) {
-            publicUrl.pathname = `${PUBLIC_PATH_PREFIX}/`;
+        if (publicUrl.pathname === GAME_PATH_PREFIX) {
+            publicUrl.pathname = `${GAME_PATH_PREFIX}/`;
             return Response.redirect(publicUrl.href, 308);
         }
 
-        if (!publicUrl.pathname.startsWith(`${PUBLIC_PATH_PREFIX}/`)) {
+        if (publicUrl.pathname === PRESENTATION_PATH_PREFIX) {
+            publicUrl.pathname = `${PRESENTATION_PATH_PREFIX}/`;
+            return Response.redirect(publicUrl.href, 308);
+        }
+
+        if (publicUrl.pathname.startsWith(`${PRESENTATION_PATH_PREFIX}/`)) {
+            return createPresentationResponse(request, environment);
+        }
+
+        if (!publicUrl.pathname.startsWith(`${GAME_PATH_PREFIX}/`)) {
             return createLandingPageResponse(request.method);
         }
 

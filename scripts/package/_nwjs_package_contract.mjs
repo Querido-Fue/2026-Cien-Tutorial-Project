@@ -40,8 +40,8 @@ export const NWJS_PACKAGE_CONTRACT = Object.freeze({
         Object.freeze({ source: 'project/license', target: 'license' }),
         Object.freeze({ source: 'project/asset/tutorial', target: 'asset/tutorial' }),
         Object.freeze({
-            source: 'project/asset/font/LanaPixel.ttf',
-            target: 'asset/font/LanaPixel.ttf'
+            source: 'project/asset/font/OwnglyphParkDahyun.ttf',
+            target: 'asset/font/OwnglyphParkDahyun.ttf'
         }),
         Object.freeze({
             source: 'project/asset/old/icon/logo.ico',

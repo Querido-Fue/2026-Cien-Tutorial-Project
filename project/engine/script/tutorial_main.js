@@ -7,6 +7,10 @@ import { ColorUtil } from 'util/color_util.js';
 import { RuntimeTool } from 'util/runtime_tool.js';
 import { WebReleaseManager } from 'engine/release/_web_release_manager.js';
 import { BrowserCompatibilityWarningGate } from 'engine/app/_browser_compatibility_warning_gate.js';
+import { getData } from 'data/data_handler.js';
+import { waitForFontFaces } from 'util/font_util.js';
+
+const TEXT_RENDER_DATA = getData('TEXT_RENDER_DATA');
 
 let systemHandler;
 let tutorialGame;
@@ -23,6 +27,9 @@ const initializeTutorialRuntime = async () => {
         if (releaseState.reloadScheduled) {
             return;
         }
+        await waitForFontFaces(TEXT_RENDER_DATA.FONT_FACES, {
+            timeoutMs: TEXT_RENDER_DATA.FONT_LOAD_TIMEOUT_MS
+        });
         new TimeHandler();
         new MathUtil();
         new ColorUtil();

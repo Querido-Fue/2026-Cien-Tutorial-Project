@@ -9,6 +9,7 @@
 | `project/engine/release-bootstrap.js` | HTTP(S)에서 `release.json`을 no-store로 확인하고 최신 문서로 재접속한 뒤 엔진 모듈을 연결하는 고전 스크립트 |
 | `project/engine/style.css` | 전역 CSS, 캔버스/동적 오버레이 host/폰트 스타일 |
 | `project/engine/script/main.js` | 현재 진입 모듈. 기본 런타임인 `tutorial_main.js`를 로드합니다. |
+| `project/presentation/public/ppt/nthplayer/` | `/ppt/nthplayer/`의 15장 연속 카메라 덱, 던전 파노라마 자산, 게임 iframe 프리로드·0.6초 슬롯/전체 화면 컨트롤러 |
 | `project/engine/script/tutorial_main.js` | `TutorialScene`을 초기 `active` 씬과 플레이 씬 factory로 주입하는 튜토리얼 런타임 진입점 |
 | `project/engine/script/release/_web_release_manager.js` | bootstrap 결과 검증, 직접 실행 폴백 확인과 한 번만 수행하는 최신 릴리스 재접속을 담당하는 웹 경계 |
 | `project/engine/script/diagnostic_main.js` | `DiagnosticScene`을 주입하는 수동 엔진 진단 런타임 진입점 |
@@ -33,6 +34,8 @@
 | `scripts/import-tutorial-assets.mjs` | `project/asset` 원본을 보존하며 매니페스트의 ASCII 런타임 이름으로 안전 복사하는 CLI |
 | `scripts/check-assets.mjs` | 원본·런타임 PNG IHDR 크기, 경로 충돌, 누락·폴백을 검사하는 CLI |
 | `scripts/build-web.mjs` | KST 버전·Git 체인지로그 매니페스트와 배포별 모듈 경로를 만드는 정적 웹 빌드 CLI |
+| `scripts/cloudflare/nthplayer-worker.js` | `/game/nthplayer/` Pages 프록시, `/ppt/nthplayer/` 정적 발표 자산, 나머지 경로의 준비 중 화면을 조정하는 Worker |
+| `scripts/cloudflare/wrangler.jsonc` | apex·www Route와 발표 셸 `PRESENTATION_ASSETS` 바인딩을 선언하는 Cloudflare 배포 설정 |
 | `scripts/web/_web_release_manifest_builder.mjs` | Git 기록과 한글 카탈로그를 결합해 `release.json`을 생성하는 빌더 |
 | `scripts/tutorial-assets/` | PNG 헤더, 경로 containment와 에셋 감사를 파일당 한 책임으로 분리한 Node 모듈 |
 | `scripts/tutorial-balance/` | 전략 규약·판단, 공개 모델 API port, 지표 수집, 실행 조정과 보고를 파일당 한 책임으로 분리한 Node 하네스 |

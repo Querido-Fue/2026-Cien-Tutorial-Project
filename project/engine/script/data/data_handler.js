@@ -30,6 +30,7 @@ import { EFFECT_RENDER_CONSTANTS } from 'data/display/effect_render_constants.js
 import { OVERLAY_RENDER_CONSTANTS } from 'data/display/overlay_render_constants.js';
 import { VIGNETTE_CONSTANTS } from 'data/display/vignette_constants.js';
 import { DISPLAY_SURFACE_DATA } from 'data/display/display_surface_data.js';
+import { TEXT_RENDER_DATA } from 'data/display/text_render_data.js';
 import { WORLD_POSTPROCESS_CONSTANTS } from 'data/display/world_postprocess_constants.js';
 import { MOUSE_BUTTON_INPUT_DATA } from 'data/input/mouse_button_input_data.js';
 import { TUTORIAL_GAME_DATA } from 'data/game/tutorial_game_data.js';
@@ -38,6 +39,9 @@ import { TUTORIAL_ASSET_MANIFEST } from 'data/game/tutorial_asset_manifest.js';
 import {
     TUTORIAL_GUIDANCE_PRESENTATION_DATA
 } from 'data/game/tutorial_guidance_presentation_data.js';
+import {
+    TUTORIAL_DIALOGUE_PRESENTATION_DATA
+} from 'data/game/tutorial_dialogue_presentation_data.js';
 import { TUTORIAL_RECORD_PRESENTATION_DATA } from 'data/game/tutorial_record_presentation_data.js';
 import { TUTORIAL_SPRITE_CLIPS } from 'data/game/tutorial_sprite_clips.js';
 
@@ -70,12 +74,14 @@ const DATA_REGISTRY = Object.freeze({
     OVERLAY_RENDER_CONSTANTS,
     VIGNETTE_CONSTANTS,
     DISPLAY_SURFACE_DATA,
+    TEXT_RENDER_DATA,
     WORLD_POSTPROCESS_CONSTANTS,
     MOUSE_BUTTON_INPUT_DATA,
     TUTORIAL_GAME_DATA,
     TUTORIAL_CONTENT_DATA,
     TUTORIAL_ASSET_MANIFEST,
     TUTORIAL_GUIDANCE_PRESENTATION_DATA,
+    TUTORIAL_DIALOGUE_PRESENTATION_DATA,
     TUTORIAL_RECORD_PRESENTATION_DATA,
     TUTORIAL_SPRITE_CLIPS
 });

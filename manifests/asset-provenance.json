@@ -44,6 +44,19 @@
       "releaseStatus": "approved"
     },
     {
+      "id": "ownglyph-park-dahyun-font",
+      "category": "font",
+      "paths": [
+        "project/asset/font/OwnglyphParkDahyun.ttf"
+      ],
+      "origin": "사용자 제공 온글잎 박다현체; Copyright © 2023 VoyagerX, inc. & Dahyeon Park",
+      "originStatus": "user-confirmed-authorized",
+      "license": "상업적 사용 가능(사용자 확인, 2026-08-31); 파일 수정은 VoyagerX, inc. 사전 서면 허가 필요",
+      "notice": "THIRD_PARTY_NOTICES.md",
+      "sha256": "FBCC7E2E16ABD0C9192AFF6561871AB95C369BC58284879E813055BDE7C5568F",
+      "releaseStatus": "approved"
+    },
+    {
       "id": "provided-art-sources",
       "category": "art",
       "paths": [

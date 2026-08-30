@@ -230,7 +230,7 @@ export class TutorialScene extends BaseScene {
         this.pauseView = new TutorialPauseView(tutorialRenderPort, this.assetPort);
         this.galleryView = new TutorialGalleryView(tutorialRenderPort, this.assetPort);
         this.resultView = new TutorialResultView(tutorialRenderPort, this.assetPort);
-        this.cutsceneView = new TutorialCutsceneView(tutorialRenderPort);
+        this.cutsceneView = new TutorialCutsceneView(tutorialRenderPort, this.assetPort);
         this.battleTutorialView = new TutorialBattleTutorialView(
             tutorialRenderPort,
             this.assetPort,
@@ -429,6 +429,7 @@ export class TutorialScene extends BaseScene {
         this.elapsedSeconds += deltaSeconds;
         this.uiActionHandled = false;
         this.guidance.update((this.cutscenes.isOpen() || this.#isPresentationLocked()) ? 0 : deltaSeconds);
+        this.cutsceneView.update(this.cutscenes.isOpen() ? this.#createCutsceneViewModel() : null, deltaSeconds);
 
         this.#ensureButtons();
         this.buttonHost.setPresentation(this.recordPopups.createButtonPresentation(
@@ -1029,7 +1030,8 @@ export class TutorialScene extends BaseScene {
      * @private
      */
     #applyCutsceneNext() {
-        if (!this.cutscenes.isOpen()) {
+        if (!this.cutscenes.isOpen()
+            || this.cutsceneView.revealAll(this.#createCutsceneViewModel())) {
             return;
         }
         const transition = this.cutscenes.advance();
@@ -1316,7 +1318,6 @@ export class TutorialScene extends BaseScene {
         enqueueSimulationCommand({ type, payload });
     }
 
-
     /** @returns {object} 비전투 뷰가 공유하는 직렬화 가능 표시 프레임입니다. @private */
     #createNonbattleViewFrame() {
         return Object.freeze({
@@ -1474,7 +1475,7 @@ export class TutorialScene extends BaseScene {
             floorActors: this.floorActorView,
             ready: this.#canAcceptBattleInput(),
             achievement: this.achievementBanner.getSnapshot(),
-            selection: this.battleSelection.getSnapshot()
+            selection: this.battleSelection.getSnapshot(), buttonHoverScales: this.buttonHost.getHoverScales()
         });
     }
 
@@ -1629,7 +1630,6 @@ export class TutorialScene extends BaseScene {
             ];
         return specs;
     }
-
 
     /**
      * 명령 경계에서 인벤토리 표시 페이지를 순환합니다.

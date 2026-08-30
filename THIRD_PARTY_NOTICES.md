@@ -20,9 +20,19 @@
 - 파일: `project/asset/font/LanaPixel.ttf`
 - 출처: 프로젝트 제공 폰트 파일
 - 라이선스: 전체 사용 가능(사용자 확인, 2026-08-28)
-- 상태: 배포 가능
+- 상태: 저장소 보존, 현재 런타임·배포 패키지에서는 미사용
 
-게임 런타임과 패키징 결과는 이 폰트를 사용한다.
+## 온글잎 박다현체 (Ownglyph PDH)
+
+- 파일: `project/asset/font/OwnglyphParkDahyun.ttf`
+- 원본 파일명: `온글잎 박다현체.ttf`
+- 저작권: Copyright © 2023 VoyagerX, inc. & Dahyeon Park, All rights reserved.
+- 제작·배포 주체: VoyagerX, inc. / 온글잎
+- 사용 조건: 상업적 사용 가능(사용자 확인, 2026-08-31)
+- 수정 조건: 폰트 내부 고지에 따라 파일 수정에는 VoyagerX, inc.의 사전 서면 허가가 필요
+- 상태: 원본 바이트를 수정하지 않고 런타임 이름으로 복사해 배포 가능
+
+현재 게임 런타임과 패키징 결과는 이 폰트를 사용한다.
 
 ## 프로젝트 생성 아트
 

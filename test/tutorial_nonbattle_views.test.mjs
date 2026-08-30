@@ -38,6 +38,8 @@ const COLORS = Object.freeze({
         PanelStrong: '#111',
         CardIconBackground: '#fff',
         Accent: '#0ff',
+        Primary: '#c55',
+        GaugeValue: '#211',
         Success: '#0f0',
         Danger: '#f00',
         OverlayDim: '#000'
@@ -184,6 +186,89 @@ test('비전투 화면의 핵심 콘텐츠와 버튼은 세 기준 화면의 UI 
             assert.doesNotThrow(() => JSON.stringify(buttonSpecs));
         }
     }
+});
+
+test('컷씬은 dialogue_bubble 에셋 위에 grapheme을 0.02초마다 한 글자씩 표시한다', () => {
+    const dialogueBubble = { width: 676, height: 96 };
+    const requestedAssetKeys = [];
+    const renderCommands = [];
+    const renderPort = {
+        ...NOOP_RENDER_PORT,
+        render(layer, command) {
+            renderCommands.push({ layer, command });
+        }
+    };
+    const assetPort = {
+        getUiAsset(key) {
+            requestedAssetKeys.push(key);
+            return key === 'dialogueBubble' ? dialogueBubble : null;
+        }
+    };
+    const view = new TutorialCutsceneView(renderPort, assetPort);
+    const viewModel = createViewModel(VIEWPORTS[0], {
+        state: {
+            open: true,
+            cutsceneId: 'opening',
+            title: 'N번째 플레이어',
+            cardIndex: 0,
+            cardCount: 2,
+            hasNextCard: true
+        },
+        card: {
+            speaker: '로라',
+            text: '가👨‍👩‍👧‍👦나'
+        },
+        presentationLocked: false
+    });
+    const getVisibleBody = () => renderCommands
+        .filter(({ command }) => (
+            command.shape === 'text'
+            && command.fill === COLORS.UI.GaugeValue
+            && command.text.length > 0
+        ))
+        .map(({ command }) => command.text);
+
+    view.update(viewModel, 0.019);
+    view.draw(viewModel);
+    assert.deepEqual(getVisibleBody(), []);
+    const bubbleCommand = renderCommands.find(
+        ({ command }) => command.image === dialogueBubble
+    )?.command;
+    assert.ok(bubbleCommand);
+    assert.ok(Math.abs((bubbleCommand.w / bubbleCommand.h) - (676 / 96)) < 0.03);
+    assert.equal(renderCommands.some(({ command }) => command.shape === 'roundRect'), false);
+
+    renderCommands.length = 0;
+    view.update(viewModel, 0.001);
+    view.draw(viewModel);
+    assert.deepEqual(getVisibleBody(), ['가']);
+
+    renderCommands.length = 0;
+    view.update(viewModel, 0.02);
+    view.draw(viewModel);
+    assert.deepEqual(getVisibleBody(), ['가👨‍👩‍👧‍👦']);
+
+    assert.equal(view.revealAll(viewModel), true);
+    renderCommands.length = 0;
+    view.draw(viewModel);
+    assert.deepEqual(getVisibleBody(), ['가👨‍👩‍👧‍👦나']);
+    assert.equal(view.revealAll(viewModel), false);
+
+    const nextCard = {
+        ...viewModel,
+        state: {
+            ...viewModel.state,
+            cardIndex: 1,
+            hasNextCard: false
+        },
+        card: { speaker: '시스템', text: '새 카드' }
+    };
+    renderCommands.length = 0;
+    view.update(nextCard, 0.02);
+    view.draw(nextCard);
+    assert.deepEqual(getVisibleBody(), ['새']);
+    assert.ok(requestedAssetKeys.length >= 5);
+    assert.equal(requestedAssetKeys.every((key) => key === 'dialogueBubble'), true);
 });
 
 test('메인 메뉴는 타이틀과 버튼 외 안내 문구·카메라 오버레이를 그리지 않는다', () => {

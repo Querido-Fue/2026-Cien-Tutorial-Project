@@ -123,6 +123,16 @@ export class TutorialButtonHost {
         return 1 + ((targetScale - 1) * hoverValue);
     }
 
+    /**
+     * 현재 구성된 모든 버튼의 애니메이션된 호버 배율을 스냅샷으로 반환합니다.
+     * @returns {Readonly<Record<string, number>>} 버튼 키별 현재 호버 배율입니다.
+     */
+    getHoverScales() {
+        return Object.freeze(Object.fromEntries(
+            Object.keys(this.#buttons).map((key) => [key, this.getHoverScale(key)])
+        ));
+    }
+
     /** 소유한 풀 요소를 반납하고 호스트를 초기화합니다. */
     destroy() {
         this.#releaseButtons();

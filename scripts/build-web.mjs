@@ -144,7 +144,10 @@ const copyRuntimeAssets = async (outputRoot) => {
     await mkdir(path.join(outputAssetRoot, 'font'), { recursive: true });
     await mkdir(path.join(outputAssetRoot, 'old', 'icon'), { recursive: true });
     await cp(path.join(assetRoot, 'tutorial'), path.join(outputAssetRoot, 'tutorial'), { recursive: true });
-    await cp(path.join(assetRoot, 'font', 'LanaPixel.ttf'), path.join(outputAssetRoot, 'font', 'LanaPixel.ttf'));
+    await cp(
+        path.join(assetRoot, 'font', 'OwnglyphParkDahyun.ttf'),
+        path.join(outputAssetRoot, 'font', 'OwnglyphParkDahyun.ttf')
+    );
     await cp(path.join(assetRoot, 'old', 'icon', 'logo.ico'), path.join(outputAssetRoot, 'old', 'icon', 'logo.ico'));
 };
 

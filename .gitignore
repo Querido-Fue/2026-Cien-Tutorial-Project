@@ -12,6 +12,8 @@
 !project/asset/**
 !project/engine/
 !project/engine/**
+!project/presentation/
+!project/presentation/**
 !project/license
 !project/license/**
 !test/

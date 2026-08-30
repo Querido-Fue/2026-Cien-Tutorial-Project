@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import {
     BrowserFileSystem,
@@ -32,6 +33,19 @@ const RELEASE_FIXTURE = Object.freeze({
         })
     ])
 });
+const TEST_DIRECTORY = path.dirname(fileURLToPath(import.meta.url));
+const PRESENTATION_ROOT = path.resolve(
+    TEST_DIRECTORY,
+    '..',
+    'project',
+    'presentation',
+    'public',
+    'ppt',
+    'nthplayer'
+);
+
+/** @param {string} source @param {RegExp} pattern @returns {number} 정규식 일치 수입니다. */
+const countMatches = (source, pattern) => [...source.matchAll(pattern)].length;
 
 class TestStorage {
     constructor() {
@@ -113,8 +127,15 @@ test('웹 빌드는 Pages 하위 경로에서 동작하는 정적 번들을 만�
         indexHtml,
         /src="\.\/releases\/0830_0520-abcdef1\/script\/main\.js"/
     );
+    assert.match(
+        indexHtml,
+        /href="\.\/asset\/font\/OwnglyphParkDahyun\.ttf\?v=0830_0520-abcdef1"/
+    );
     assert.doesNotMatch(indexHtml, /\.\.\/asset\//);
-    assert.match(styleSheet, /url\('\.\/asset\/font\/LanaPixel\.ttf\?v=0830_0520-abcdef1'\)/);
+    assert.match(
+        styleSheet,
+        /url\('\.\/asset\/font\/OwnglyphParkDahyun\.ttf\?v=0830_0520-abcdef1'\)/
+    );
     assert.doesNotMatch(assetManifest, /\.\.\/asset\//);
     assert.match(
         assetManifest,
@@ -140,7 +161,8 @@ test('웹 빌드는 Pages 하위 경로에서 동작하는 정적 번들을 만�
         'script',
         'main.js'
     ));
-    await stat(path.join(outputRoot, 'asset', 'font', 'LanaPixel.ttf'));
+    await stat(path.join(outputRoot, 'asset', 'font', 'OwnglyphParkDahyun.ttf'));
+    await assert.rejects(() => stat(path.join(outputRoot, 'asset', 'font', 'LanaPixel.ttf')));
     await stat(path.join(outputRoot, 'asset', 'tutorial', 'maps', 'first-floor-background.png'));
 });
 
@@ -181,6 +203,66 @@ test('Cloudflare 경로 프록시는 기준 경로에 후행 슬래시를 강제
     const response = await nthplayerWorker.fetch(new Request('https://jukchang.com/game/nthplayer?from=home'));
     assert.equal(response.status, 308);
     assert.equal(response.headers.get('location'), 'https://jukchang.com/game/nthplayer/?from=home');
+});
+
+test('웹 발표는 15장 연속 장면과 미리 로드한 게임 프레임을 함께 제공한다', async () => {
+    const indexHtml = await readFile(path.join(PRESENTATION_ROOT, 'index.html'), 'utf-8');
+    const styleSheet = await readFile(path.join(PRESENTATION_ROOT, 'presentation.css'), 'utf-8');
+    const slideStyleSheet = await readFile(path.join(PRESENTATION_ROOT, 'slides.css'), 'utf-8');
+    const controller = await readFile(path.join(PRESENTATION_ROOT, 'presentation.js'), 'utf-8');
+    const deckController = await readFile(
+        path.join(PRESENTATION_ROOT, 'presentation-deck.js'),
+        'utf-8'
+    );
+
+    assert.equal(countMatches(indexHtml, /\sdata-slide(?:\s|>)/g), 15);
+    assert.match(indexHtml, /data-prototype-slide/);
+    assert.match(indexHtml, /id="prototype-fullscreen"/);
+    assert.match(indexHtml, /data-source="\/game\/nthplayer\/"/);
+    assert.match(indexHtml, /assets\/lora-dungeon-panorama-v1\.png|slides\.css/);
+    assert.match(styleSheet, /--game-frame-opacity:\s*0/);
+    assert.match(styleSheet, /transition-property:[^;]*width[^;]*height/);
+    assert.match(slideStyleSheet, /\.prototype-frame-slot/);
+    assert.match(slideStyleSheet, /body\.is-game-expanded/);
+    assert.match(controller, /iframe\.loading = 'eager'/);
+    assert.match(controller, /nthPlayerPresentation/);
+    assert.match(controller, /setLayout\(layout = \{\}\)/);
+    assert.match(controller, /PROTOTYPE_TRANSITION_MS = 600/);
+    assert.match(controller, /contentWindow\?\.addEventListener\('keydown'/);
+    assert.match(deckController, /class PresentationDeck/);
+    assert.match(deckController, /event\.composedPath\(\)/);
+    assert.match(deckController, /nthplayer:slide-change/);
+});
+
+test('Cloudflare Worker는 발표 경로와 정적 자산을 전용 바인딩으로 제공한다', async () => {
+    const requestedUrls = [];
+    const environment = {
+        PRESENTATION_ASSETS: {
+            async fetch(request) {
+                requestedUrls.push(request.url);
+                return new Response('<!doctype html><title>Presentation</title>', {
+                    headers: { 'content-type': 'text/html; charset=utf-8' },
+                });
+            },
+        },
+    };
+
+    const redirectResponse = await nthplayerWorker.fetch(new Request(
+        'https://jukchang.com/ppt/nthplayer?draft=1'
+    ), environment);
+    assert.equal(redirectResponse.status, 308);
+    assert.equal(
+        redirectResponse.headers.get('location'),
+        'https://jukchang.com/ppt/nthplayer/?draft=1'
+    );
+
+    const presentationResponse = await nthplayerWorker.fetch(new Request(
+        'https://jukchang.com/ppt/nthplayer/'
+    ), environment);
+    assert.equal(presentationResponse.status, 200);
+    assert.deepEqual(requestedUrls, ['https://jukchang.com/ppt/nthplayer/']);
+    assert.equal(presentationResponse.headers.get('cache-control'), 'no-store, max-age=0');
+    assert.match(presentationResponse.headers.get('content-security-policy'), /frame-src 'self'/);
 });
 
 test('Cloudflare 경로 프록시는 기존 루트 준비 중 화면을 보존한다', async () => {

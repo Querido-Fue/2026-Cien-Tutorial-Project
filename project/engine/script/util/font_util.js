@@ -62,6 +62,53 @@ export function createFontString(options = {}) {
 }
 
 /**
+ * 지정한 웹폰트 묶음이 Canvas 측정 전에 준비될 때까지 기다립니다.
+ * 로드 실패나 제한 시간 초과 시 false를 반환하고 런타임은 폴백 폰트로 계속 진행합니다.
+ * @param {Array<{FAMILY:string,WEIGHT?:number,SIZE_PX?:number,SAMPLE?:string}>} faceSpecs - 로드할 폰트 사양입니다.
+ * @param {{fontSet?:FontFaceSet,timeoutMs?:number}} [options={}] - 폰트 집합과 제한 시간입니다.
+ * @returns {Promise<boolean>} 모든 폰트가 준비되었는지 여부입니다.
+ */
+export async function waitForFontFaces(faceSpecs, options = {}) {
+    const specs = Array.isArray(faceSpecs)
+        ? faceSpecs.filter((spec) => typeof spec?.FAMILY === 'string' && spec.FAMILY)
+        : [];
+    if (specs.length === 0) {
+        return true;
+    }
+
+    const fontSet = options.fontSet || globalThis.document?.fonts;
+    if (!fontSet || typeof fontSet.load !== 'function') {
+        return false;
+    }
+
+    const loadPromise = Promise.all(specs.map(async (spec) => {
+        const faces = await fontSet.load(createFontString({
+            family: spec.FAMILY,
+            weight: spec.WEIGHT ?? DEFAULT_FONT_WEIGHT,
+            sizePx: spec.SIZE_PX ?? DEFAULT_FONT_SIZE_PX
+        }), spec.SAMPLE || '');
+        return Array.from(faces || []).length > 0;
+    })).then((results) => results.every(Boolean)).catch(() => false);
+
+    const timeoutMs = Number(options.timeoutMs);
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+        return loadPromise;
+    }
+
+    let timeoutId;
+    try {
+        return await Promise.race([
+            loadPromise,
+            new Promise((resolve) => {
+                timeoutId = setTimeout(() => resolve(false), timeoutMs);
+            })
+        ]);
+    } finally {
+        clearTimeout(timeoutId);
+    }
+}
+
+/**
  * 텍스트 프리셋 데이터에서 Canvas font 속성 문자열을 생성합니다.
  * @param {object} presetData - 텍스트 프리셋 데이터입니다.
  * @param {object} [options={}] - 프리셋 해석 옵션입니다.

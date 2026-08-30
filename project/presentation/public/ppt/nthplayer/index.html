@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#100b14">
+  <title>N번째 플레이어 · 중간 발표</title>
+  <link rel="stylesheet" href="./presentation.css">
+  <link rel="stylesheet" href="./slides.css">
+  <script type="module" src="./presentation.js"></script>
+</head>
+<body>
+  <div class="cinematic-world" aria-hidden="true">
+    <div class="cinematic-world__panorama"></div>
+    <div class="cinematic-world__depth cinematic-world__depth--far"></div>
+    <div class="cinematic-world__depth cinematic-world__depth--near"></div>
+    <div class="cinematic-world__veil"></div>
+    <div class="cinematic-world__grain"></div>
+  </div>
+
+  <main id="presentation-stage" class="deck" aria-label="N번째 플레이어 중간 발표">
+    <section
+      class="slide slide--cover is-active"
+      data-slide
+      data-camera-x="27vw"
+      data-camera-y="1vh"
+      data-camera-scale="1.08"
+      data-tone="ember"
+      aria-hidden="false"
+    >
+      <div class="slide__content slide__content--cover">
+        <p class="eyebrow">CIEN TUTORIAL PROJECT · TEAM 1</p>
+        <h1 class="cover-title"><span>N</span>번째 플레이어</h1>
+        <p class="cover-question">Will you be the next player?</p>
+        <div class="cover-meta">
+          <span>최선우</span><span>정진</span><span>임형택</span><span>주창환</span><span>김유나</span>
+        </div>
+      </div>
+      <p class="slide-hint">클릭하여 던전 안으로</p>
+    </section>
+
+    <section
+      class="slide slide--mechanism"
+      data-slide
+      data-camera-x="21vw"
+      data-camera-y="-3vh"
+      data-camera-scale="1.22"
+      data-tone="ember"
+      aria-hidden="true"
+    >
+      <div class="slide__content slide__content--split">
+        <div>
+          <p class="eyebrow">01 · THE MECHANISM</p>
+          <h2>쓰러뜨리는 것만으로는<br><em>구할 수 없다.</em></h2>
+        </div>
+        <div class="mechanism-card glass-panel">
+          <p class="mechanism-card__lead">두 층에서 펼쳐지는<br>턴제 전략 보스전</p>
+          <dl class="stat-list">
+            <div><dt>전장</dt><dd>9 × 8 · 2개 층</dd></div>
+            <div><dt>제한</dt><dd>로라 행동 최대 12회</dd></div>
+            <div><dt>목표</dt><dd>HP 0 + 불안정도 제어</dd></div>
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    <section
+      class="slide slide--reference slide--center"
+      data-slide
+      data-camera-x="17vw"
+      data-camera-y="4vh"
+      data-camera-scale="1.34"
+      data-tone="ember"
+      aria-hidden="true"
+    >
+      <div class="slide__content slide__content--center">
+        <p class="eyebrow">02 · REFERENCE DNA</p>
+        <h2>전략은 읽기 쉬워야<br><em>깊어진다.</em></h2>
+        <div class="reference-grid">
+          <article class="reference-card"><span>01</span><h3>Demon School</h3><p>행동 전에 결과를 읽는 전술</p></article>
+          <article class="reference-card"><span>02</span><h3>Metal Slug Tactics</h3><p>짧고 선명한 한 턴의 밀도</p></article>
+          <article class="reference-card"><span>03</span><h3>Time Flies</h3><p>반복 자체가 서사가 되는 구조</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section
+      class="slide slide--concept"
+      data-slide
+      data-camera-x="12vw"
+      data-camera-y="-1vh"
+      data-camera-scale="1.2"
+      data-tone="ember"
+      aria-hidden="true"
+    >
+      <div class="slide__content">
+        <p class="eyebrow">03 · CONCEPT</p>
+        <h2>정답은 공격력이 아니라<br><em>행동의 순서</em>에 있다.</h2>
+        <ol class="concept-route">
+          <li><span>EXPLORE</span><strong>탐색</strong><p>고정된 전장에서 단서를 찾는다</p></li>
+          <li><span>COMBINE</span><strong>조합</strong><p>아이템과 경로를 한 수로 엮는다</p></li>
+          <li><span>STABILIZE</span><strong>안정화</strong><p>로라의 마음까지 계산한다</p></li>
+        </ol>
+      </div>
+    </section>
+
+    <section
+      class="slide slide--loop slide--center"
+      data-slide
+      data-camera-x="7vw"
+      data-camera-y="-6vh"
+      data-camera-scale="1.12"
+      data-tone="ember"
+      aria-hidden="true"
+    >
+      <div class="slide__content slide__content--center">
+        <p class="eyebrow">04 · CORE LOOP</p>
+        <h2>한 번의 선택이<br>다음 장면을 바꾼다.</h2>
+        <ol class="loop-track">
+          <li><i>1</i><strong>이동 + 행동</strong><small>경로를 확정하고 한 수를 둔다</small></li>
+          <li><i>2</i><strong>상태 계산</strong><small>HP와 불안정도가 함께 변한다</small></li>
+          <li><i>3</i><strong>로라의 반응</strong><small>거리와 감정에 따라 공격한다</small></li>
+          <li><i>4</i><strong>기록 + 재도전</strong><small>단서를 기억해 더 나은 빌드를 만든다</small></li>
+        </ol>
+      </div>
+    </section>
+
+    <section
+      class="slide slide--player"
+      data-slide
+      data-camera-x="2vw"
+      data-camera-y="2vh"
+      data-camera-scale="1.3"
+      data-tone="ember"
+      aria-hidden="true"
+    >
+      <div class="slide__content player-layout">
+        <div>
+          <p class="eyebrow">05 · PLAYER SYSTEM</p>
+          <h2>한 턴.<br><em>한 수.</em></h2>
+          <p class="slide-copy">매턴 최대 4칸의 경로와 행동 1회를 조합한다. 이동을 다 쓰지 않아도 되고, 행동 전후의 위치가 곧 리스크가 된다.</p>
+        </div>
+        <div class="player-board glass-panel" aria-label="플레이어 턴 구성 예시">
+          <div class="path-grid" aria-hidden="true">
+            <span></span><span></span><span class="path-grid__step">3</span><span></span><span></span>
+            <span></span><span class="path-grid__step">2</span><span class="path-grid__step">4</span><span></span><span></span>
+            <span class="path-grid__player">P</span><span class="path-grid__step">1</span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span class="path-grid__lora">L</span>
+          </div>
+          <div class="action-row">
+            <span>공격</span><span>아이템</span><span>회복</span><span>대기</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section
+      class="slide slide--lora slide--right"
+      data-slide
+      data-camera-x="-4vw"
+      data-camera-y="-1vh"
+      data-camera-scale="1.38"
+      data-tone="violet"
+      aria-hidden="true"
+    >
+      <div class="slide__content lora-layout">
+        <div class="lora-portrait-wrap" aria-hidden="true">
+          <span class="lora-aura"></span>
+          <img src="/game/nthplayer/asset/tutorial/characters/lora-portrait-unstable-pixel-v3.png" alt="">
+        </div>
+        <div>
+          <p class="eyebrow">06 · LORA SYSTEM</p>
+          <h2>로라는 움직이지 않는다.<br><em>상태가 움직인다.</em></h2>
+          <p class="slide-copy">거리와 불안정도에 따라 근접 공격과 전체 공격을 고른다. 같은 행동도 로라의 마음에 따라 전혀 다른 위험이 된다.</p>
+          <ol class="instability-scale" aria-label="로라 불안정도 단계">
+            <li class="is-stable"><b>0</b><span>안정</span><small>10</small></li>
+            <li><b>11</b><span>불안</span><small>40</small></li>
+            <li><b>41</b><span>동요</span><small>60</small></li>
+            <li class="is-unstable"><b>61</b><span>불안정</span><small>80</small></li>
+            <li class="is-collapse"><b>81</b><span>붕괴</span><small>100</small></li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <section
+      class="slide slide--items slide--center"
+      data-slide
+      data-camera-x="-10vw"
+      data-camera-y="4vh"
+      data-camera-scale="1.26"
+      data-tone="violet"
+      aria-hidden="true"
+    >
+      <div class="slide__content slide__content--center">
+        <p class="eyebrow">07 · ITEM SYSTEM</p>
+        <h2>아이템은 버프가 아니라<br><em>로라를 읽는 문장.</em></h2>
+        <div class="item-grid">
+          <article class="item-card"><img src="/game/nthplayer/asset/tutorial/ui/items/old-teddy-pixel-v2.png" alt="낡은 곰인형"><strong>낡은 곰인형</strong><span>피해를 낮추고 마음을 누그러뜨린다</span></article>
+          <article class="item-card"><img src="/game/nthplayer/asset/tutorial/ui/items/music-box-pixel-v2.png" alt="오르골"><strong>오르골</strong><span>한 턴의 평화를 만든다</span></article>
+          <article class="item-card"><img src="/game/nthplayer/asset/tutorial/ui/items/mirror-pixel-v2.png" alt="거울"><strong>거울</strong><span>로라의 행동을 한 번 멈춘다</span></article>
+          <article class="item-card"><img src="/game/nthplayer/asset/tutorial/ui/items/eyeliner-pixel-v2.png" alt="아이라인"><strong>아이라인</strong><span>불안정도를 직접 낮춘다</span></article>
+          <article class="item-card"><img src="/game/nthplayer/asset/tutorial/ui/items/diamond-pickaxe-pixel-v2.png" alt="다이아몬드 곡괭이"><strong>곡괭이</strong><span>벽을 넘어 새로운 경로를 연다</span></article>
+        </div>
+      </div>
+    </section>
+
+    <section
+      class="slide slide--maps"
+      data-slide
+      data-camera-x="-16vw"
+      data-camera-y="-3vh"
+      data-camera-scale="1.18"
+      data-tone="violet"
+      aria-hidden="true"
+    >
+      <div class="slide__content map-layout">
+        <div>
+          <p class="eyebrow">08 · MAP SYSTEM</p>
+          <h2>여섯 번째 반응 뒤,<br><em>세계가 무너진다.</em></h2>
+          <p class="slide-copy">9 × 8 고정 전장이 1층에서 지하층으로 이어진다. 외운 길은 사라지지 않지만, 같은 좌표의 의미는 완전히 바뀐다.</p>
+        </div>
+        <div class="map-stack" aria-label="1층과 지하층 맵">
+          <figure class="map-card map-card--first"><img src="/game/nthplayer/asset/tutorial/maps/first-floor-background.png" alt="로라의 방 1층"><figcaption><b>PHASE 01</b> 로라의 방 · 따뜻한 위장</figcaption></figure>
+          <figure class="map-card map-card--basement"><img src="/game/nthplayer/asset/tutorial/maps/basement-background.png" alt="로라의 방 지하층"><figcaption><b>PHASE 02</b> 지하층 · 드러난 균열</figcaption></figure>
+        </div>
+      </div>
+    </section>
+
+    <section
+      class="slide slide--cutscene slide--right"
+      data-slide
+      data-camera-x="-22vw"
+      data-camera-y="5vh"
+      data-camera-scale="1.34"
+      data-tone="collapse"
+      aria-hidden="true"
+    >
+      <div class="slide__content cutscene-layout">
+        <div class="cutscene-portrait" aria-hidden="true">
+          <img src="/game/nthplayer/asset/tutorial/characters/lora-portrait-anxious-pixel-v3.png" alt="">
+        </div>
+        <div class="cutscene-copy">
+          <p class="eyebrow">09 · CUT SCENE</p>
+          <h2>전투 사이에<br><em>기억이 열린다.</em></h2>
+          <blockquote>“먼저 나가볼게. 확인만 하고, 꼭 데리러 올게.”<br><span>꼭, 이라고 했다. 나는 그 말을 믿기로 했다.</span></blockquote>
+          <p class="slide-copy">아이템과 기록은 스펙뿐 아니라 로라를 대하는 이유를 바꾼다.</p>
+        </div>
+      </div>
+    </section>
+
+    <section
+      class="slide slide--balance slide--center"
+      data-slide
+      data-camera-x="-27vw"
+      data-camera-y="-2vh"
+      data-camera-scale="1.2"
+      data-tone="collapse"
+      aria-hidden="true"
+    >
+      <div class="slide__content slide__content--center">
+        <p class="eyebrow">10 · BALANCE</p>
+        <h2>빨리 끝낼수록<br><em>좋은 결말에서 멀어진다.</em></h2>
+        <div class="balance-board glass-panel">
+          <div class="balance-goal"><span>승리 조건</span><strong>로라 HP</strong><b>0</b><i>+</i><strong>불안정도</strong><b>≤ 10</b></div>
+          <div class="balance-gauges">
+            <div><span>공격만 반복</span><i class="gauge gauge--danger"><b></b></i><small>빠른 무력화 · 불안정 누적</small></div>
+            <div><span>탐색 + 조합</span><i class="gauge gauge--calm"><b></b></i><small>느린 접근 · 진엔딩 가능</small></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section
+      class="slide slide--prototype"
+      data-slide
+      data-prototype-slide
+      data-camera-x="-30vw"
+      data-camera-y="0vh"
+      data-camera-scale="1.08"
+      data-tone="collapse"
+      aria-hidden="true"
+    >
+      <div class="slide__content prototype-layout">
+        <div class="prototype-copy">
+          <p class="eyebrow">11 · LIVE PROTOTYPE</p>
+          <h2>설명 대신,<br><em>직접 한 수.</em></h2>
+          <p class="slide-copy">오른쪽 화면은 실제 빌드입니다. 게임 안에서는 자유롭게 조작하고, 화면 바깥을 클릭하면 다음 장으로 이동합니다.</p>
+          <div class="prototype-load-state"><i></i><span>게임을 준비하는 중</span></div>
+        </div>
+        <div class="prototype-frame-shell">
+          <div class="prototype-frame-slot" data-game-slot aria-hidden="true"></div>
+          <p>GAME BUILD · jukchang.com/game/nthplayer</p>
+        </div>
+      </div>
+    </section>
+
+    <section
+      class="slide slide--design slide--center"
+      data-slide
+      data-camera-x="-25vw"
+      data-camera-y="-5vh"
+      data-camera-scale="1.28"
+      data-tone="violet"
+      aria-hidden="true"
+    >
+      <div class="slide__content slide__content--center">
+        <p class="eyebrow">12 · UI &amp; ART SYSTEM</p>
+        <h2>익숙한 튜토리얼이<br><em>로라의 던전</em>이 되기까지.</h2>
+        <div class="design-progression">
+          <article><span>01</span><strong>FAMILIAR</strong><p>양피지와 친절한 안내</p></article>
+          <i aria-hidden="true"></i>
+          <article><span>02</span><strong>PERSONAL</strong><p>인형·거울·일기 속 흔적</p></article>
+          <i aria-hidden="true"></i>
+          <article><span>03</span><strong>FRACTURED</strong><p>보랏빛 지하와 붕괴한 세계</p></article>
+        </div>
+        <div class="palette-strip" aria-label="게임 색상 팔레트"><span></span><span></span><span></span><span></span><span></span></div>
+      </div>
+    </section>
+
+    <section
+      class="slide slide--roadmap"
+      data-slide
+      data-camera-x="-18vw"
+      data-camera-y="2vh"
+      data-camera-scale="1.17"
+      data-tone="violet"
+      aria-hidden="true"
+    >
+      <div class="slide__content roadmap-layout">
+        <div>
+          <p class="eyebrow">13 · WHAT WE DID / WHAT'S NEXT</p>
+          <h2>프로토타입에서<br><em>완성된 한 판</em>으로.</h2>
+        </div>
+        <div class="roadmap-columns">
+          <article class="glass-panel"><span>DONE</span><ul><li>2개 층 전투와 12회 행동 제한</li><li>아이템·불안정도·엔딩 루프</li><li>캐릭터·UI·맵 아트 적용</li><li>웹에서 바로 실행되는 빌드</li></ul></article>
+          <article class="glass-panel"><span>NEXT</span><ul><li>난이도와 아이템 수치 재조정</li><li>공격·피격·붕괴 연출 강화</li><li>컷씬·갤러리 마감</li><li>플레이테스트와 접근성 점검</li></ul></article>
+        </div>
+      </div>
+    </section>
+
+    <section
+      class="slide slide--finale slide--center"
+      data-slide
+      data-camera-x="-8vw"
+      data-camera-y="-1vh"
+      data-camera-scale="1.06"
+      data-tone="ember"
+      aria-hidden="true"
+    >
+      <div class="slide__content slide__content--center finale-content">
+        <p class="eyebrow">NTH PLAYER · THANK YOU</p>
+        <h2>로라를 쓰러뜨릴 것인가,<br><em>이해할 것인가.</em></h2>
+        <p>당신의 한 수가 엔딩이 됩니다.</p>
+        <code>jukchang.com/game/nthplayer</code>
+      </div>
+    </section>
+  </main>
+
+  <div class="deck-status" aria-hidden="true">
+    <span class="deck-status__current">01</span>
+    <span class="deck-status__line"><i></i></span>
+    <span class="deck-status__total">15</span>
+  </div>
+  <p id="slide-announcer" class="sr-only" aria-live="polite"></p>
+
+  <nthplayer-game-frame
+    id="nthplayer-game"
+    data-source="/game/nthplayer/"
+    aria-hidden="true"
+  ></nthplayer-game-frame>
+  <button
+    id="prototype-fullscreen"
+    class="prototype-fullscreen"
+    type="button"
+    data-no-advance
+    aria-pressed="false"
+    hidden
+  >
+    <span aria-hidden="true">↗</span>
+    <b>전체화면</b>
+  </button>
+</body>
+</html>

@@ -1,5 +1,8 @@
-const DEFAULT_FONT_FAMILY = 'LanaPixel, monospace';
-const MONO_FONT_FAMILY = 'Consolas, monospace';
+import {
+    PRIMARY_GAME_FONT_STACK
+} from '../ui/typography/font_family_constants.js';
+
+const DEFAULT_FONT_FAMILY = PRIMARY_GAME_FONT_STACK;
 const TYPOGRAPHY_SCALE = 1.2;
 
 /**
@@ -735,7 +738,8 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
                 RESET_ICON_SIZE_RATIO: 0.46,
                 FLIP_SECONDS: 0.5,
                 SIDE_TRAVEL_SECONDS: 0.26,
-                SIDE_START_AT_FLIP_RATIO: 0.9
+                SIDE_START_AT_FLIP_RATIO: 0.9,
+                HOVER_SCALE: 1.05
             }
         },
         INVENTORY: {
@@ -803,13 +807,13 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         ACTION_LORA_SCALE: 0.08
     },
     TYPOGRAPHY: {
-        TITLE: createTypographySpec(2.8, 34, 56, 800),
-        SUBTITLE: createTypographySpec(1.45, 19, 30, 600),
-        HEADING: createTypographySpec(1.65, 22, 34, 750),
-        BODY: createTypographySpec(1.25, 18, 26, 500),
-        SMALL: createTypographySpec(0.95, 14, 20, 500),
-        BUTTON: createTypographySpec(1.15, 17, 24, 700),
-        MONO: createTypographySpec(1, 14, 21, 600, MONO_FONT_FAMILY)
+        TITLE: createTypographySpec(2.8, 34, 56, 400),
+        SUBTITLE: createTypographySpec(1.45, 19, 30, 400),
+        HEADING: createTypographySpec(1.65, 22, 34, 400),
+        BODY: createTypographySpec(1.25, 18, 26, 400),
+        SMALL: createTypographySpec(0.95, 14, 20, 400),
+        BUTTON: createTypographySpec(1.15, 17, 24, 400),
+        MONO: createTypographySpec(1, 14, 21, 400)
     },
     TEXT: {
         TITLE: 'N번째 플레이어',

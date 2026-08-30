@@ -49,6 +49,7 @@ async function createFakeRepository(root) {
     await createFile(join(root, 'project', 'license', 'pretendard.txt'));
     await createFile(join(root, 'project', 'asset', 'tutorial', 'runtime.png'));
     await createFile(join(root, 'project', 'asset', 'font', 'LanaPixel.ttf'));
+    await createFile(join(root, 'project', 'asset', 'font', 'OwnglyphParkDahyun.ttf'));
     await createFile(join(
         root,
         'project',
@@ -135,7 +136,8 @@ test('패키징은 고정 NW.js 입력과 런타임 에셋만 새 폴더에 조�
     assert.equal(result.outputDirectory, outputDirectory);
     await access(join(outputDirectory, NWJS_PACKAGE_CONTRACT.executableName));
     await access(join(outputDirectory, 'asset', 'tutorial', 'runtime.png'));
-    await access(join(outputDirectory, 'asset', 'font', 'LanaPixel.ttf'));
+    await access(join(outputDirectory, 'asset', 'font', 'OwnglyphParkDahyun.ttf'));
+    await assert.rejects(() => access(join(outputDirectory, 'asset', 'font', 'LanaPixel.ttf')));
     await access(join(outputDirectory, 'asset', 'old', 'icon', 'logo.png'));
     await access(join(outputDirectory, 'THIRD_PARTY_NOTICES.md'));
     await assert.rejects(() => access(join(outputDirectory, 'nw.exe')));

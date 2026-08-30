@@ -84,7 +84,7 @@ GitHub Actions는 Node `22.18.0`, `npm ci --ignore-scripts`, `npm test`, 쓰기 
 1. 입력 폴더 이름이 `nwjs-v0.108.0-win-x64`이다.
 2. `nw.exe` 제품 버전과 필수 Windows 런타임 파일·디렉터리가 계약과 일치한다.
 3. 출력 폴더가 아직 존재하지 않는다.
-4. 패키지는 `engine`, `asset/tutorial`, LanaPixel 폰트, 앱 아이콘, 런타임
+4. 패키지는 `engine`, `asset/tutorial`, 온글잎 박다현체 폰트, 앱 아이콘, 런타임
    `package.json`, `license`, `THIRD_PARTY_NOTICES.md`만 복사한다.
 5. `nw.exe`는 `nth-player.exe`로 바꾸고 NW.js `credits.html`과 결정론적
    `BUILD_INFO.json`을 보존한다.

@@ -20,6 +20,9 @@ NW.js·웹 브라우저와 Canvas/WebGL 기반의 2D 턴제 전술 프로토타�
 `.github/workflows/pages.yml`을 통해 전체 검증 뒤 GitHub Pages에 자동 배포됩니다. 로컬
 실행과 `jukchang.com/game/nthplayer` 경로 프록시 구성은
 [`docs/web-deployment.md`](docs/web-deployment.md)를 확인합니다.
+웹 발표는 `jukchang.com/ppt/nthplayer/`에서 제공하며, 한 장의 던전 파노라마를 따라
+15개 장면이 연속 이동합니다. 프로토타입 장에서는 처음부터 미리 로드한 동일 출처 게임
+iframe을 재사용하고, 0.6초 `easeOutExpo` 슬롯·전체 화면 전환과 Escape 복귀를 제공합니다.
 
 ## 재현 가능한 Windows 패키징
 
@@ -91,6 +94,7 @@ npm run build:web
 | 경로 | 역할 |
 | --- | --- |
 | `project/engine/` | NW.js·브라우저 공용 HTML 진입점, 엔진, 튜토리얼 런타임 |
+| `project/presentation/` | Cloudflare Worker가 제공하는 15장 웹 발표, 연속 카메라 덱, 게임 iframe 프레임 컨트롤러와 발표 전용 자산 |
 | `project/asset/` | 게임 아트, 폰트, 사운드 원본 및 런타임 에셋 |
 | `project/license/` | 배포 에셋 라이선스 |
 | `test/` | Node 기반 회귀 테스트 |

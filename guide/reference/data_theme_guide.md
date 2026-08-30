@@ -50,6 +50,7 @@ const DATA_REGISTRY = Object.freeze({
 | `OVERLAY_RENDER_CONSTANTS` | `data/display/overlay_render_constants.js` |
 | `VIGNETTE_CONSTANTS` | `data/display/vignette_constants.js` |
 | `DISPLAY_SURFACE_DATA` | `data/display/display_surface_data.js` |
+| `TEXT_RENDER_DATA` | `data/display/text_render_data.js` |
 | `MOUSE_BUTTON_INPUT_DATA` | `data/input/mouse_button_input_data.js` |
 | `TUTORIAL_GAME_DATA` | `data/game/tutorial_game_data.js` |
 | `TUTORIAL_RECORD_PRESENTATION_DATA` | `data/game/tutorial_record_presentation_data.js` |

@@ -1,6 +1,8 @@
+import { PRIMARY_GAME_FONT_STACK } from '../typography/font_family_constants.js';
+
 const UI_WIDTH_UNIT = 'WW';
 const UI_HEIGHT_UNIT = 'WH';
-const DEFAULT_BUTTON_FONT_FAMILY = 'Pretendard Variable, arial';
+const DEFAULT_BUTTON_FONT_FAMILY = PRIMARY_GAME_FONT_STACK;
 const OVERLAY_BUTTON_ALIGN = 'right';
 
 /**
@@ -69,7 +71,7 @@ export const BUTTON_CONSTANTS = Object.freeze({
         margin: 0.8,
         radius: 0.3,
         fontSize: 1,
-        fontWeight: 600
+        fontWeight: 400
     }),
     OVERLAY_LINK_BUTTON: createOverlayButtonPreset({
         width: 6,
@@ -77,7 +79,7 @@ export const BUTTON_CONSTANTS = Object.freeze({
         margin: 0.65,
         radius: 0.3,
         fontSize: 0.8,
-        fontWeight: 500,
+        fontWeight: 400,
         iconType: 'arrow'
     })
 });

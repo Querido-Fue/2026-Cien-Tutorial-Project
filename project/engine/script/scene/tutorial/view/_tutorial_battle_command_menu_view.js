@@ -8,6 +8,11 @@ import {
     drawTutorialPixelAsset,
     fitTutorialAssetRect
 } from './_tutorial_asset_view_helpers.js';
+import {
+    resolveTutorialCommandHoverScale,
+    scaleTutorialCommandFont,
+    scaleTutorialCommandRect
+} from './_tutorial_command_hover_presentation.js';
 
 const MOVE_PHASE = 'move';
 const ACTION_PHASE = 'action';
@@ -112,6 +117,10 @@ export class TutorialBattleCommandMenuView {
         try {
             this.#syncPhase();
             const geometry = this.#resolveGeometry();
+            const hoverScale = Math.max(
+                1,
+                Number(this.#config().HOVER_SCALE) || 1
+            );
             return this.#resolveActions(viewModel.snapshot.phase).map((action) => ({
                 key: action.key,
                 ...geometry[action.slot],
@@ -122,6 +131,7 @@ export class TutorialBattleCommandMenuView {
                 enabled: action.enabled,
                 active: action.active,
                 focused: action.focused,
+                hoverScale,
                 inspectable: true,
                 command: { type: action.type, payload: action.payload }
             }));
@@ -272,7 +282,15 @@ export class TutorialBattleCommandMenuView {
         const { colors, fonts } = this.#frame;
         const config = this.#config();
         const alpha = this.#resolveActionAlpha(action);
-        const transformed = this.#scaleRectY(rect, verticalScale);
+        const hoverScale = resolveTutorialCommandHoverScale(
+            this.#frame.hud,
+            action.key
+        );
+        const visualRect = scaleTutorialCommandRect(
+            rect,
+            hoverScale
+        );
+        const transformed = this.#scaleRectY(visualRect, verticalScale);
         drawTutorialPixelAsset(this.#renderPort, {
             layer: 'ui',
             image: this.#assetPort.getUiAsset?.('actionButton'),
@@ -284,20 +302,22 @@ export class TutorialBattleCommandMenuView {
         if (verticalScale < 0.18) {
             return;
         }
-        const labelY = rect.y + (rect.h * (Number(config.PRIMARY_LABEL_Y_RATIO) || 0.52));
+        const labelY = visualRect.y + (
+            visualRect.h * (Number(config.PRIMARY_LABEL_Y_RATIO) || 0.52)
+        );
         if (kind === 'move') {
             const label = truncateBattleViewText(
                 this.#renderPort,
                 action.label,
-                fonts.SMALL,
-                rect.w * 0.72
+                scaleTutorialCommandFont(fonts.SMALL, hoverScale),
+                visualRect.w * 0.72
             );
             drawBattleViewText(this.#renderPort, {
                 layer: 'ui',
                 text: label,
-                x: rect.x + (rect.w * 0.5),
+                x: visualRect.x + (visualRect.w * 0.5),
                 y: labelY,
-                font: fonts.SMALL,
+                font: scaleTutorialCommandFont(fonts.SMALL, hoverScale),
                 fill: colors.UI.OnPrimary || colors.UI.Text,
                 align: 'center',
                 alpha: contentAlpha
@@ -306,14 +326,14 @@ export class TutorialBattleCommandMenuView {
         }
         const iconSize = Math.max(
             1,
-            Math.round(rect.h * (Number(config.PRIMARY_ICON_SIZE_RATIO) || 0.28))
+            Math.round(visualRect.h * (Number(config.PRIMARY_ICON_SIZE_RATIO) || 0.28))
         );
-        const iconCenterX = rect.x + (rect.w * 0.36);
+        const iconCenterX = visualRect.x + (visualRect.w * 0.36);
         this.#drawIcon(
             'attackIcon',
             {
                 x: iconCenterX - (iconSize * 0.5),
-                y: rect.y + ((rect.h - iconSize) * 0.5),
+                y: visualRect.y + ((visualRect.h - iconSize) * 0.5),
                 w: iconSize,
                 h: iconSize
             },
@@ -323,9 +343,12 @@ export class TutorialBattleCommandMenuView {
         drawBattleViewText(this.#renderPort, {
             layer: 'ui',
             text: action.label,
-            x: rect.x + (rect.w * 0.59),
+            x: visualRect.x + (visualRect.w * 0.59),
             y: labelY,
-            font: fonts.BUTTON || fonts.SMALL,
+            font: scaleTutorialCommandFont(
+                fonts.BUTTON || fonts.SMALL,
+                hoverScale
+            ),
             fill: colors.UI.OnPrimary || colors.UI.Text,
             align: 'center',
             alpha: contentAlpha
@@ -345,20 +368,24 @@ export class TutorialBattleCommandMenuView {
         }
         const config = this.#config();
         const alpha = this.#resolveActionAlpha(action);
+        const visualRect = scaleTutorialCommandRect(
+            rect,
+            resolveTutorialCommandHoverScale(this.#frame.hud, action.key)
+        );
         drawTutorialPixelAsset(this.#renderPort, {
             layer: 'ui',
             image: this.#assetPort.getUiAsset?.('waitHealButton'),
-            rect: this.#scaleRectY(rect, verticalScale),
+            rect: this.#scaleRectY(visualRect, verticalScale),
             mode: 'exact',
             alpha
         });
         const iconSize = Math.max(
             1,
-            Math.round(rect.w * (Number(config.RESET_ICON_SIZE_RATIO) || 0.46))
+            Math.round(visualRect.w * (Number(config.RESET_ICON_SIZE_RATIO) || 0.46))
         );
         this.#drawIcon('resetIcon', {
-            x: rect.x + ((rect.w - iconSize) * 0.5),
-            y: rect.y + ((rect.h - iconSize) * 0.5),
+            x: visualRect.x + ((visualRect.w - iconSize) * 0.5),
+            y: visualRect.y + ((visualRect.h - iconSize) * 0.5),
             w: iconSize,
             h: iconSize
         }, alpha * clampProgress(verticalScale * 2.4), verticalScale);
@@ -387,7 +414,7 @@ export class TutorialBattleCommandMenuView {
         for (const slot of ['heal', 'idle']) {
             const action = actions[slot];
             const target = geometry[slot];
-            const rect = {
+            const baseRect = {
                 x: Math.round(lerp(
                     origin.x - (target.w * 0.5),
                     target.x,
@@ -401,6 +428,10 @@ export class TutorialBattleCommandMenuView {
                 w: target.w,
                 h: target.h
             };
+            const rect = scaleTutorialCommandRect(
+                baseRect,
+                resolveTutorialCommandHoverScale(this.#frame.hud, action.key)
+            );
             const alpha = this.#resolveActionAlpha(action) * value;
             drawTutorialPixelAsset(this.#renderPort, {
                 layer: 'ui',

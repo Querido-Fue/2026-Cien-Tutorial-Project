@@ -35,6 +35,13 @@
 | `image` | `x`, `y`, `w`, `h`, `image` | `alpha` |
 | `arrow` | `x`, `y`, `w`, `h` | `fill`, `rotation`, `alpha` |
 
+`TEXT_RENDER_DATA.PIXEL_PROFILES`에 등록된 폰트는 동일한 `text` 명령을 유지하되
+`PixelTextRenderer`가 작은 문자열 Canvas로 래스터화한 뒤 최근접 확대합니다. 현재
+`OwnglyphParkDahyun`은 22px 이하에서 1px 알파 임계 처리, 그보다 큰 크기에서 2px 도트
+격자를 사용합니다. `measureText()`도 같은 저해상도 font 메트릭을 사용하므로 줄바꿈과 버튼
+배치는 실제 도트 결과 폭을 기준으로 계산합니다. 프로필 밖의 폰트와 그라디언트 텍스트는
+기존 `fillText()` 경로를 유지합니다.
+
 ## 3. 공통 스타일
 
 | 프로퍼티 | 타입 | 설명 |

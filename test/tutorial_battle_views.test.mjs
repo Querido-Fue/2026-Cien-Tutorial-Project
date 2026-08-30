@@ -1089,6 +1089,9 @@ test('이동 확정 뒤 우하단 행동 메뉴는 확대된 공격과 60% 회�
     );
     assert.equal(actionSpecs.every((spec) => spec.label === ''), true);
     assert.equal(actionSpecs.every((spec) => spec.drawBackground === false), true);
+    assert.equal(actionSpecs.every((spec) => (
+        spec.hoverScale === TUTORIAL_GAME_DATA.LAYOUT.ACTIONS.CLUSTER.HOVER_SCALE
+    )), true);
     for (let leftIndex = 0; leftIndex < actionSpecs.length; leftIndex++) {
         for (let rightIndex = leftIndex + 1; rightIndex < actionSpecs.length; rightIndex++) {
             assert.equal(
@@ -1122,6 +1125,53 @@ test('이동 확정 뒤 우하단 행동 메뉴는 확대된 공격과 60% 회�
     assert.equal(commands.some((command) => (
         ['근접', '원거리', '회복', '대기', '액션'].includes(command.text)
     )), false);
+
+    const basePrimaryFrame = commands.find(
+        (command) => command.image === assets.actionButton
+    );
+    const baseSideFrames = commands.filter(
+        (command) => command.image === assets.waitHealButton
+    );
+    commands.length = 0;
+    viewModel.hud.buttonHoverScales = {
+        'battle-ranged': 1.025,
+        'battle-heal': 1.05,
+        'battle-idle': 1.05
+    };
+    view.draw(viewModel);
+
+    const hoveredPrimaryFrame = commands.find(
+        (command) => command.image === assets.actionButton
+    );
+    const hoveredSideFrames = commands.filter(
+        (command) => command.image === assets.waitHealButton
+    );
+    assert.equal(
+        hoveredPrimaryFrame.w,
+        Math.round(basePrimaryFrame.w * 1.025)
+    );
+    assert.equal(
+        hoveredPrimaryFrame.h,
+        Math.round(basePrimaryFrame.h * 1.025)
+    );
+    for (let index = 0; index < baseSideFrames.length; index++) {
+        assert.equal(
+            hoveredSideFrames[index].w,
+            Math.round(baseSideFrames[index].w * 1.05)
+        );
+        assert.equal(
+            hoveredSideFrames[index].h,
+            Math.round(baseSideFrames[index].h * 1.05)
+        );
+    }
+    const centerOf = (rect) => ({
+        x: rect.x + (rect.w * 0.5),
+        y: rect.y + (rect.h * 0.5)
+    });
+    const basePrimaryCenter = centerOf(basePrimaryFrame);
+    const hoveredPrimaryCenter = centerOf(hoveredPrimaryFrame);
+    assert.ok(Math.abs(basePrimaryCenter.x - hoveredPrimaryCenter.x) <= 0.5);
+    assert.ok(Math.abs(basePrimaryCenter.y - hoveredPrimaryCenter.y) <= 0.5);
 });
 
 test('우하단 커맨드 전환은 90% 플립 뒤 보조 버튼을 펼치고 역순에서는 먼저 접는다', () => {

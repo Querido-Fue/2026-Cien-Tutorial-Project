@@ -1,5 +1,7 @@
+import { PRIMARY_GAME_FONT_STACK } from './font_family_constants.js';
+
 const UI_WIDTH_UNIT = 'WW';
-const DEFAULT_TEXT_FONT_FAMILY = 'Pretendard Variable, arial';
+const DEFAULT_TEXT_FONT_FAMILY = PRIMARY_GAME_FONT_STACK;
 
 /**
  * 텍스트 크기 단위 값을 생성합니다.
@@ -33,16 +35,16 @@ function createTextPreset(sizeValue, weight) {
  * 텍스트 렌더링에 사용되는 타이포그래피 설정 상수 모음입니다.
  */
 export const TEXT_CONSTANTS = Object.freeze({
-    H1: createTextPreset(2, 700),
-    H2: createTextPreset(1.6, 600),
+    H1: createTextPreset(2, 400),
+    H2: createTextPreset(1.6, 400),
     H3: createTextPreset(1.3, 400),
-    H3_BOLD: createTextPreset(1.3, 700),
-    H4: createTextPreset(1.1, 300),
-    H4_BOLD: createTextPreset(1.1, 700),
-    H5: createTextPreset(1, 300),
-    H5_BOLD: createTextPreset(1, 700),
-    H6: createTextPreset(0.85, 300),
-    H6_BOLD: createTextPreset(0.85, 700),
-    SETTINGS_DESC: createTextPreset(0.9, 300),
+    H3_BOLD: createTextPreset(1.3, 400),
+    H4: createTextPreset(1.1, 400),
+    H4_BOLD: createTextPreset(1.1, 400),
+    H5: createTextPreset(1, 400),
+    H5_BOLD: createTextPreset(1, 400),
+    H6: createTextPreset(0.85, 400),
+    H6_BOLD: createTextPreset(0.85, 400),
+    SETTINGS_DESC: createTextPreset(0.9, 400),
     SETTINGS_SLIDER_VALUE: createTextPreset(0.9, 400)
 });
