@@ -122,6 +122,7 @@ const LIGHT_TACTICS_THEME = Object.freeze({
         CardHeader: '#d9d9d9',
         GaugeTrack: '#d9d9d9',
         GaugeHp: '#EC6565',
+        GaugeValue: '#2b2025',
         GaugeInstability: '#E9A44C',
         Danger: '#d9485f',
         Success: '#168f62',

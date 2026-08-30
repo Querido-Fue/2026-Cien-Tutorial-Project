@@ -727,6 +727,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
                     GAP_X: 0,
                     GAP_Y: 0
                 },
+                HP_VALUE: { X: 111, Y: 47, WIDTH: 20, HEIGHT: 8 },
                 HP_BAR: { X: 47, Y: 55, WIDTH: 167, HEIGHT: 6 },
                 PAGE_PREVIOUS: { X: 12, Y: 14, WIDTH: 14, HEIGHT: 24 },
                 PAGE_NEXT: { X: 206, Y: 14, WIDTH: 14, HEIGHT: 24 }
@@ -765,7 +766,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         TITLE_STARTER_ENTER_SECONDS: 0.36,
         TITLE_STARTER_MORPH_SECONDS: 0.58,
         TITLE_BATTLE_REVEAL_SECONDS: 0.42,
-        GAUGE_SECONDS: 0.34,
+        GAUGE_SECONDS: 0.3,
         PARTICLE_COUNT: 12,
         SHAKE_TILE_RATIO: 0.055,
         BUTTON_HOVER_SCALE: 1.035,

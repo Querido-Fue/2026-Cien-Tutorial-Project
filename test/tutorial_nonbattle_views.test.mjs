@@ -399,6 +399,12 @@ test('갤러리 책갈피와 결과 버튼은 Figma 관찰 좌표와 책 내부 
             h: Math.round(token.h * 720)
         }))
     );
+    assert.deepEqual(
+        sectionButtons.map((button) => button.label),
+        GALLERY_SECTIONS.map((section) => section.title)
+    );
+    assert.equal(sectionButtons.every((button) => button.tooltip === false), true);
+    assert.equal(sectionButtons.every((button) => button.fontScale === 0.76), true);
     assert.equal(galleryButtons.some((button) => button.key === 'gallery-play'), false);
     assert.equal(
         galleryButtons.find((button) => button.key === 'gallery-prev').backgroundImageFlipX,

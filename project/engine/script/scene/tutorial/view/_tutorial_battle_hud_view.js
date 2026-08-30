@@ -6,64 +6,16 @@ import {
     truncateBattleViewText,
     wrapBattleViewText
 } from './_tutorial_battle_view_helpers.js';
+import { drawBattleHpValue } from './_tutorial_battle_hp_value_view.js';
 import {
     drawTutorialPixelAsset,
     fitTutorialAssetRect
 } from './_tutorial_asset_view_helpers.js';
 import { TutorialBattleCommandMenuView } from './_tutorial_battle_command_menu_view.js';
-
-const LORA_STATUS_PANEL_LAYOUT = Object.freeze({
-    SOURCE: Object.freeze({ WIDTH: 247, HEIGHT: 90 }),
-    PORTRAIT_VIEWPORT: Object.freeze({ X: 0, Y: 0, WIDTH: 55, HEIGHT: 56 }),
-    PORTRAIT_SCALE: 1.22,
-    PORTRAIT_VISUAL_CENTER: Object.freeze({ X: 0.55, Y: 0.4 }),
-    PORTRAIT_CLIP: Object.freeze([
-        Object.freeze({ X: 25, Y: 6 }),
-        Object.freeze({ X: 49, Y: 27 }),
-        Object.freeze({ X: 25, Y: 50 }),
-        Object.freeze({ X: 6, Y: 27 })
-    ]),
-    PORTRAIT_FRAME_CLIPS: Object.freeze([
-        Object.freeze([
-            Object.freeze({ X: 0, Y: 27 }),
-            Object.freeze({ X: 25, Y: 0 }),
-            Object.freeze({ X: 25, Y: 6 }),
-            Object.freeze({ X: 6, Y: 27 })
-        ]),
-        Object.freeze([
-            Object.freeze({ X: 25, Y: 0 }),
-            Object.freeze({ X: 55, Y: 27 }),
-            Object.freeze({ X: 49, Y: 27 }),
-            Object.freeze({ X: 25, Y: 6 })
-        ]),
-        Object.freeze([
-            Object.freeze({ X: 55, Y: 27 }),
-            Object.freeze({ X: 25, Y: 56 }),
-            Object.freeze({ X: 25, Y: 50 }),
-            Object.freeze({ X: 49, Y: 27 })
-        ]),
-        Object.freeze([
-            Object.freeze({ X: 25, Y: 56 }),
-            Object.freeze({ X: 0, Y: 27 }),
-            Object.freeze({ X: 6, Y: 27 }),
-            Object.freeze({ X: 25, Y: 50 })
-        ])
-    ]),
-    HP_BAR: Object.freeze({ X: 62, Y: 56, WIDTH: 149, HEIGHT: 4 }),
-    INSTABILITY_BAR: Object.freeze({ X: 51, Y: 70, WIDTH: 149, HEIGHT: 4 })
-});
-
-const ITEM_DESCRIPTION_PANEL_LAYOUT = Object.freeze({
-    SOURCE: Object.freeze({ WIDTH: 86, HEIGHT: 128 }),
-    TITLE: Object.freeze({ X: 10, Y: 2, WIDTH: 66, HEIGHT: 10 }),
-    STATUS: Object.freeze({ X: 10, Y: 16, WIDTH: 66, HEIGHT: 10 }),
-    DESCRIPTION: Object.freeze({ X: 14, Y: 29, WIDTH: 58, HEIGHT: 64 }),
-    PAGE: Object.freeze({ X: 22, Y: 94, WIDTH: 42, HEIGHT: 8 }),
-    MAX_DESCRIPTION_LINES: 5,
-    LINE_HEIGHT_WH: 2.1,
-    MIN_LINE_HEIGHT_PX: 14,
-    MAX_LINE_HEIGHT_PX: 17
-});
+import {
+    ITEM_DESCRIPTION_PANEL_LAYOUT,
+    LORA_STATUS_PANEL_LAYOUT
+} from './_tutorial_battle_hud_layout.js';
 
 /**
  * @class TutorialBattleHudView
@@ -333,6 +285,16 @@ export class TutorialBattleHudView {
             loraHp / loraMaxHp, colors.UI.GaugeHp,
             expectedLoraHp / loraMaxHp, 'loraHpBar'
         );
+        drawBattleHpValue(this.#renderPort, {
+            rect: this.#resolveSourcePanelPart(
+                panelRect,
+                LORA_STATUS_PANEL_LAYOUT.HP_VALUE,
+                LORA_STATUS_PANEL_LAYOUT.SOURCE
+            ),
+            value: loraHp,
+            font: this.#frame.fonts.SMALL,
+            fill: colors.UI.GaugeValue || colors.UI.Text
+        });
         this.#drawEmbeddedGauge(
             instabilityBarRect,
             instability / 100, colors.UI.GaugeInstability,
@@ -414,6 +376,16 @@ export class TutorialBattleHudView {
             playerHp / playerMaxHp, colors.UI.GaugeHp,
             expectedPlayerHp / playerMaxHp, null, false
         );
+        drawBattleHpValue(this.#renderPort, {
+            rect: this.#resolvePlayerPanelPart(
+                playerPanelRect,
+                inventoryLayout.PLAYER_PANEL?.HP_VALUE,
+                inventoryLayout
+            ),
+            value: playerHp,
+            font: this.#frame.fonts.SMALL,
+            fill: colors.UI.GaugeValue || colors.UI.Text
+        });
     }
 
     /** 픽셀 설명 패널의 실제 내부 안전 영역에 아이템 정보를 그립니다. @private */

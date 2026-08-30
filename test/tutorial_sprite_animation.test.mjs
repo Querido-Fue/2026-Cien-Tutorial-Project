@@ -95,6 +95,25 @@ test('비루프 타격은 impact를 한 번만 내고 완료 뒤 ambient로 복�
     assert.equal(animator.hasBlockingAnimation(), false);
 });
 
+test('로라 공격 뒤 붕괴 상태도 확대·축소 없이 느린 부유로 복귀한다', () => {
+    const animator = createAnimator();
+    animator.syncActors([{
+        id: 'lora', actorType: 'lora', x: 4, y: 0, alive: true,
+        facing: 'left', ambientAnimationId: 'unstable'
+    }]);
+    assert.equal(animator.play('lora', 'melee', { facing: 'left' }), true);
+    animator.syncActors([{
+        id: 'lora', actorType: 'lora', x: 4, y: 0, alive: true,
+        facing: 'left', ambientAnimationId: 'collapse'
+    }]);
+
+    animator.update(1);
+    const snapshot = animator.getSnapshot().lora;
+    assert.equal(snapshot.animationId, 'collapse');
+    assert.equal(snapshot.fallbackEffect, 'breathing');
+    assert.equal(snapshot.locked, false);
+});
+
 test('높은 우선순위 피격은 행동을 중단하고 큰 델타에도 잠금을 남기지 않는다', () => {
     const animator = createAnimator();
     animator.syncActors([{
