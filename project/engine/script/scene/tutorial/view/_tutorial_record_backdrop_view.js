@@ -1,3 +1,5 @@
+const HOST_ID = 'tutorial-record-backdrop';
+
 /** @param {number} value @returns {string} CSS에 사용할 짧은 소수 문자열입니다. */
 function formatCssNumber(value) {
     return String(Number(Number(value).toFixed(3)));
@@ -9,21 +11,19 @@ function formatCssNumber(value) {
  */
 export class TutorialRecordBackdropView {
     #config;
-    #getElementById;
-    #element;
-    #originalStyle;
+    #document;
+    #anchor;
+    #host;
 
     /**
      * @param {object} config - 블러 대상과 강도 설정입니다.
-     * @param {Function} [getElementById] - 테스트 가능한 DOM 조회 포트입니다.
+     * @param {Document|null} [documentRef] - 테스트 가능한 DOM 포트입니다.
      */
-    constructor(config = {}, getElementById = null) {
+    constructor(config = {}, documentRef = globalThis.document || null) {
         this.#config = Object.freeze({ ...config });
-        this.#getElementById = typeof getElementById === 'function'
-            ? getElementById
-            : (id) => globalThis.document?.getElementById?.(id) || null;
-        this.#element = null;
-        this.#originalStyle = null;
+        this.#document = documentRef;
+        this.#anchor = null;
+        this.#host = null;
     }
 
     /**
@@ -38,11 +38,13 @@ export class TutorialRecordBackdropView {
             this.clear();
             return;
         }
-        const element = this.#resolveElement();
-        if (!element?.style) {
+        const anchor = this.#resolveAnchor();
+        const bounds = anchor?.getBoundingClientRect?.();
+        const host = this.#ensureHost();
+        if (!host?.style || !(bounds?.width > 0) || !(bounds?.height > 0)) {
+            this.clear();
             return;
         }
-        this.#captureOriginalStyle(element.style);
         const blur = Math.max(0, Number(this.#config.BLUR_PX) || 0) * progress;
         const targetBrightness = Math.max(
             0,
@@ -54,48 +56,63 @@ export class TutorialRecordBackdropView {
             Math.min(1, Number(this.#config.DIM_ALPHA) || 0)
         ) * progress;
         const filter = `blur(${formatCssNumber(blur)}px) brightness(${formatCssNumber(brightness)})`;
-        element.style.webkitBackdropFilter = filter;
-        element.style.backdropFilter = filter;
-        element.style.backgroundColor = `rgba(5, 3, 8, ${formatCssNumber(dimAlpha)})`;
-        element.style.willChange = 'backdrop-filter, background-color';
+        host.style.display = 'block';
+        host.style.left = `${formatCssNumber(bounds.left)}px`;
+        host.style.top = `${formatCssNumber(bounds.top)}px`;
+        host.style.width = `${formatCssNumber(bounds.width)}px`;
+        host.style.height = `${formatCssNumber(bounds.height)}px`;
+        host.style.webkitBackdropFilter = filter;
+        host.style.backdropFilter = filter;
+        host.style.backgroundColor = `rgba(5, 3, 8, ${formatCssNumber(dimAlpha)})`;
+        host.style.willChange = 'backdrop-filter, background-color';
     }
 
-    /** 기록 팝업이 닫히면 vignette surface의 기존 inline style을 정확히 복원합니다. */
+    /** 기록 팝업이 닫히면 전용 backdrop을 숨기고 합성 효과를 제거합니다. */
     clear() {
-        if (!this.#element?.style || !this.#originalStyle) {
+        if (!this.#host?.style) {
             return;
         }
-        Object.assign(this.#element.style, this.#originalStyle);
-        this.#originalStyle = null;
+        this.#host.style.display = 'none';
+        this.#host.style.webkitBackdropFilter = '';
+        this.#host.style.backdropFilter = '';
+        this.#host.style.backgroundColor = 'transparent';
+        this.#host.style.willChange = '';
     }
 
     /** DOM 스타일과 참조를 정리합니다. */
     destroy() {
         this.clear();
-        this.#element = null;
-        this.#getElementById = () => null;
+        this.#host?.remove?.();
+        this.#host = null;
+        this.#anchor = null;
+        this.#document = null;
     }
 
-    /** @returns {object|null} 블러를 담당할 vignette 요소입니다. @private */
-    #resolveElement() {
-        if (!this.#element) {
-            this.#element = this.#getElementById(
+    /** @returns {HTMLElement|null} 게임 화면과 같은 경계를 제공하는 요소입니다. @private */
+    #resolveAnchor() {
+        if (!this.#anchor) {
+            this.#anchor = this.#document?.getElementById?.(
                 String(this.#config.ELEMENT_ID || 'vignette')
-            );
+            ) || null;
         }
-        return this.#element;
+        return this.#anchor;
     }
 
-    /** @param {object} style - 복원할 CSSStyleDeclaration입니다. @private */
-    #captureOriginalStyle(style) {
-        if (this.#originalStyle) {
-            return;
+    /** @returns {HTMLElement|null} 책 아래에 놓이는 전용 블러 계층입니다. @private */
+    #ensureHost() {
+        if (this.#host && this.#host.isConnected !== false) {
+            return this.#host;
         }
-        this.#originalStyle = Object.freeze({
-            webkitBackdropFilter: style.webkitBackdropFilter || '',
-            backdropFilter: style.backdropFilter || '',
-            backgroundColor: style.backgroundColor || '',
-            willChange: style.willChange || ''
-        });
+        if (!this.#document?.body?.appendChild || !this.#document?.createElement) {
+            return null;
+        }
+        this.#document.getElementById?.(HOST_ID)?.remove?.();
+        const host = this.#document.createElement('div');
+        host.id = HOST_ID;
+        host.className = 'tutorial-record-backdrop';
+        host.setAttribute?.('aria-hidden', 'true');
+        this.#document.body.appendChild(host);
+        this.#host = host;
+        return host;
     }
 }

@@ -91,26 +91,68 @@ test('기록 책은 0.6초 easeOutExpo로 열리고 0.4초 easeInExpo로 역재�
     assert.equal(controller.hasWork(), false);
 });
 
-test('기록 배경은 게임 vignette를 진행도만큼 블러·감광하고 닫힐 때 복원한다', () => {
-    const style = {
-        webkitBackdropFilter: '',
-        backdropFilter: '',
-        backgroundColor: 'transparent',
-        willChange: ''
+test('기록 배경은 책 아래 전용 계층에서 게임 장면만 블러·감광한다', () => {
+    const children = [];
+    const anchor = {
+        getBoundingClientRect: () => ({
+            left: 12,
+            top: 8,
+            width: 1280,
+            height: 720
+        })
+    };
+    const documentRef = {
+        body: {
+            appendChild(child) {
+                children.push(child);
+            }
+        },
+        createElement() {
+            return {
+                style: {},
+                isConnected: true,
+                remove() {
+                    this.isConnected = false;
+                }
+            };
+        },
+        getElementById(id) {
+            return id === 'vignette' ? anchor : null;
+        }
     };
     const backdrop = new TutorialRecordBackdropView(
         TUTORIAL_RECORD_PRESENTATION_DATA.BACKDROP,
-        () => ({ style })
+        documentRef
     );
     backdrop.sync({ visible: true, progress: 0.5 });
 
-    assert.equal(style.backdropFilter, 'blur(5px) brightness(0.79)');
-    assert.equal(style.webkitBackdropFilter, style.backdropFilter);
-    assert.equal(style.backgroundColor, 'rgba(5, 3, 8, 0.14)');
+    const [host] = children;
+    assert.equal(host.id, 'tutorial-record-backdrop');
+    assert.equal(host.className, 'tutorial-record-backdrop');
+    assert.deepEqual(
+        {
+            display: host.style.display,
+            left: host.style.left,
+            top: host.style.top,
+            width: host.style.width,
+            height: host.style.height
+        },
+        {
+            display: 'block',
+            left: '12px',
+            top: '8px',
+            width: '1280px',
+            height: '720px'
+        }
+    );
+    assert.equal(host.style.backdropFilter, 'blur(5px) brightness(0.79)');
+    assert.equal(host.style.webkitBackdropFilter, host.style.backdropFilter);
+    assert.equal(host.style.backgroundColor, 'rgba(5, 3, 8, 0.14)');
     backdrop.clear();
-    assert.equal(style.backdropFilter, '');
-    assert.equal(style.backgroundColor, 'transparent');
-    assert.equal(style.willChange, '');
+    assert.equal(host.style.display, 'none');
+    assert.equal(host.style.backdropFilter, '');
+    assert.equal(host.style.backgroundColor, 'transparent');
+    assert.equal(host.style.willChange, '');
 });
 
 test('전투 기록 책은 top 레이어에서 확대·페이드·페이지 프레임을 함께 적용한다', () => {

@@ -81,8 +81,9 @@ noscript {
 
 .tutorial-guidance-focus-panel {
     position: absolute;
+    inset: 0;
     pointer-events: none;
-    will-change: left, top, width, height, backdrop-filter;
+    will-change: backdrop-filter, mask-image, -webkit-mask-image;
 }
 
 #overlaylayerhost {
@@ -98,6 +99,15 @@ noscript {
 #vignette {
     z-index: 50;
     background-color: rgba(0, 0, 0, 0);
+    pointer-events: none;
+}
+
+.tutorial-record-backdrop {
+    position: fixed;
+    z-index: 70;
+    display: none;
+    overflow: hidden;
+    border-radius: 8px;
     pointer-events: none;
 }
 

@@ -37,7 +37,7 @@ test('포커스 전환 중에는 다음 클릭 키를 받지 않되 Escape 건�
     });
 });
 
-test('아웃포커스 계층은 선택 영역을 네 패널로 비우고 블러를 최대 8px로 제한한다', () => {
+test('아웃포커스 계층은 선택 영역을 감싼 원에서 바깥으로 블러를 점진적으로 강화한다', () => {
     const children = [];
     const createElement = () => ({
         style: {},
@@ -80,16 +80,21 @@ test('아웃포커스 계층은 선택 영역을 네 패널로 비우고 블러�
     });
 
     const [host] = children;
-    const [top, bottom, left, right] = host.children;
+    const [radialPanel] = host.children;
     assert.deepEqual(
         { left: host.style.left, top: host.style.top, w: host.style.width, h: host.style.height },
         { left: '5px', top: '7px', w: '100px', h: '50px' }
     );
-    assert.equal(top.style.height, '10px');
-    assert.equal(bottom.style.top, '30px');
-    assert.equal(left.style.width, '20px');
-    assert.equal(right.style.left, '60px');
-    assert.equal(top.style.backdropFilter, 'blur(8px) brightness(0.84)');
+    assert.equal(host.children.length, 1);
+    assert.equal(radialPanel.style.backdropFilter, 'blur(8px) brightness(0.84)');
+    assert.match(
+        radialPanel.style.maskImage,
+        /^radial-gradient\(circle at 40px 20px,/
+    );
+    assert.match(radialPanel.style.maskImage, /transparent 22\.361px/);
+    assert.match(radialPanel.style.maskImage, /rgba\(0, 0, 0, 0\.5\)/);
+    assert.match(radialPanel.style.maskImage, /#000 40\.361px, #000 100%\)$/);
+    assert.equal(radialPanel.style.maskImage, radialPanel.style.webkitMaskImage);
     view.clear();
     assert.equal(host.style.display, 'none');
 });

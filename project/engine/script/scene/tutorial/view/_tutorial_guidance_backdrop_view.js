@@ -1,9 +1,21 @@
 const HOST_ID = 'tutorial-guidance-focus-backdrop';
-const PANEL_NAMES = Object.freeze(['top', 'bottom', 'left', 'right']);
+const RADIAL_MASK_STOPS = Object.freeze([
+    Object.freeze({ ratio: 0.14, alpha: 0.04 }),
+    Object.freeze({ ratio: 0.32, alpha: 0.18 }),
+    Object.freeze({ ratio: 0.5, alpha: 0.5 }),
+    Object.freeze({ ratio: 0.68, alpha: 0.82 }),
+    Object.freeze({ ratio: 0.86, alpha: 0.96 })
+]);
 
 /** @param {number} value @param {number} min @param {number} max */
 function clamp(value, min, max) {
     return Math.min(max, Math.max(min, Number(value) || 0));
+}
+
+/** @param {number} value @returns {string} */
+function formatCssNumber(value) {
+    const rounded = Math.round((Number(value) || 0) * 1000) / 1000;
+    return String(Object.is(rounded, -0) ? 0 : rounded);
 }
 
 /**
@@ -14,14 +26,14 @@ export class TutorialGuidanceBackdropView {
     #config;
     #document;
     #host;
-    #panels;
+    #panel;
 
     /** @param {object} config @param {Document|null} documentRef */
     constructor(config = {}, documentRef = globalThis.document || null) {
         this.#config = config;
         this.#document = documentRef;
         this.#host = null;
-        this.#panels = Object.create(null);
+        this.#panel = null;
     }
 
     /**
@@ -80,31 +92,14 @@ export class TutorialGuidanceBackdropView {
             Number(this.#config.FOCUS_FEATHER_CSS_PX) || 18
         );
         const visual = Object.freeze({ blurPx, brightness, dimAlpha });
-
-        this.#placePanel('top', 0, 0, bounds.width, top, visual, {
-            direction: 'bottom', feather
+        const halfWidth = Math.max(0, right - left) * 0.5;
+        const halfHeight = Math.max(0, bottom - top) * 0.5;
+        this.#placePanel(visual, {
+            centerX: left + halfWidth,
+            centerY: top + halfHeight,
+            radius: Math.hypot(halfWidth, halfHeight),
+            feather
         });
-        this.#placePanel(
-            'bottom',
-            0,
-            bottom,
-            bounds.width,
-            bounds.height - bottom,
-            visual,
-            { direction: 'top', feather }
-        );
-        this.#placePanel('left', 0, top, left, bottom - top, visual, {
-            direction: 'right', feather
-        });
-        this.#placePanel(
-            'right',
-            right,
-            top,
-            bounds.width - right,
-            bottom - top,
-            visual,
-            { direction: 'left', feather }
-        );
     }
 
     /** 현재 backdrop만 즉시 숨깁니다. */
@@ -118,7 +113,7 @@ export class TutorialGuidanceBackdropView {
     destroy() {
         this.#host?.remove?.();
         this.#host = null;
-        this.#panels = Object.create(null);
+        this.#panel = null;
     }
 
     /** @returns {HTMLElement|null} @private */
@@ -136,64 +131,61 @@ export class TutorialGuidanceBackdropView {
         const host = this.#document.createElement('div');
         host.id = HOST_ID;
         host.className = 'tutorial-guidance-focus-backdrop';
-        for (const name of PANEL_NAMES) {
-            const panel = this.#document.createElement('div');
-            panel.className = `tutorial-guidance-focus-panel is-${name}`;
-            host.appendChild(panel);
-            this.#panels[name] = panel;
-        }
+        const panel = this.#document.createElement('div');
+        panel.className = 'tutorial-guidance-focus-panel is-radial';
+        host.appendChild(panel);
         this.#document.body.appendChild(host);
         this.#host = host;
+        this.#panel = panel;
         return host;
     }
 
     /** @private */
-    #placePanel(name, x, y, width, height, visual, edge) {
-        const panel = this.#panels[name];
+    #placePanel(visual, focus) {
+        const panel = this.#panel;
         if (!panel) {
             return;
         }
-        const safeWidth = Math.max(0, width);
-        const safeHeight = Math.max(0, height);
-        if (safeWidth < 0.5 || safeHeight < 0.5) {
-            panel.style.display = 'none';
-            return;
-        }
         panel.style.display = 'block';
-        panel.style.left = `${x}px`;
-        panel.style.top = `${y}px`;
-        panel.style.width = `${safeWidth}px`;
-        panel.style.height = `${safeHeight}px`;
+        panel.style.left = '0';
+        panel.style.top = '0';
+        panel.style.width = '100%';
+        panel.style.height = '100%';
         panel.style.backgroundColor = `rgba(7, 3, 10, ${visual.dimAlpha})`;
-        const filter = `blur(${visual.blurPx}px) brightness(${visual.brightness})`;
+        const filter = `blur(${formatCssNumber(visual.blurPx)}px) brightness(${formatCssNumber(visual.brightness)})`;
         panel.style.backdropFilter = filter;
         panel.style.webkitBackdropFilter = filter;
-        const mask = this.#createFeatherMask(edge.direction, edge.feather, {
-            width: safeWidth,
-            height: safeHeight
-        });
+        const mask = this.#createRadialMask(focus);
         panel.style.maskImage = mask;
         panel.style.webkitMaskImage = mask;
+        panel.style.maskMode = 'alpha';
+        panel.style.maskRepeat = 'no-repeat';
+        panel.style.webkitMaskRepeat = 'no-repeat';
     }
 
     /** @private */
-    #createFeatherMask(direction, requestedFeather, size) {
-        const vertical = direction === 'top' || direction === 'bottom';
-        const length = vertical ? size.height : size.width;
-        const feather = Math.min(length, Math.max(0, requestedFeather));
+    #createRadialMask(focus) {
+        const centerX = Math.max(0, Number(focus.centerX) || 0);
+        const centerY = Math.max(0, Number(focus.centerY) || 0);
+        const radius = Math.max(0, Number(focus.radius) || 0);
+        const feather = Math.max(0, Number(focus.feather) || 0);
+        const center = `${formatCssNumber(centerX)}px ${formatCssNumber(centerY)}px`;
+        const innerRadius = `${formatCssNumber(radius)}px`;
         if (feather <= 0.5) {
-            return 'linear-gradient(#000, #000)';
+            return `radial-gradient(circle at ${center}, transparent 0, transparent ${innerRadius}, #000 ${innerRadius}, #000 100%)`;
         }
-        const solidStop = Math.max(0, length - feather);
-        if (direction === 'bottom') {
-            return `linear-gradient(to bottom, #000 0, #000 ${solidStop}px, transparent ${length}px)`;
-        }
-        if (direction === 'top') {
-            return `linear-gradient(to bottom, transparent 0, #000 ${feather}px, #000 100%)`;
-        }
-        if (direction === 'right') {
-            return `linear-gradient(to right, #000 0, #000 ${solidStop}px, transparent ${length}px)`;
-        }
-        return `linear-gradient(to right, transparent 0, #000 ${feather}px, #000 100%)`;
+        const transitionStops = RADIAL_MASK_STOPS.map(({ ratio, alpha }) => {
+            const stopRadius = formatCssNumber(radius + (feather * ratio));
+            return `rgba(0, 0, 0, ${alpha}) ${stopRadius}px`;
+        });
+        const outerRadius = formatCssNumber(radius + feather);
+        return [
+            `radial-gradient(circle at ${center}`,
+            'transparent 0',
+            `transparent ${innerRadius}`,
+            ...transitionStops,
+            `#000 ${outerRadius}px`,
+            '#000 100%)'
+        ].join(', ');
     }
 }
