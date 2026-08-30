@@ -131,7 +131,7 @@ export class PerformanceDebugger {
         const font = createFontString({
             weight: PERFORMANCE_DEBUG_CONSTANTS.FONT_WEIGHT,
             sizePx: fontSize,
-            family: "Pretendard Variable, arial"
+            family: "PFStardust, sans-serif"
         });
         const lineHeight = fontSize + Math.max(
             PERFORMANCE_DEBUG_CONSTANTS.LINE_GAP_MIN,

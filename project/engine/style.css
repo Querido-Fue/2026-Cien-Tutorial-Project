@@ -15,7 +15,8 @@ body {
     min-height: 100dvh;
     overflow: hidden;
     background-color: #101010;
-    font-family: 'OwnglyphParkDahyun', sans-serif;
+    font-family: 'PFStardust', sans-serif;
+    font-weight: 400;
     font-synthesis: none;
     touch-action: none;
     user-select: none;
@@ -151,7 +152,7 @@ noscript {
     display: none;
     color: #e5e1d8;
     font-size: clamp(19px, 2.1vw, 34px);
-    font-weight: 400;
+    font-weight: 700;
     line-height: 1.15;
     text-align: center;
     text-shadow: 0 2px 0 #101010, 0 0 14px rgba(0, 0, 0, 0.72);
@@ -160,7 +161,7 @@ noscript {
 
 .pointer-lock-focus-copy strong {
     font-size: clamp(28px, 3.2vw, 52px);
-    font-weight: 400;
+    font-weight: 800;
     line-height: 1;
 }
 
@@ -241,7 +242,7 @@ body.pointer-lock-initial-resuming #pointer-lock-focus-overlay {
     background: rgba(16, 16, 16, 0.9);
     box-shadow: 0 3px 12px rgba(0, 0, 0, 0.48);
     color: #f1ede4;
-    font-family: 'OwnglyphParkDahyun', sans-serif;
+    font-family: 'PFStardust', sans-serif;
     font-size: clamp(12px, 0.9vw, 16px);
     font-weight: 400;
     line-height: 1.25;
@@ -267,9 +268,25 @@ body.pointer-lock-initial-resuming #pointer-lock-focus-overlay {
 }
 
 @font-face {
-    font-family: 'OwnglyphParkDahyun';
+    font-family: 'PFStardust';
     font-weight: 400;
     font-style: normal;
     font-display: block;
-    src: url('../asset/font/OwnglyphParkDahyun.ttf') format('truetype');
+    src: url('../asset/font/PFStardustS.ttf') format('truetype');
+}
+
+@font-face {
+    font-family: 'PFStardust';
+    font-weight: 700;
+    font-style: normal;
+    font-display: block;
+    src: url('../asset/font/PFStardustBold.ttf') format('truetype');
+}
+
+@font-face {
+    font-family: 'PFStardust';
+    font-weight: 800;
+    font-style: normal;
+    font-display: block;
+    src: url('../asset/font/PFStardustExtraBold.ttf') format('truetype');
 }

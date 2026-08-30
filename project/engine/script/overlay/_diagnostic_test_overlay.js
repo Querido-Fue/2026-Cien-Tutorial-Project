@@ -43,11 +43,11 @@ const DIAGNOSTIC_TEST_COPY = Object.freeze({
 });
 
 const DIAGNOSTIC_FONT_SPECS = Object.freeze({
-    BODY: { sizeUIWW: 1.0, min: 13, max: 17, family: 'Pretendard Variable', weight: 500 },
-    LABEL: { sizeUIWW: 0.94, min: 12, max: 16, family: 'Pretendard Variable', weight: 720 },
-    SECTION: { sizeUIWW: 0.82, min: 11, max: 14, family: 'Pretendard Variable', weight: 760 },
-    KEY: { sizeUIWW: 0.76, min: 9, max: 13, family: 'Pretendard Variable', weight: 760 },
-    KEY_SMALL: { sizeUIWW: 0.62, min: 8, max: 11, family: 'Pretendard Variable', weight: 760 },
+    BODY: { sizeUIWW: 1.0, min: 13, max: 17, family: 'PFStardust', weight: 400 },
+    LABEL: { sizeUIWW: 0.94, min: 12, max: 16, family: 'PFStardust', weight: 700 },
+    SECTION: { sizeUIWW: 0.82, min: 11, max: 14, family: 'PFStardust', weight: 800 },
+    KEY: { sizeUIWW: 0.76, min: 9, max: 13, family: 'PFStardust', weight: 800 },
+    KEY_SMALL: { sizeUIWW: 0.62, min: 8, max: 11, family: 'PFStardust', weight: 800 },
     MONO: { sizeUIWW: 0.86, min: 11, max: 15, family: 'Consolas', weight: 500 },
     MONO_SMALL: { sizeUIWW: 0.74, min: 10, max: 13, family: 'Consolas', weight: 500 }
 });

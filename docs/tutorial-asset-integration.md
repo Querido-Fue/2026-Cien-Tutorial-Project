@@ -3,20 +3,22 @@
 ## 1. 원본과 런타임 복사본
 
 - 이 저장소에는 프롬프트가 예시한 `incoming_assets/`가 없고, 사용자 지시에 따라 `project/asset/`을 원본의 단일 기준으로 사용한다.
-- 원본 파일은 이름 변경·덮어쓰기·삭제하지 않는다. `npm run import:assets`가 `TUTORIAL_ASSET_MANIFEST`를 읽고 `project/asset/tutorial/` 아래 ASCII 파일명으로 `COPYFILE_EXCL` 복사한다.
+- `project/asset/img2/`는 임시 반입 폴더다. 실제 신규 파일은 검토 뒤 `project/asset/img/`의 의미별 폴더로 옮기고, 동일한 중복본은 `img2`를 정리할 때까지 그대로 둘 수 있다.
+- 정식 원본인 `project/asset/img/` 파일은 import 과정에서 덮어쓰거나 삭제하지 않는다. `npm run import:assets`가 `TUTORIAL_ASSET_MANIFEST`를 읽고 `project/asset/tutorial/` 아래 ASCII 파일명으로 `COPYFILE_EXCL` 복사한다.
 - 이미 같은 파일이 있으면 SHA-256이 같을 때만 멱등 성공으로 처리하고, 내용이 다른 파일은 충돌 오류로 중단한다.
 - `npm run check:assets`는 원본과 런타임 복사본의 PNG IHDR 실제 크기, 선언된 기대/실제 크기, 경로 containment, 중복 ID와 폴백 참조를 검사한다.
 
 ## 2. 런타임 계약
 
-`project/engine/script/data/game/tutorial_asset_manifest.js`가 다음 다섯 도메인을 조합한다.
+`project/engine/script/data/game/tutorial_asset_manifest.js`가 다음 여섯 도메인을 조합한다.
 
 | 도메인 | 데이터 모듈 | 런타임 정책 |
 | --- | --- | --- |
 | 두 층 맵 | `_tutorial_map_asset_entries.js` | 배경+격자가 모두 준비되면 분리 레이어를 사용하고, 하나라도 실패하면 `full` 합성본으로 폴백 |
 | 메뉴·HUD·팝업 | `_tutorial_ui_asset_entries.js` | 투명 여백은 manifest `sourceRect`로 한 번 crop하고 빈 도안 위 문구·수치는 런타임 한글 텍스트로 표시 |
 | 아이템 | `_tutorial_item_asset_entries.js` | 16×16 개별 PNG를 월드와 인벤토리가 같은 논리 ID로 사용 |
-| 캐릭터 스프라이트 | `_tutorial_sprite_asset_entries.js` | 플레이어 5개, 로라 1개, 슬라임 2개 시트를 원본 크기로 보존하고 `TUTORIAL_SPRITE_CLIPS`가 source rect를 선택 |
+| 캐릭터 스프라이트 | `_tutorial_sprite_asset_entries.js` | 플레이어 7개, 로라 7개, 슬라임 2개 시트를 원본 크기로 보존하고 `TUTORIAL_SPRITE_CLIPS`가 source rect를 선택 |
+| 전투 효과 | `_tutorial_effect_asset_entries.js` | 로라 광역 폭발 12610×580 시트를 런타임에 한 번 로드하고 2D `sourceRect`로 현재 프레임만 그림 |
 | 레거시 | `_tutorial_legacy_asset_entries.js` | 초상화와 기존 정적 로라 이미지를 비스프라이트 표시용 호환 자산으로 유지 |
 
 로더는 PNG 자연 크기가 계약과 다르면 `image-dimensions-mismatch`로 실패시키며, crop canvas와 2D/WebGL 확대 모두 nearest-neighbor를 사용한다. 뷰는 실제 경로나 `Image.onload`를 알지 않고 `TutorialAssetPort`만 조회한다.
@@ -63,6 +65,8 @@ Google Drive의 UI 폴더에 있는 `ingame_item_*.png` 파일명과 `시스템 
   판정한다. `TutorialAchievementBanner`는 판정 결과의 표시 수명만 소유한다.
 - 메인 타이틀처럼 글자가 포함된 완성 로고는 그대로 쓰되, 버튼·턴·상태·아이템 설명·튜토리얼·업적의 빈 프레임에는 현재 상태에서 계산한 한글 텍스트를 얹는다.
 - 캐릭터 시트의 프레임 해석과 누락 동작 폴백은 `docs/tutorial-sprite-animation.md`를 단일 기준으로 삼는다. 기존 정적 로라 이미지는 초상화·호환 폴백 외에는 전투 배우 렌더에 사용하지 않는다.
+- `rora breathing.png`는 몸 좌/우와 머리 좌/우가 모두 포함된 256×64 수정본을 정식 원본으로 사용한다. 플레이어와 로라 대기는 몸을 고정하고 머리만 1픽셀 이동하는 합성 클립이며, 머리 레이어는 그림자를 만들지 않는다.
+- `EXPLOSION!.png`는 970×580 프레임 13장의 가로 시트다. 두 번째 전면 플래시 프레임은 재생 목록에서 제외하고 첫 플래시는 낮은 알파로 제한한다.
 - 사운드는 독립 `TUTORIAL_AUDIO_MANIFEST`와 전용 MP3 감사 경로로 통합했다. 이미지 로더는
   계속 PNG만 소유하며 오디오 버스·cue·폴백 정책은 `docs/tutorial-audio.md`를 따른다.
 

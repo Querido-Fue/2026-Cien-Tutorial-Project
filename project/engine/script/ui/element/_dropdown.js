@@ -92,9 +92,9 @@ export class DropdownElement extends BaseUIElement {
         this.iconColor = properties.iconColor || ColorSchemes.Overlay.Text.Control || this.textColor;
 
         this.font = properties.font || createFontString({
-            weight: 600,
+            weight: 700,
             sizePx: this.height * 0.5,
-            family: "Pretendard Variable, arial"
+            family: "PFStardust, sans-serif"
         });
 
         this.hoverScaleMultiplier = 1.03;

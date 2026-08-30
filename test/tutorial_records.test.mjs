@@ -4,6 +4,7 @@ import test from 'node:test';
 import { TUTORIAL_CONTENT_DATA } from '../project/engine/script/data/game/tutorial_content_data.js';
 import { TUTORIAL_GAME_DATA } from '../project/engine/script/data/game/tutorial_game_data.js';
 import { TutorialGalleryController } from '../project/engine/script/scene/tutorial/_tutorial_gallery_controller.js';
+import { TutorialRecordSpawnPlanner } from '../project/engine/script/scene/tutorial/_tutorial_record_spawn_planner.js';
 import {
     createDefaultTutorialMeta,
     unlockTutorialRecord
@@ -17,7 +18,7 @@ function positionKey(value) {
     return `${value.x},${value.y}`;
 }
 
-test('일기·개발자 기록 10개는 빈 타일에 한 번씩 배치된다', () => {
+test('일기·개발자 기록 10개와 층별 후보 스폰포인트는 빈 타일에 고정된다', () => {
     const contentRecordIds = [
         ...TUTORIAL_CONTENT_DATA.RECORDS.LORA,
         ...TUTORIAL_CONTENT_DATA.RECORDS.DEVELOPER
@@ -46,6 +47,47 @@ test('일기·개발자 기록 10개는 빈 타일에 한 번씩 배치된다', 
         assert.equal(new Set(recordPositions).size, recordPositions.length, floor.id);
         assert.equal(recordPositions.some((key) => occupied.has(key)), false, floor.id);
     }
+});
+
+test('미획득 기록과 현재 페이즈 스폰포인트를 각각 무작위로 뽑아 최대 두 개만 배치한다', () => {
+    const randomValues = [0.9, 0.8, 0, 0.2];
+    const planner = new TutorialRecordSpawnPlanner(TUTORIAL_GAME_DATA.FLOORS, {
+        random: () => randomValues.shift()
+    });
+    const planned = planner.createFloorRecords();
+
+    assert.deepEqual(planned, [
+        [{
+            id: 'f1-developer-diary-1',
+            recordId: 'developer-diary:3',
+            x: 1,
+            y: 6
+        }],
+        [{
+            id: 'b1-lora-diary-6',
+            recordId: 'lora-diary:1',
+            x: 1,
+            y: 3
+        }]
+    ]);
+    assert.equal(planned.flat().length, 2);
+    assert.equal(new Set(planned.flat().map(({ recordId }) => recordId)).size, 2);
+
+    const allRecordIds = [
+        ...TUTORIAL_CONTENT_DATA.RECORDS.LORA,
+        ...TUTORIAL_CONTENT_DATA.RECORDS.DEVELOPER
+    ].map(({ id }) => id);
+    const lastRecordPlanner = new TutorialRecordSpawnPlanner(TUTORIAL_GAME_DATA.FLOORS, {
+        random: () => 0
+    });
+    const onlyLastRecord = lastRecordPlanner.createFloorRecords(
+        allRecordIds.filter((recordId) => recordId !== 'developer-diary:3')
+    );
+    assert.deepEqual(onlyLastRecord[0].map(({ recordId }) => recordId), [
+        'developer-diary:3'
+    ]);
+    assert.deepEqual(onlyLastRecord[1], []);
+    assert.deepEqual(lastRecordPlanner.createFloorRecords(allRecordIds), [[], []]);
 });
 
 test('기록 해금은 갤러리 본문 공개와 안정 ID 직접 선택을 함께 복원한다', () => {

@@ -7,6 +7,7 @@ import {
     saveTutorialMeta,
     unlockTutorialAchievement,
     unlockTutorialCutscene,
+    unlockTutorialGallery,
     unlockTutorialRecord
 } from './_tutorial_meta_progress.js';
 import {
@@ -102,6 +103,18 @@ export class TutorialMetaSession {
             nextMeta = unlockTutorialAchievement(nextMeta, id);
         }
         this.replace(nextMeta);
+    }
+
+    /**
+     * 전체 갤러리 ID를 멱등 병합하고 런 staging 여부와 관계없이 즉시 저장합니다.
+     * @param {object} catalog - 갤러리 종류별 전체 ID 목록입니다.
+     * @returns {boolean} 실제 진행도가 바뀌었는지 여부입니다.
+     */
+    unlockGallery(catalog) {
+        return this.replace(
+            unlockTutorialGallery(this.meta, catalog),
+            { persist: true }
+        );
     }
 
     /**

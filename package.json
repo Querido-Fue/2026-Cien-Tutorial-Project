@@ -7,7 +7,7 @@
     "test:model": "node --experimental-default-type=module --test test/tutorial_battle_model.test.mjs test/tutorial_combat_preview.test.mjs",
     "test:balance": "node --experimental-default-type=module --test test/tutorial_balance_simulation.test.mjs",
     "test:contracts": "node --experimental-default-type=module --test test/tutorial_source_contract.test.mjs test/tutorial_scene_seams.test.mjs test/tutorial_content_meta.test.mjs test/tutorial_nonbattle_views.test.mjs test/tutorial_battle_views.test.mjs test/tutorial_release_tooling.test.mjs",
-    "test:presentation": "node --experimental-default-type=module --test test/tutorial_presentation.test.mjs test/tutorial_sprite_data.test.mjs test/tutorial_sprite_animation.test.mjs test/tutorial_sprite_render.test.mjs",
+    "test:presentation": "node --experimental-default-type=module --test test/tutorial_presentation.test.mjs test/tutorial_sprite_data.test.mjs test/tutorial_sprite_animation.test.mjs test/tutorial_sprite_render.test.mjs test/tutorial_battle_effect_animation.test.mjs",
     "test:visual": "node --experimental-default-type=module --test test/tutorial_design_space.test.mjs test/tutorial_nonbattle_views.test.mjs test/tutorial_battle_views.test.mjs test/tutorial_visual_fixture_contract.test.mjs",
     "test:assets": "node --experimental-default-type=module --test test/tutorial_assets.test.mjs",
     "test:audio": "node --experimental-default-type=module --test test/tutorial_audio.test.mjs",

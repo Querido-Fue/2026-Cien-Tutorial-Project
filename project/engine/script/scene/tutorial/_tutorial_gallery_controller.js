@@ -101,6 +101,28 @@ export class TutorialGalleryController {
     }
 
     /**
+     * 모든 갤러리 항목과 엔딩 재생에 필요한 메타 ID 목록을 반환합니다.
+     * @returns {Readonly<object>} 종류별 전체 해금 ID입니다.
+     */
+    getUnlockCatalog() {
+        const cutsceneIds = new Set(this.#content.GALLERY.cutsceneIds);
+        for (const ending of this.#content.ENDINGS) {
+            if (typeof ending.cutsceneId === 'string' && ending.cutsceneId) {
+                cutsceneIds.add(ending.cutsceneId);
+            }
+        }
+        return Object.freeze({
+            achievementIds: Object.freeze(this.#content.ACHIEVEMENTS.map(({ id }) => id)),
+            recordIds: Object.freeze([
+                ...this.#content.RECORDS.LORA.map(({ id }) => id),
+                ...this.#content.RECORDS.DEVELOPER.map(({ id }) => id)
+            ]),
+            endingIds: Object.freeze(this.#content.ENDINGS.map(({ id }) => id)),
+            cutsceneIds: Object.freeze([...cutsceneIds])
+        });
+    }
+
+    /**
      * 뷰와 버튼이 함께 사용할 읽기 전용 갤러리 상태를 만듭니다.
      * @param {object} meta - 현재 메타 진행도입니다.
      * @returns {Readonly<object>} 섹션·항목·선택 상태입니다.
@@ -117,6 +139,10 @@ export class TutorialGalleryController {
         const selectedIndex = this.#getEntryIndex(selectedSection.id, entries.length);
         return Object.freeze({
             sections: Object.freeze(sections),
+            unlockAllHoldSeconds: Math.max(
+                0,
+                Number(this.#content.GALLERY.unlockAllHoldSeconds) || 0
+            ),
             selectedSectionIndex: this.#sectionIndex,
             selectedSectionId: selectedSection.id,
             selectedSectionTitle: selectedSection.title,

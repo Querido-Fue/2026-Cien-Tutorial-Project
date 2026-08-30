@@ -46,6 +46,7 @@ export const TUTORIAL_PRESENTATION_CUE_TYPES = Object.freeze({
     HEALTH_TRANSITION: 'health-transition',
     INSTABILITY_TRANSITION: 'instability-transition',
     ACTOR_ANIMATION: 'actor-animation',
+    WORLD_ANIMATION: 'world-animation',
     SCREEN_SHAKE: 'screen-shake',
     FLASH: 'flash',
     STABILIZE: 'stabilize',

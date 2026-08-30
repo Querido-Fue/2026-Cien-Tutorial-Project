@@ -5,34 +5,18 @@
 `manifests/asset-provenance.json`에 있다. “차단”은 파일을 숨기거나 삭제했다는
 뜻이 아니라, 공개 릴리스 전에 권리 증빙 또는 교체가 필요하다는 뜻이다.
 
-## Pretendard Variable
+## PF 스타더스트 3.0
 
-- 파일: `project/asset/old/font/PretendardVariable.woff2`
-- 출처: Pretendard 프로젝트
-- 라이선스: SIL Open Font License 1.1
-- 상태: 배포 가능
-- 전체 저작권 고지와 라이선스: `project/license/pretendard.txt`
+- 파일: `project/asset/font/PFStardustS.ttf`, `PFStardustBold.ttf`, `PFStardustExtraBold.ttf`
+- 원본 파일명: `PF스타더스트 3.0 S.ttf`, `PF스타더스트 3.0 Bold.ttf`, `PF스타더스트 3.0 ExtraBold.ttf`
+- 저작권: Copyright © 2018 Pinnata, All Rights Reserved.
+- 출처: https://m.blog.naver.com/campanula913/221366697603
+- 사용 조건: 개인·기업의 상업적 사용과 웹·프로그램 임베딩 가능(사용자 확인, 2026-08-31)
+- 제한: 제작자 허가 없는 폰트 파일 수정·재배포·유상 판매 금지(웹·프로그램 임베딩은 별도 허용)
+- 상태: 원본 바이트를 수정하지 않고 게임과 배포 결과에 임베딩
+- 상세 고지: `project/license/pf-stardust-notice.txt`
 
-패키징 결과에는 위 라이선스 파일을 `license/pretendard.txt`로 함께 넣는다.
-
-## LanaPixel
-
-- 파일: `project/asset/font/LanaPixel.ttf`
-- 출처: 프로젝트 제공 폰트 파일
-- 라이선스: 전체 사용 가능(사용자 확인, 2026-08-28)
-- 상태: 저장소 보존, 현재 런타임·배포 패키지에서는 미사용
-
-## 온글잎 박다현체 (Ownglyph PDH)
-
-- 파일: `project/asset/font/OwnglyphParkDahyun.ttf`
-- 원본 파일명: `온글잎 박다현체.ttf`
-- 저작권: Copyright © 2023 VoyagerX, inc. & Dahyeon Park, All rights reserved.
-- 제작·배포 주체: VoyagerX, inc. / 온글잎
-- 사용 조건: 상업적 사용 가능(사용자 확인, 2026-08-31)
-- 수정 조건: 폰트 내부 고지에 따라 파일 수정에는 VoyagerX, inc.의 사전 서면 허가가 필요
-- 상태: 원본 바이트를 수정하지 않고 런타임 이름으로 복사해 배포 가능
-
-현재 게임 런타임과 패키징 결과는 이 폰트를 사용한다.
+현재 게임은 S를 본문, Bold를 강조·버튼, ExtraBold를 제목·핵심 정보에 사용한다.
 
 ## 프로젝트 생성 아트
 
@@ -58,6 +42,7 @@ FFmpeg 등 구성 요소의 고지는 해당 `credits.html`이 기준이다.
 저장소와 제공된 기획 자료에서 확인되지 않았다.
 
 - `project/asset/img/**`
+- `project/asset/img2/**` (교체 완료 뒤 삭제 예정인 중복 원본 포함)
 - `project/asset/old/ui/**`
 - `project/asset/old/icon/**`
 - 위 파일에서 만든 `project/asset/tutorial/**/*.png` 런타임 복사본

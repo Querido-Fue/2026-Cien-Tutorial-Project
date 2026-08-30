@@ -11,6 +11,11 @@ const assetRoot = path.join(repositoryRoot, 'project', 'asset');
 const defaultOutputRoot = path.join(repositoryRoot, 'dist', 'web');
 const buildMarkerName = '.nthplayer-web-build';
 const textExtensions = new Set(['.css', '.html', '.js', '.json']);
+const runtimeFontFileNames = Object.freeze([
+    'PFStardustS.ttf',
+    'PFStardustBold.ttf',
+    'PFStardustExtraBold.ttf'
+]);
 
 const isPathInside = (candidate, parent) => {
     const relativePath = path.relative(parent, candidate);
@@ -144,10 +149,12 @@ const copyRuntimeAssets = async (outputRoot) => {
     await mkdir(path.join(outputAssetRoot, 'font'), { recursive: true });
     await mkdir(path.join(outputAssetRoot, 'old', 'icon'), { recursive: true });
     await cp(path.join(assetRoot, 'tutorial'), path.join(outputAssetRoot, 'tutorial'), { recursive: true });
-    await cp(
-        path.join(assetRoot, 'font', 'OwnglyphParkDahyun.ttf'),
-        path.join(outputAssetRoot, 'font', 'OwnglyphParkDahyun.ttf')
-    );
+    for (const fontFileName of runtimeFontFileNames) {
+        await cp(
+            path.join(assetRoot, 'font', fontFileName),
+            path.join(outputAssetRoot, 'font', fontFileName)
+        );
+    }
     await cp(path.join(assetRoot, 'old', 'icon', 'logo.ico'), path.join(outputAssetRoot, 'old', 'icon', 'logo.ico'));
 };
 

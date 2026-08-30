@@ -430,7 +430,7 @@ test('전투 결과 조정자는 cue·진행도·기록·컷씬을 고정 순서
                 return ['cue'];
             }
         },
-        spriteCueRouter: {
+        animationCoordinator: {
             route(cues) {
                 calls.push('route');
                 return cues;
@@ -661,6 +661,7 @@ test('인벤토리 프레젠터와 전투 뷰 모델 팩토리는 페이지·표
             stabilizeSeconds: 0
         },
         spriteAnimations: {},
+        battleEffects: [{ id: 'arrow-1' }],
         floorActors: null,
         ready: true,
         achievement: null,
@@ -683,6 +684,7 @@ test('인벤토리 프레젠터와 전투 뷰 모델 팩토리는 페이지·표
     assert.equal(viewModel.hud.inventory.entries[1].usable, false);
     assert.equal(viewModel.hud.inventory.entries[1].blockedByMovementPhase, true);
     assert.equal(viewModel.hud.controls.hasBow, true);
+    assert.deepEqual(viewModel.world.battleEffects, [{ id: 'arrow-1' }]);
     assert.deepEqual(battleFocus.keys, ['item-bow', 'item-ocarina']);
     assert.equal(Object.isFrozen(viewModel), true);
 });

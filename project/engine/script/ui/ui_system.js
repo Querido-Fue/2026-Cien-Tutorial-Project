@@ -66,6 +66,14 @@ export class UISystem {
     setCursorVisible(isVisible) {
         this.cursor?.setVisible?.(isVisible);
     }
+
+    /**
+     * 활성 장면이 요청한 동적 커서 종류와 보조 정보를 반영합니다.
+     * @param {object|null} presentation - 커서 표시 모델입니다.
+     */
+    setCursorPresentation(presentation) {
+        this.cursor?.setPresentation?.(presentation);
+    }
 }
 
 /**

@@ -4,11 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="robots" content="noindex, nofollow">
-  <meta name="theme-color" content="#100b14">
+  <meta name="theme-color" content="#f0eee8">
   <title>N번째 플레이어 · 중간 발표</title>
-  <link rel="stylesheet" href="./presentation.css">
-  <link rel="stylesheet" href="./slides.css">
-  <script type="module" src="./presentation.js"></script>
+  <link href="https://cdn.jsdelivr.net/gh/sun-typeface/SUIT@2/fonts/variable/woff2/SUIT-Variable.css" rel="stylesheet">
+  <link rel="stylesheet" href="./presentation.css?v=4">
+  <link rel="stylesheet" href="./slides.css?v=6">
+  <link rel="stylesheet" href="./slides-system.css?v=4">
+  <link rel="stylesheet" href="./slides-history.css?v=1">
+  <script type="module" src="./presentation.js?v=4"></script>
+  <script type="module" src="./prototype-audio-boundary.js?v=1"></script>
 </head>
 <body>
   <div class="cinematic-world" aria-hidden="true">
@@ -23,6 +27,7 @@
     <section
       class="slide slide--cover is-active"
       data-slide
+      data-folio="01"
       data-camera-x="27vw"
       data-camera-y="1vh"
       data-camera-scale="1.08"
@@ -32,7 +37,7 @@
       <div class="slide__content slide__content--cover">
         <p class="eyebrow">CIEN TUTORIAL PROJECT · TEAM 1</p>
         <h1 class="cover-title"><span>N</span>번째 플레이어</h1>
-        <p class="cover-question">Will you be the next player?</p>
+        <p class="cover-question" data-echo="Will you be the next player?">Will you be the next player?</p>
         <div class="cover-meta">
           <span>최선우</span><span>정진</span><span>임형택</span><span>주창환</span><span>김유나</span>
         </div>
@@ -43,6 +48,7 @@
     <section
       class="slide slide--mechanism"
       data-slide
+      data-folio="02"
       data-camera-x="21vw"
       data-camera-y="-3vh"
       data-camera-scale="1.22"
@@ -54,7 +60,7 @@
           <p class="eyebrow">01 · THE MECHANISM</p>
           <h2>쓰러뜨리는 것만으로는<br><em>구할 수 없다.</em></h2>
         </div>
-        <div class="mechanism-card glass-panel">
+        <div class="mechanism-card">
           <p class="mechanism-card__lead">두 층에서 펼쳐지는<br>턴제 전략 보스전</p>
           <dl class="stat-list">
             <div><dt>전장</dt><dd>9 × 8 · 2개 층</dd></div>
@@ -68,6 +74,7 @@
     <section
       class="slide slide--reference slide--center"
       data-slide
+      data-folio="03"
       data-camera-x="17vw"
       data-camera-y="4vh"
       data-camera-scale="1.34"
@@ -88,6 +95,7 @@
     <section
       class="slide slide--concept"
       data-slide
+      data-folio="04"
       data-camera-x="12vw"
       data-camera-y="-1vh"
       data-camera-scale="1.2"
@@ -102,12 +110,17 @@
           <li><span>COMBINE</span><strong>조합</strong><p>아이템과 경로를 한 수로 엮는다</p></li>
           <li><span>STABILIZE</span><strong>안정화</strong><p>로라의 마음까지 계산한다</p></li>
         </ol>
+        <div class="concept-figure" aria-hidden="true">
+          <img src="/game/nthplayer/asset/tutorial/characters/lora-portrait-stable-pixel-v3.png" alt="">
+          <img src="/game/nthplayer/asset/tutorial/characters/lora-portrait-unstable-pixel-v3.png" alt="">
+        </div>
       </div>
     </section>
 
     <section
       class="slide slide--loop slide--center"
       data-slide
+      data-folio="05"
       data-camera-x="7vw"
       data-camera-y="-6vh"
       data-camera-scale="1.12"
@@ -115,6 +128,7 @@
       aria-hidden="true"
     >
       <div class="slide__content slide__content--center">
+        <span class="loop-word" aria-hidden="true">LOOP</span>
         <p class="eyebrow">04 · CORE LOOP</p>
         <h2>한 번의 선택이<br>다음 장면을 바꾼다.</h2>
         <ol class="loop-track">
@@ -129,6 +143,7 @@
     <section
       class="slide slide--player"
       data-slide
+      data-folio="06"
       data-camera-x="2vw"
       data-camera-y="2vh"
       data-camera-scale="1.3"
@@ -141,13 +156,9 @@
           <h2>한 턴.<br><em>한 수.</em></h2>
           <p class="slide-copy">매턴 최대 4칸의 경로와 행동 1회를 조합한다. 이동을 다 쓰지 않아도 되고, 행동 전후의 위치가 곧 리스크가 된다.</p>
         </div>
-        <div class="player-board glass-panel" aria-label="플레이어 턴 구성 예시">
-          <div class="path-grid" aria-hidden="true">
-            <span></span><span></span><span class="path-grid__step">3</span><span></span><span></span>
-            <span></span><span class="path-grid__step">2</span><span class="path-grid__step">4</span><span></span><span></span>
-            <span class="path-grid__player">P</span><span class="path-grid__step">1</span><span></span><span></span><span></span>
-            <span></span><span></span><span></span><span></span><span class="path-grid__lora">L</span>
-          </div>
+        <div class="player-board" aria-label="플레이어 턴 구성 예시">
+          <img class="player-map-art" src="/game/nthplayer/asset/tutorial/maps/first-floor-background.png" alt="">
+          <canvas class="path-overlay" data-player-path-overlay aria-hidden="true"></canvas>
           <div class="action-row">
             <span>공격</span><span>아이템</span><span>회복</span><span>대기</span>
           </div>
@@ -158,6 +169,7 @@
     <section
       class="slide slide--lora slide--right"
       data-slide
+      data-folio="07"
       data-camera-x="-4vw"
       data-camera-y="-1vh"
       data-camera-scale="1.38"
@@ -187,6 +199,7 @@
     <section
       class="slide slide--items slide--center"
       data-slide
+      data-folio="08"
       data-camera-x="-10vw"
       data-camera-y="4vh"
       data-camera-scale="1.26"
@@ -197,11 +210,18 @@
         <p class="eyebrow">07 · ITEM SYSTEM</p>
         <h2>아이템은 버프가 아니라<br><em>로라를 읽는 문장.</em></h2>
         <div class="item-grid">
-          <article class="item-card"><img src="/game/nthplayer/asset/tutorial/ui/items/old-teddy-pixel-v2.png" alt="낡은 곰인형"><strong>낡은 곰인형</strong><span>피해를 낮추고 마음을 누그러뜨린다</span></article>
-          <article class="item-card"><img src="/game/nthplayer/asset/tutorial/ui/items/music-box-pixel-v2.png" alt="오르골"><strong>오르골</strong><span>한 턴의 평화를 만든다</span></article>
-          <article class="item-card"><img src="/game/nthplayer/asset/tutorial/ui/items/mirror-pixel-v2.png" alt="거울"><strong>거울</strong><span>로라의 행동을 한 번 멈춘다</span></article>
-          <article class="item-card"><img src="/game/nthplayer/asset/tutorial/ui/items/eyeliner-pixel-v2.png" alt="아이라인"><strong>아이라인</strong><span>불안정도를 직접 낮춘다</span></article>
-          <article class="item-card"><img src="/game/nthplayer/asset/tutorial/ui/items/diamond-pickaxe-pixel-v2.png" alt="다이아몬드 곡괭이"><strong>곡괭이</strong><span>벽을 넘어 새로운 경로를 연다</span></article>
+          <article class="item-card item-card--starter"><img src="/game/nthplayer/asset/tutorial/ui/items/bow-pixel-v2.png" alt="활과 화살"><strong>활과 화살</strong><span>원거리 공격 30 · 로라 턴 불안정 +3 · 로라 공격 +5</span></article>
+          <article class="item-card item-card--starter"><img src="/game/nthplayer/asset/tutorial/ui/items/mascot-costume-pixel-v2.png" alt="인형탈"><strong>인형탈</strong><span>받는 피해 −8 · 플레이어 턴 종료마다 불안정 −3</span></article>
+          <article class="item-card"><img src="/game/nthplayer/asset/tutorial/ui/items/old-teddy-pixel-v2.png" alt="낡은 곰인형"><strong>낡은 곰인형</strong><span>소지: 공격 −20 / 피해 −10 · 사용: 불안정 −20</span></article>
+          <article class="item-card"><img src="/game/nthplayer/asset/tutorial/ui/items/music-box-pixel-v2.png" alt="오르골"><strong>오르골</strong><span>1턴 동안 모두 공격 불가 · 로라 턴 불안정 −10</span></article>
+          <article class="item-card"><img src="/game/nthplayer/asset/tutorial/ui/items/eyeliner-pixel-v2.png" alt="아이라인"><strong>아이라인</strong><span>사용 즉시 불안정 −15</span></article>
+          <article class="item-card"><img src="/game/nthplayer/asset/tutorial/ui/items/diamond-pickaxe-pixel-v2.png" alt="다이아몬드 곡괭이"><strong>다이아몬드 곡괭이</strong><span>소지 중 벽 타일 통과 가능</span></article>
+          <article class="item-card"><img src="/game/nthplayer/asset/tutorial/ui/items/mirror-pixel-v2.png" alt="거울"><strong>거울</strong><span>추가 플레이어 턴 +1 · 로라 행동 없이 재이동</span></article>
+          <article class="item-card"><img src="/game/nthplayer/asset/tutorial/ui/items/mushroom-pixel-v2.png" alt="마리오의 버섯"><strong>마리오의 버섯</strong><span>이동력 ×2 · 공격력 ×2 · 피격 시 효과 종료</span></article>
+          <article class="item-card"><img src="/game/nthplayer/asset/tutorial/ui/items/ocarina-pixel-v2.png" alt="링크의 오카리나"><strong>링크의 오카리나</strong><span>모든 양의 불안정 증가 무효</span></article>
+          <article class="item-card"><img src="/game/nthplayer/asset/tutorial/ui/items/haste-pixel-v2.png" alt="메이플스토리의 헤이스트"><strong>헤이스트</strong><span>매 플레이어 턴 행동 +1 · 총 2회</span></article>
+          <article class="item-card"><img src="/game/nthplayer/asset/tutorial/ui/items/memory-photo-pixel-v2.png" alt="알파와 같이 찍은 사진"><strong>알파와 찍은 사진</strong><span>현재 불안정도를 70%로 감소</span></article>
+          <article class="item-card"><img src="/game/nthplayer/asset/tutorial/ui/items/tile-cleanser-pixel-v2.png" alt="타일 정화제"><strong>타일 정화제</strong><span>페널티 이벤트 타일 → 불안정 감소 타일</span></article>
         </div>
       </div>
     </section>
@@ -209,6 +229,7 @@
     <section
       class="slide slide--maps"
       data-slide
+      data-folio="09"
       data-camera-x="-16vw"
       data-camera-y="-3vh"
       data-camera-scale="1.18"
@@ -231,6 +252,7 @@
     <section
       class="slide slide--cutscene slide--right"
       data-slide
+      data-folio="10"
       data-camera-x="-22vw"
       data-camera-y="5vh"
       data-camera-scale="1.34"
@@ -253,6 +275,7 @@
     <section
       class="slide slide--balance slide--center"
       data-slide
+      data-folio="11"
       data-camera-x="-27vw"
       data-camera-y="-2vh"
       data-camera-scale="1.2"
@@ -262,7 +285,7 @@
       <div class="slide__content slide__content--center">
         <p class="eyebrow">10 · BALANCE</p>
         <h2>빨리 끝낼수록<br><em>좋은 결말에서 멀어진다.</em></h2>
-        <div class="balance-board glass-panel">
+        <div class="balance-board">
           <div class="balance-goal"><span>승리 조건</span><strong>로라 HP</strong><b>0</b><i>+</i><strong>불안정도</strong><b>≤ 10</b></div>
           <div class="balance-gauges">
             <div><span>공격만 반복</span><i class="gauge gauge--danger"><b></b></i><small>빠른 무력화 · 불안정 누적</small></div>
@@ -275,6 +298,7 @@
     <section
       class="slide slide--prototype"
       data-slide
+      data-folio="12"
       data-prototype-slide
       data-camera-x="-30vw"
       data-camera-y="0vh"
@@ -285,7 +309,7 @@
       <div class="slide__content prototype-layout">
         <div class="prototype-copy">
           <p class="eyebrow">11 · LIVE PROTOTYPE</p>
-          <h2>설명 대신,<br><em>직접 한 수.</em></h2>
+          <h2><span class="prototype-display">Prototype</span><em>직접 한 수.</em></h2>
           <p class="slide-copy">오른쪽 화면은 실제 빌드입니다. 게임 안에서는 자유롭게 조작하고, 화면 바깥을 클릭하면 다음 장으로 이동합니다.</p>
           <div class="prototype-load-state"><i></i><span>게임을 준비하는 중</span></div>
         </div>
@@ -299,6 +323,7 @@
     <section
       class="slide slide--design slide--center"
       data-slide
+      data-folio="13"
       data-camera-x="-25vw"
       data-camera-y="-5vh"
       data-camera-scale="1.28"
@@ -320,29 +345,59 @@
     </section>
 
     <section
-      class="slide slide--roadmap"
+      class="slide slide--history"
       data-slide
+      data-folio="14"
       data-camera-x="-18vw"
       data-camera-y="2vh"
       data-camera-scale="1.17"
       data-tone="violet"
       aria-hidden="true"
     >
-      <div class="slide__content roadmap-layout">
-        <div>
-          <p class="eyebrow">13 · WHAT WE DID / WHAT'S NEXT</p>
-          <h2>프로토타입에서<br><em>완성된 한 판</em>으로.</h2>
-        </div>
-        <div class="roadmap-columns">
-          <article class="glass-panel"><span>DONE</span><ul><li>2개 층 전투와 12회 행동 제한</li><li>아이템·불안정도·엔딩 루프</li><li>캐릭터·UI·맵 아트 적용</li><li>웹에서 바로 실행되는 빌드</li></ul></article>
-          <article class="glass-panel"><span>NEXT</span><ul><li>난이도와 아이템 수치 재조정</li><li>공격·피격·붕괴 연출 강화</li><li>컷씬·갤러리 마감</li><li>플레이테스트와 접근성 점검</li></ul></article>
-        </div>
+      <div class="slide__content history-layout">
+        <header class="history-intro">
+          <p class="eyebrow">13 · BUILD HISTORY</p>
+          <h2>기능은 한 줄씩,<br><em>던전은 한 층씩.</em></h2>
+          <div class="history-metric" aria-label="2026년 2월 14일부터 8월 31일까지 119개 커밋">
+            <strong>119</strong>
+            <span>COMMITS<small>FEB 14 → AUG 31 · 2026</small></span>
+          </div>
+          <p class="history-source">GITHUB MAIN · <code>c5b9c13 → 306d71f</code></p>
+        </header>
+        <ol class="history-timeline" aria-label="Git 커밋으로 본 기능 발전 과정">
+          <li>
+            <div class="history-commit"><time>FEB—MAY</time><code>90ca658 → e3d7d2e</code></div>
+            <div class="history-copy"><strong>엔진이 무대를 만들다</strong><p>WebGL·레이어·충돌·입력·로딩·오버레이를 차례로 정비했다.</p></div>
+            <span class="history-step">01</span>
+          </li>
+          <li>
+            <div class="history-commit"><time>JUL 18—25</time><code>1da3049 → b336974</code></div>
+            <div class="history-copy"><strong>기획이 플레이 가능한 규칙이 되다</strong><p>기획 v3.2를 반영하고 Proto 1.0 → 2.0으로 핵심 루프를 고정했다.</p></div>
+            <span class="history-step">02</span>
+          </li>
+          <li>
+            <div class="history-commit"><time>AUG 27—28</time><code>253507b → b997c95</code></div>
+            <div class="history-copy"><strong>감각을 검증 가능한 전투로 바꾸다</strong><p>행동 미리보기와 결정론적 시뮬레이션으로 전투와 밸런스를 검증했다.</p></div>
+            <span class="history-step">03</span>
+          </li>
+          <li>
+            <div class="history-commit"><time>AUG 28</time><code>230ce80 → 5cf60dc</code></div>
+            <div class="history-copy"><strong>기능 위에 로라의 세계를 입히다</strong><p>맵·UI·스프라이트·음악·컷씬·엔딩을 하나의 던전 경험으로 결합했다.</p></div>
+            <span class="history-step">04</span>
+          </li>
+          <li>
+            <div class="history-commit"><time>AUG 28—31</time><code>8c12499 → 7d6fc1d</code></div>
+            <div class="history-copy"><strong>로컬 빌드를 웹의 한 판으로 마감하다</strong><p>브라우저 배포 뒤 카메라·입력·조명·기록·접근성을 반복 폴리시했다.</p></div>
+            <span class="history-step">05</span>
+          </li>
+        </ol>
       </div>
     </section>
 
     <section
       class="slide slide--finale slide--center"
       data-slide
+      data-folio="15"
       data-camera-x="-8vw"
       data-camera-y="-1vh"
       data-camera-scale="1.06"
@@ -367,7 +422,7 @@
 
   <nthplayer-game-frame
     id="nthplayer-game"
-    data-source="/game/nthplayer/"
+    data-source="/game/nthplayer/?embed=presentation"
     aria-hidden="true"
   ></nthplayer-game-frame>
   <button

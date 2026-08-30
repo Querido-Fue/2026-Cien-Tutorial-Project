@@ -42,9 +42,9 @@ export class SegmentControlElement extends BaseUIElement {
         this.textColorInactive = properties.textColorInactive || ColorSchemes.Overlay.Segment.TextInactive;
 
         this.font = properties.font || createFontString({
-            weight: 600,
+            weight: 700,
             sizePx: this.height * 0.55,
-            family: "Pretendard Variable, arial"
+            family: "PFStardust, sans-serif"
         });
 
 
@@ -209,9 +209,9 @@ export class SegmentControlElement extends BaseUIElement {
             const color = isSelected ? this.textColorActive : this.textColorInactive;
 
             const fontToUse = this.font || createFontString({
-                weight: 600,
+                weight: 700,
                 sizePx: this.height * 0.55,
-                family: "Pretendard Variable, arial"
+                family: "PFStardust, sans-serif"
             });
 
             render(this.layer, {

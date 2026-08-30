@@ -47,11 +47,13 @@ apex A 레코드는 프록시된 상태로 GoDaddy의 현재 외부 도메인 �
 필요한 파일은 다음과 같습니다.
 
 - `scripts/cloudflare/nthplayer-worker.js`: 안전한 GET/HEAD 프록시, Range 요청 전달,
-  게임·발표 경로의 후행 슬래시 리다이렉트, 발표 자산 보안 헤더, 루트 준비 중 화면
+  게임·발표 경로의 후행 슬래시 리다이렉트, 발표 전용 게임 입력 브리지 주입,
+  발표 자산 보안 헤더, 루트 준비 중 화면
 - `scripts/cloudflare/wrangler.jsonc`: apex와 `www`의 HTTPS Route 및
   `project/presentation/public` 정적 자산 바인딩 선언
-- `project/presentation/public/ppt/nthplayer/`: 15개 장면, 연속 파노라마 카메라와 텍스트
-  전환, 동일 출처 게임 iframe 프리로드·슬롯/전체 화면 전환 API
+- `project/presentation/public/ppt/nthplayer/`: 15개 편집형 장면, 연속 파노라마 카메라와
+  텍스트 전환, 동일 출처 게임 iframe 프리로드, canvas 스냅샷 기반 슬롯/전체 화면 전환,
+  임베드 전용 가상 포인터 잠금 브리지
 
 Cloudflare 계정 인증 후 저장소 루트에서 Wrangler로 배포할 수 있습니다.
 
@@ -72,18 +74,23 @@ Worker 배포 후 다음을 확인합니다.
 ```bash
 curl -I https://jukchang.com/game/nthplayer
 curl -I https://jukchang.com/game/nthplayer/
-curl -I https://jukchang.com/game/nthplayer/asset/font/OwnglyphParkDahyun.ttf
+curl -I https://jukchang.com/game/nthplayer/asset/font/PFStardustS.ttf
+curl -I https://jukchang.com/game/nthplayer/asset/font/PFStardustBold.ttf
+curl -I https://jukchang.com/game/nthplayer/asset/font/PFStardustExtraBold.ttf
 curl -I https://jukchang.com/ppt/nthplayer
 curl -I https://jukchang.com/ppt/nthplayer/
 ```
 
 슬래시가 없는 두 기준 경로는 각각 슬래시가 있는 URL로 308 응답해야 하고, 게임·발표
 문서와 게임 폰트는 200이어야 합니다. 발표 문서는 첫 장부터
-`/game/nthplayer/` iframe을 숨긴 상태로 한 번만 미리 로드하고, 12번째 프로토타입 장에서
-같은 iframe을 드러냅니다. 전체화면 버튼은 0.6초 `easeOutExpo`로 뷰포트를 채우며 Escape는
-원래 슬롯으로 복귀해야 합니다. 루트 `https://jukchang.com/`은 `Coming Soon!` 준비 중
-화면을 반환해야 합니다. GoDaddy 본 사이트를 공개할 때는 Worker의 루트 응답 정책과 DNS
-원본을 함께 재검토해야 합니다.
+`/game/nthplayer/?embed=presentation` iframe을 숨긴 상태로 한 번만 미리 로드하고,
+12번째 프로토타입 장에서 같은 iframe을 드러냅니다. 임베드 쿼리의 HTML에만 입력 브리지가
+주입되어 첫 클릭 뒤 실제 게임 버튼과 키보드가 동작해야 하며, 일반 게임 URL에는 주입되지
+않아야 합니다. 전체화면 버튼은 마지막 canvas 화면을 이미지로 고정한 채 0.6초
+`easeOutExpo`로 뷰포트를 채우고 전환이 끝나면 실제 iframe으로 돌아옵니다. Escape는 원래
+슬롯으로 복귀해야 하며, iframe 바깥 클릭은 다음 장으로 진행해야 합니다. 루트
+`https://jukchang.com/`은 `Coming Soon!` 준비 중 화면을 반환해야 합니다. GoDaddy 본
+사이트를 공개할 때는 Worker의 루트 응답 정책과 DNS 원본을 함께 재검토해야 합니다.
 
 ## 권리 확인
 

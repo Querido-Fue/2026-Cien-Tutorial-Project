@@ -3,6 +3,7 @@ import {
     drawBattleViewText
 } from './_tutorial_battle_view_helpers.js';
 import { TutorialBattleLayout } from './_tutorial_battle_layout.js';
+import { TutorialSpriteFrameRenderer } from './_tutorial_sprite_frame_renderer.js';
 
 /**
  * @class TutorialBattleActorView
@@ -11,11 +12,16 @@ import { TutorialBattleLayout } from './_tutorial_battle_layout.js';
 export class TutorialBattleActorView {
     #renderPort;
     #assetPort;
+    #spriteFrameRenderer;
 
     /** @param {object} renderPort - 렌더 명령 포트입니다. @param {object} assetPort - 이미지 조회 포트입니다. */
     constructor(renderPort, assetPort = {}) {
         this.#renderPort = renderPort;
         this.#assetPort = assetPort;
+        this.#spriteFrameRenderer = new TutorialSpriteFrameRenderer(
+            renderPort,
+            assetPort
+        );
     }
 
     /**
@@ -277,32 +283,16 @@ export class TutorialBattleActorView {
 
     /** @param {{x:number,y:number}} point @param {object|null} animation @param {number} baseScale @param {number} alpha @param {object} frame @returns {boolean} @private */
     #drawSprite(point, animation, baseScale, alpha, frame) {
-        if (!animation?.assetId || !Array.isArray(animation.layers) || animation.layers.length === 0) {
-            return false;
-        }
-        const image = this.#assetPort.getImage?.(animation.assetId) || null;
-        if (!image) {
-            return false;
-        }
         const geometry = this.#resolveSpriteGeometry(point, animation, baseScale, frame);
         if (!geometry) {
             return false;
         }
-        const effectAlpha = this.#getFallbackEffectAlpha(animation);
-        for (const sourceRect of animation.layers) {
-            this.#renderPort.renderGL('object', {
-                image,
-                sourceRect,
-                flipX: animation.flipX === true,
-                x: geometry.x,
-                y: geometry.y,
-                w: geometry.width,
-                h: geometry.height,
-                alpha: alpha * effectAlpha,
-                smoothing: false
-            });
-        }
-        return true;
+        return this.#spriteFrameRenderer.draw({
+            animation,
+            geometry,
+            alpha,
+            effectAlpha: this.#getFallbackEffectAlpha(animation)
+        });
     }
 
     /**
@@ -416,15 +406,16 @@ export class TutorialBattleActorView {
             ? this.#assetPort.getImage?.(animation.assetId) || null
             : null;
         const layers = Array.isArray(animation?.layers) ? animation.layers : [];
+        const shadowLayers = layers.filter((layer) => layer?.castsShadow !== false);
         const shadowFootAnchors = this.#resolveShadowFootAnchors(animation);
 
-        if (geometry && image && layers.length > 0) {
+        if (geometry && image && shadowLayers.length > 0) {
             if (shadowFootAnchors.length === 2) {
                 this.#drawFootAnchoredSpriteProjectionShadow({
                     animation,
                     geometry,
                     image,
-                    sourceRect: layers[0],
+                    sourceRect: shadowLayers[0],
                     shadowFootAnchors,
                     axes,
                     config,
@@ -439,7 +430,7 @@ export class TutorialBattleActorView {
                     animation,
                     geometry,
                     image,
-                    layers,
+                    layers: shadowLayers,
                     axes,
                     config,
                     alpha: actorAlpha,

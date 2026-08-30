@@ -38,6 +38,9 @@ test('32×32 논리 클립 계약은 필수 배우 동작과 실제 시트 경�
             for (const rect of frame.layers) {
                 assert.equal([rect.x, rect.y, rect.w, rect.h].every(Number.isInteger), true);
                 assert.ok(rect.x >= 0 && rect.y >= 0 && rect.w > 0 && rect.h > 0);
+                assert.equal(Number.isFinite(rect.offsetXRatio), true);
+                assert.equal(Number.isFinite(rect.offsetYRatio), true);
+                assert.equal(typeof rect.castsShadow, 'boolean');
                 for (const assetId of assetIds) {
                     const dimensions = dimensionsByAssetId[assetId];
                     assert.ok(rect.x + rect.w <= dimensions.width, `${clip.id} x 경계`);
@@ -52,16 +55,12 @@ test('32×32 논리 클립 계약은 필수 배우 동작과 실제 시트 경�
         assert.ok(clip.visualTopInsetRatio >= 0 && clip.visualTopInsetRatio < 1);
     }
 
-    const visualTopInsets = { player: 0.125, lora: 0.257, slime: 0.66 };
-    for (const [actorType, inset] of Object.entries(visualTopInsets)) {
-        const actorClips = clips.filter((clip) => clip.actorType === actorType);
-        assert.ok(actorClips.length > 0, actorType);
-        assert.equal(
-            actorClips.every((clip) => clip.visualTopInsetRatio === inset),
-            true,
-            `${actorType} 실제 픽셀 상단 보정`
-        );
-    }
+    assert.equal(clips
+        .filter((clip) => clip.actorType === 'slime')
+        .every((clip) => clip.visualTopInsetRatio === 0.66), true);
+    assert.equal(TUTORIAL_SPRITE_CLIPS.CLIPS['player.idle.left'].visualTopInsetRatio, 7 / 64);
+    assert.equal(TUTORIAL_SPRITE_CLIPS.CLIPS['lora.idle.left'].visualTopInsetRatio, 13 / 64);
+    assert.equal(TUTORIAL_SPRITE_CLIPS.CLIPS['lora.collapse.left'].visualTopInsetRatio, 19 / 64);
 
     for (const clip of clips.filter((entry) => (
         entry.available && ['player', 'lora'].includes(entry.actorType)
@@ -80,7 +79,7 @@ test('32×32 논리 클립 계약은 필수 배우 동작과 실제 시트 경�
     }
 });
 
-test('원본이 없는 Range·Breathing·로라 액션은 순환 없는 명시적 폴백으로 해석된다', () => {
+test('새 Range·Breathing·로라 액션은 실제 시트로, 미제공 방향·사망만 명시적 폴백으로 해석된다', () => {
     const clips = TUTORIAL_SPRITE_CLIPS.CLIPS;
     for (const clip of Object.values(clips).filter((entry) => !entry.available)) {
         assert.equal(typeof clip.fallbackClipId, 'string', clip.id);
@@ -99,31 +98,36 @@ test('원본이 없는 Range·Breathing·로라 액션은 순환 없는 명시�
         actorType: 'player', animationId: 'ranged', facing: 'right'
     });
     assert.equal(ranged.requestedClipId, 'player.ranged.right');
-    assert.equal(ranged.resolvedClipId, 'player.item.right');
-    assert.equal(ranged.fallbackUsed, true);
-    assert.equal(ranged.fallbackEffect, 'ranged');
-    assert.equal(ranged.visualTopInsetRatio, 0.125);
+    assert.equal(ranged.resolvedClipId, 'player.ranged.right');
+    assert.equal(ranged.fallbackUsed, false);
+    assert.equal(ranged.fallbackEffect, null);
+    assert.equal(ranged.frames.length, 7);
+    assert.equal(ranged.fps, 12);
+    assert.equal(ranged.impactFrame, 4);
+    assert.equal(ranged.visualTopInsetRatio, 7 / 64);
 
     const unstable = resolver.resolve({
         actorType: 'lora', animationId: 'unstable', facing: 'down'
     });
-    assert.equal(unstable.resolvedClipId, 'lora.idle.down');
+    assert.equal(unstable.resolvedClipId, 'lora.unstable.down');
     assert.equal(unstable.frames.length, 4);
-    assert.equal(unstable.fps, 2);
+    assert.equal(unstable.fps, 4);
     assert.equal(unstable.loop, true);
-    assert.equal(unstable.fallbackEffect, 'breathing');
-    assert.equal(unstable.visualTopInsetRatio, 0.257);
+    assert.equal(unstable.fallbackUsed, false);
+    assert.equal(unstable.fallbackEffect, null);
+    assert.equal(unstable.visualTopInsetRatio, 14 / 64);
     assert.equal(unstable.shadowFootFrames.length, unstable.frames.length);
     assert.equal(unstable.shadowFootFrames.every((feet) => feet.length === 2), true);
 
     const collapse = resolver.resolve({
         actorType: 'lora', animationId: 'collapse', facing: 'down'
     });
-    assert.equal(collapse.resolvedClipId, 'lora.idle.down');
+    assert.equal(collapse.resolvedClipId, 'lora.collapse.down');
     assert.equal(collapse.frames.length, 4);
-    assert.equal(collapse.fps, 2);
+    assert.equal(collapse.fps, 4);
     assert.equal(collapse.loop, true);
-    assert.equal(collapse.fallbackEffect, 'breathing');
+    assert.equal(collapse.fallbackUsed, false);
+    assert.equal(collapse.fallbackEffect, null);
 
     const loraEast = resolver.resolve({
         actorType: 'lora', animationId: 'idle', facing: 'right'
@@ -131,13 +135,17 @@ test('원본이 없는 Range·Breathing·로라 액션은 순환 없는 명시�
     const loraWest = resolver.resolve({
         actorType: 'lora', animationId: 'idle', facing: 'left'
     });
-    assert.deepEqual(loraWest.frames, loraEast.frames);
-    assert.equal(loraEast.flipX, true);
+    assert.notDeepEqual(loraWest.frames, loraEast.frames);
+    assert.equal(loraEast.flipX, false);
     assert.equal(loraWest.flipX, false);
-    assert.deepEqual(
-        loraWest.shadowFootFrames[0].map(({ x, y }) => ({ x: 1 - x, y })).reverse(),
-        loraEast.shadowFootFrames[0]
-    );
+    assert.deepEqual(loraWest.frames[0].layers.map(({ x }) => x), [0, 64]);
+    assert.deepEqual(loraEast.frames[0].layers.map(({ x }) => x), [192, 128]);
+    assert.deepEqual(loraWest.frames.map((frame) => frame.layers[1].offsetYRatio), [
+        0, -1 / 64, -1 / 64, 0
+    ]);
+    assert.equal(loraWest.frames.every((frame) => (
+        frame.layers[0].castsShadow && !frame.layers[1].castsShadow
+    )), true);
 
     const slime = resolver.resolve({
         actorType: 'slime', animationId: 'idle', variant: 'blue'
@@ -145,9 +153,9 @@ test('원본이 없는 Range·Breathing·로라 액션은 순환 없는 명시�
     assert.equal(slime.visualTopInsetRatio, 0.66);
 });
 
-test('매니페스트는 실제 8개 스프라이트 시트를 픽셀 렌더 자산으로 등록한다', () => {
+test('매니페스트는 실제 16개 스프라이트 시트를 픽셀 렌더 자산으로 등록한다', () => {
     const ids = Object.values(TUTORIAL_ASSET_MANIFEST.SPRITES);
-    assert.equal(ids.length, 8);
+    assert.equal(ids.length, 16);
     assert.equal(new Set(ids).size, ids.length);
     for (const id of ids) {
         const entry = TUTORIAL_ASSET_MANIFEST.ENTRIES.find((candidate) => candidate.id === id);
@@ -164,7 +172,11 @@ test('스프라이트 런타임은 파일당 한 클래스와 장면 역참조 �
         '_tutorial_sprite_animator.js',
         '_tutorial_sprite_cue_router.js',
         '_tutorial_sprite_roster.js',
-        'view/_tutorial_battle_actor_view.js'
+        '_tutorial_battle_effect_animator.js',
+        '_tutorial_battle_animation_coordinator.js',
+        'view/_tutorial_battle_actor_view.js',
+        'view/_tutorial_battle_effect_view.js',
+        'view/_tutorial_sprite_frame_renderer.js'
     ];
     for (const file of files) {
         const source = await readFile(new URL(

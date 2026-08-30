@@ -53,6 +53,7 @@ const DATA_REGISTRY = Object.freeze({
 | `TEXT_RENDER_DATA` | `data/display/text_render_data.js` |
 | `MOUSE_BUTTON_INPUT_DATA` | `data/input/mouse_button_input_data.js` |
 | `TUTORIAL_GAME_DATA` | `data/game/tutorial_game_data.js` |
+| `TUTORIAL_BATTLE_LIGHTING_DATA` | `data/game/tutorial_battle_lighting_data.js` |
 | `TUTORIAL_RECORD_PRESENTATION_DATA` | `data/game/tutorial_record_presentation_data.js` |
 
 ## 3. ColorSchemes

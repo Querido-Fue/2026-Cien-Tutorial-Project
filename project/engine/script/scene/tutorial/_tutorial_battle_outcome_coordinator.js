@@ -7,7 +7,7 @@ export class TutorialBattleOutcomeCoordinator {
     /** @param {object} options - 결과 구독자와 작은 투영 포트입니다. */
     constructor(options = {}) {
         this.presenter = options.presenter;
-        this.spriteCueRouter = options.spriteCueRouter;
+        this.animationCoordinator = options.animationCoordinator;
         this.feedbackQueue = options.feedbackQueue;
         this.presentationTimeline = options.presentationTimeline;
         this.achievementEvaluator = options.achievementEvaluator;
@@ -43,7 +43,7 @@ export class TutorialBattleOutcomeCoordinator {
             path: result?.ok === true ? result?.path : [],
             failureReason: result?.ok === false ? result.reason : ''
         });
-        const routedCues = this.spriteCueRouter.route(cues);
+        const routedCues = this.animationCoordinator.route(cues);
         const layout = input.layout || {};
         const orderedCues = this.feedbackQueue.enqueue(routedCues, {
             actors: {

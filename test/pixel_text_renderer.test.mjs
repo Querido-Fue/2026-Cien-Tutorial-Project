@@ -12,7 +12,24 @@ import {
 } from '../project/engine/script/display/_pixel_text_renderer.js';
 import { waitForFontFaces } from '../project/engine/script/util/font_util.js';
 
-const FONT = '400 24px OwnglyphParkDahyun, sans-serif';
+const LEGACY_PIXEL_FONT_FAMILY = 'LegacyPixelTest';
+const LEGACY_PIXEL_RENDER_DATA = Object.freeze({
+    PIXEL_CACHE_LIMIT: 384,
+    PIXEL_PADDING: 2,
+    MAX_RASTER_WIDTH: 4096,
+    MAX_RASTER_HEIGHT: 512,
+    PIXEL_PROFILES: Object.freeze([
+        Object.freeze({
+            ID: 'legacy-pixel-test',
+            FONT_FAMILY: LEGACY_PIXEL_FONT_FAMILY,
+            PIXEL_SIZE: 2,
+            SMALL_FONT_MAX_PX: 22,
+            SMALL_PIXEL_SIZE: 1,
+            ALPHA_THRESHOLD: 182
+        })
+    ])
+});
+const FONT = `400 24px ${LEGACY_PIXEL_FONT_FAMILY}, sans-serif`;
 
 class FakeCanvasContext {
     constructor(canvas) {
@@ -102,7 +119,7 @@ class FakeCanvas {
 function createRenderer(overrides = {}) {
     const canvases = [];
     const renderer = new PixelTextRenderer({
-        ...TEXT_RENDER_DATA,
+        ...LEGACY_PIXEL_RENDER_DATA,
         ...overrides
     }, {
         createCanvas: () => {
@@ -115,14 +132,14 @@ function createRenderer(overrides = {}) {
 }
 
 test('Canvas font 크기를 읽고 저해상도 래스터 크기로 변환한다', () => {
-    assert.equal(TEXT_RENDER_DATA.PIXEL_PROFILES[0].ALPHA_THRESHOLD, 182);
+    assert.equal(LEGACY_PIXEL_RENDER_DATA.PIXEL_PROFILES[0].ALPHA_THRESHOLD, 182);
     assert.equal(getCanvasFontSize(FONT), 24);
-    assert.equal(scaleCanvasFontSize(FONT, 0.5), '400 12px OwnglyphParkDahyun, sans-serif');
+    assert.equal(scaleCanvasFontSize(FONT, 0.5), '400 12px LegacyPixelTest, sans-serif');
     assert.equal(getCanvasFontSize('bold serif'), null);
     assert.equal(scaleCanvasFontSize('bold serif', 0.5), null);
 });
 
-test('박다현체의 측정 폭과 렌더가 같은 도트 배율을 사용하고 래스터를 재사용한다', () => {
+test('분리된 레거시 도트 렌더러는 측정과 렌더 배율을 맞추고 래스터를 재사용한다', () => {
     const { renderer, canvases } = createRenderer();
     const measuredWidth = renderer.measureWidth('가나', FONT);
     assert.equal(measuredWidth, 24);
@@ -159,14 +176,14 @@ test('박다현체의 측정 폭과 렌더가 같은 도트 배율을 사용하�
     assert.deepEqual(new Set(alphas), new Set([0, 255]));
 });
 
-test('작은 박다현체는 1px 격자로 유지하고 다른 폰트는 기존 렌더에 맡긴다', () => {
+test('분리된 레거시 도트 렌더러는 작은 글자를 1px 격자로 유지하고 다른 폰트를 거부한다', () => {
     const { renderer, canvases } = createRenderer();
     const target = new FakeCanvas().context;
     assert.equal(renderer.render(target, {
         text: '작게',
         x: 10,
         y: 10,
-        font: '400 18px OwnglyphParkDahyun, sans-serif',
+        font: '400 18px LegacyPixelTest, sans-serif',
         fill: '#ffffff'
     }), true);
     const rasterCanvas = canvases[1];
@@ -194,9 +211,17 @@ test('웹폰트 로더는 선언된 굵기와 샘플을 요청하고 실패를 �
         timeoutMs: 50
     });
     assert.equal(loaded, true);
-    assert.equal(requests.length, 1);
-    assert.match(requests[0].font, /^400 24px OwnglyphParkDahyun/);
-    assert.match(requests[0].sample, /가나다/);
+    assert.deepEqual(
+        requests.map(({ font }) => font),
+        [
+            '400 24px PFStardust',
+            '700 24px PFStardust',
+            '800 24px PFStardust'
+        ]
+    );
+    for (const request of requests) {
+        assert.match(request.sample, /가나다/);
+    }
 
     assert.equal(await waitForFontFaces(TEXT_RENDER_DATA.FONT_FACES, {
         fontSet: { load: async () => [] },
@@ -204,21 +229,49 @@ test('웹폰트 로더는 선언된 굵기와 샘플을 요청하고 실패를 �
     }), false);
 });
 
-test('튜토리얼 타이포그래피는 Regular 박다현체만 사용한다', () => {
+test('튜토리얼 타이포그래피는 중요도에 따라 PF 스타더스트 굵기를 구분한다', () => {
     for (const spec of Object.values(TUTORIAL_GAME_DATA.TYPOGRAPHY)) {
-        assert.equal(spec.FAMILY, 'OwnglyphParkDahyun, sans-serif');
-        assert.equal(spec.WEIGHT, 400);
+        assert.equal(spec.FAMILY, 'PFStardust, sans-serif');
+    }
+    assert.deepEqual(
+        Object.fromEntries(Object.entries(TUTORIAL_GAME_DATA.TYPOGRAPHY)
+            .map(([name, spec]) => [name, spec.WEIGHT])),
+        {
+            TITLE: 800,
+            SUBTITLE: 700,
+            HEADING: 800,
+            BODY: 400,
+            SMALL: 400,
+            BUTTON: 700,
+            MONO: 700
+        }
+    );
+});
+
+test('런타임 PF 스타더스트 3종은 사용자 제공 원본 바이트를 그대로 보존한다', async () => {
+    const expectedFonts = [
+        ['PFStardustS.ttf', 653384, 'BFA5ABD54051F5A31A1D3E885BEA589CCB0E71FBA833097FAFDEC27E6C4D54DE'],
+        ['PFStardustBold.ttf', 688124, 'D23021D127C8E020843B5A39D3FA27B4A92D62598F06DC541538318FD0A4F4C1'],
+        ['PFStardustExtraBold.ttf', 690328, '00FBBC852D15A5A5F6189D32BB31AB3AD74EE2DE5AB949947F562371F48C38EC']
+    ];
+    for (const [fileName, length, sha256] of expectedFonts) {
+        const font = await readFile(new URL(
+            `../project/asset/font/${fileName}`,
+            import.meta.url
+        ));
+        assert.equal(font.length, length);
+        assert.equal(
+            createHash('sha256').update(font).digest('hex').toUpperCase(),
+            sha256
+        );
     }
 });
 
-test('런타임 폰트는 사용자 제공 원본 바이트를 그대로 보존한다', async () => {
-    const font = await readFile(new URL(
-        '../project/asset/font/OwnglyphParkDahyun.ttf',
+test('게임 그리기 경로는 도트 렌더러를 연결하지 않는다', async () => {
+    const drawHandlerSource = await readFile(new URL(
+        '../project/engine/script/display/_draw_handler_2d.js',
         import.meta.url
-    ));
-    assert.equal(font.length, 2026460);
-    assert.equal(
-        createHash('sha256').update(font).digest('hex').toUpperCase(),
-        'FBCC7E2E16ABD0C9192AFF6561871AB95C369BC58284879E813055BDE7C5568F'
-    );
+    ), 'utf8');
+    assert.doesNotMatch(drawHandlerSource, /PixelTextRenderer|_pixel_text_renderer/);
+    assert.match(drawHandlerSource, /case 'text':\s*renderDrawText\(context, options\);/);
 });

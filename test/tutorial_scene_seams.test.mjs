@@ -60,6 +60,7 @@ const EXPECTED_COMMANDS = Object.freeze({
     GALLERY_SECTION_SHIFT: 'tutorial/gallery-section-shift',
     GALLERY_SHIFT: 'tutorial/gallery-shift',
     GALLERY_PLAY: 'tutorial/gallery-play',
+    GALLERY_UNLOCK_ALL: 'tutorial/gallery-unlock-all',
     CLOSE_RECORD: 'tutorial/close-record',
     CUTSCENE_NEXT: 'tutorial/cutscene-next',
     CUTSCENE_CLOSE: 'tutorial/cutscene-close',

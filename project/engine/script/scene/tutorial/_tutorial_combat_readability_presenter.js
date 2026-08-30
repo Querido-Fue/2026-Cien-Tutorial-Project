@@ -4,6 +4,11 @@ const ACTION_LABELS = Object.freeze({
     none: '공격 없음'
 });
 
+const TARGET_LABELS = Object.freeze({
+    lora: '로라',
+    mob: '슬라임'
+});
+
 /** @param {*} value @param {number} [fallback=0] @returns {number} 유한 숫자입니다. */
 function toFiniteNumber(value, fallback = 0) {
     const number = Number(value);
@@ -116,7 +121,30 @@ export class TutorialCombatReadabilityPresenter {
                 : '없음',
             consumedItemCount,
             persistentLabel: this.#formatPersistentEffects(expected, preview),
+            target: this.#createTargetPreview(preview),
             changes: freezeRecord(preview?.changes)
+        });
+    }
+
+    /**
+     * 공격 계획의 대상명과 실제 적용 예정 HP를 표시값으로 변환합니다.
+     * @param {object|null} preview - 모델 행동 미리보기입니다.
+     * @returns {object|null} 공격 대상 표시값 또는 null입니다.
+     * @private
+     */
+    #createTargetPreview(preview) {
+        if (preview?.ok !== true
+            || preview?.action !== 'attack'
+            || typeof preview?.targetId !== 'string') {
+            return null;
+        }
+        const type = String(preview.targetType || 'unknown');
+        return Object.freeze({
+            id: preview.targetId,
+            type,
+            label: String(TARGET_LABELS[type] || preview.targetId),
+            hpBefore: Math.max(0, toFiniteNumber(preview.targetHpBefore)),
+            hpAfter: Math.max(0, toFiniteNumber(preview.targetHpAfter))
         });
     }
 

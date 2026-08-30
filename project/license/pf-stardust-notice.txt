@@ -1,0 +1,32 @@
+PF Stardust 3.0 font notice
+
+Font files:
+- PFStardustS.ttf
+- PFStardustBold.ttf
+- PFStardustExtraBold.ttf
+
+Original file names:
+- PF스타더스트 3.0 S.ttf
+- PF스타더스트 3.0 Bold.ttf
+- PF스타더스트 3.0 ExtraBold.ttf
+
+Copyright © 2018 Pinnata. All Rights Reserved.
+
+Original distribution page:
+https://m.blog.naver.com/campanula913/221366697603
+
+License references:
+https://noonnu.cc/font_page/1614
+https://noonnu.cc/font_page/1615
+
+License status recorded from the user's authorization and the distribution
+terms available on 2026-08-31:
+- Free commercial use by individuals and companies is allowed.
+- Embedding in websites and application programs is allowed.
+- The source terms prohibit modification, redistribution, and paid sale of
+  the font files without the creator's permission, while separately allowing
+  website and application-program embedding.
+
+This project preserves the original font bytes and distributes them only as
+embedded runtime resources of Nth Player. This notice summarizes the recorded
+usage conditions; the original distribution terms remain authoritative.

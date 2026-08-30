@@ -21,10 +21,10 @@ const DIAGNOSTIC_SCENE_STATE = Object.freeze({
 });
 
 const DIAGNOSTIC_FONT_SPECS = Object.freeze({
-    TITLE: { sizeUIWW: 2.6, min: 30, max: 46, family: 'Pretendard Variable', weight: 760 },
-    SUBTITLE: { sizeUIWW: 1.25, min: 16, max: 22, family: 'Pretendard Variable', weight: 520 },
-    BODY: { sizeUIWW: 1.08, min: 14, max: 19, family: 'Pretendard Variable', weight: 460 },
-    BUTTON_TEXT: { sizeUIWW: 1.12, min: 15, max: 20, family: 'Pretendard Variable', weight: 720 },
+    TITLE: { sizeUIWW: 2.6, min: 30, max: 46, family: 'PFStardust', weight: 800 },
+    SUBTITLE: { sizeUIWW: 1.25, min: 16, max: 22, family: 'PFStardust', weight: 700 },
+    BODY: { sizeUIWW: 1.08, min: 14, max: 19, family: 'PFStardust', weight: 400 },
+    BUTTON_TEXT: { sizeUIWW: 1.12, min: 15, max: 20, family: 'PFStardust', weight: 700 },
     MONO: { sizeUIWW: 0.95, min: 12, max: 17, family: 'Consolas', weight: 500 },
     MONO_SMALL: { sizeUIWW: 0.78, min: 10, max: 14, family: 'Consolas', weight: 500 }
 });
@@ -215,8 +215,8 @@ export class DiagnosticScene extends BaseScene {
                 parent: this,
                 layer: 'ui',
                 text: button.label,
-                font: 'Pretendard Variable',
-                fontWeight: 680,
+                font: 'PFStardust',
+                fontWeight: 700,
                 size: clampNumber(this.#uww(1.08), 15, 20),
                 color: contentColor,
                 align: 'left'

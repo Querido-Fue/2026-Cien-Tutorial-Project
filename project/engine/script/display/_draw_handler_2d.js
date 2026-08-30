@@ -8,7 +8,6 @@ import {
     renderDrawText
 } from './draw_2d_shapes.js';
 import { renderDrawImage } from './draw_2d_image.js';
-import { PixelTextRenderer } from './_pixel_text_renderer.js';
 import {
     applyDraw2DStyles,
     applyDrawLayerTransform,
@@ -16,9 +15,6 @@ import {
     normalizeDrawLayerTransform,
     resetDrawContextState
 } from './draw_2d_layer_state.js';
-import { getData } from 'data/data_handler.js';
-
-const TEXT_RENDER_DATA = getData('TEXT_RENDER_DATA');
 
 /**
  * @class DrawHandler2D
@@ -30,7 +26,6 @@ export class DrawHandler2D {
     #shadowState;
     #pathCache;
     #measureCtx;
-    #pixelTextRenderer;
     #layerOptions;
     #layerTransforms;
 
@@ -49,7 +44,6 @@ export class DrawHandler2D {
 
         const measureCanvas = document.createElement('canvas');
         this.#measureCtx = measureCanvas.getContext('2d');
-        this.#pixelTextRenderer = new PixelTextRenderer(TEXT_RENDER_DATA);
 
         for (const [layerName, context] of Object.entries(contexts)) {
             this.registerLayer(layerName, context);
@@ -115,10 +109,6 @@ export class DrawHandler2D {
      * @returns {number} 측정된 텍스트 너비입니다.
      */
     measureText(text, font) {
-        const pixelWidth = this.#pixelTextRenderer.measureWidth(text, font);
-        if (pixelWidth !== null) {
-            return pixelWidth;
-        }
         this.#measureCtx.font = font;
         return this.#measureCtx.measureText(text).width;
     }
@@ -185,9 +175,7 @@ export class DrawHandler2D {
                 renderDrawImage(context, options);
                 break;
             case 'text':
-                if (!this.#pixelTextRenderer.render(context, options)) {
-                    renderDrawText(context, options);
-                }
+                renderDrawText(context, options);
                 break;
             case 'arrow':
                 renderDrawArrow(context, options, this.#pathCache.get('arrow'));

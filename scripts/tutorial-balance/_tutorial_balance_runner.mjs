@@ -43,7 +43,7 @@ export class TutorialBalanceRunner {
     constructor(options = {}) {
         this.#gameData = options.gameData ?? TUTORIAL_GAME_DATA;
         this.#modelFactory = options.modelFactory
-            ?? ((config) => new TutorialBattleModel(config));
+            ?? ((config) => new TutorialBattleModel(config, { random: () => 0 }));
         this.#eventPolarityByType = Object.fromEntries(
             Object.entries(this.#gameData.EVENT_TILE_EFFECTS).map(([id, effect]) => (
                 [id, effect.polarity]

@@ -30,21 +30,26 @@ export class TutorialSpriteCueRouter {
     /**
      * 배우 동작을 시작하고 타격 동기화 cue에 동일 지연 시간을 기록합니다.
      * @param {readonly object[]} cues - 프레젠터 cue입니다.
+     * @param {Readonly<Record<string,number>>} effectImpactDelays - 월드 효과별 충격 지연입니다.
      * @returns {readonly object[]} 피드백 큐용 cue입니다.
      */
-    route(cues = []) {
+    route(cues = [], effectImpactDelays = {}) {
         const routed = [];
         for (const cue of Array.isArray(cues) ? cues : []) {
             if (!cue || typeof cue.type !== 'string') {
                 continue;
             }
-            const delay = cue.impactActorId && cue.impactAnimationId
+            const actorDelay = cue.impactActorId && cue.impactAnimationId
                 ? this.#animator?.getImpactDelay?.(
                     cue.impactActorId,
                     cue.impactAnimationId,
                     cue.impactFacing
                 ) || 0
                 : 0;
+            const effectDelay = typeof cue.impactEffectId === 'string'
+                ? Number(effectImpactDelays?.[cue.impactEffectId]) || 0
+                : 0;
+            const delay = Math.max(actorDelay, effectDelay);
             if (cue.type === CUE_TYPES.ACTOR_ANIMATION && cue.actorId) {
                 if (cue.waitForImpact === true && delay > 0) {
                     this.#scheduledAnimations.push({ cue, remaining: delay });

@@ -8,6 +8,8 @@ import { EFFECT_RENDER_CONSTANTS } from '../project/engine/script/data/display/e
 import { DarkTheme } from '../project/engine/script/data/theme/dark_theme.js';
 import { LightTheme } from '../project/engine/script/data/theme/light_theme.js';
 import { TutorialBattleHudView } from '../project/engine/script/scene/tutorial/view/_tutorial_battle_hud_view.js';
+import { drawBattleHpValue } from '../project/engine/script/scene/tutorial/view/_tutorial_battle_hp_value_view.js';
+import { LORA_STATUS_PANEL_LAYOUT } from '../project/engine/script/scene/tutorial/view/_tutorial_battle_hud_layout.js';
 import { TutorialBattleLayout } from '../project/engine/script/scene/tutorial/view/_tutorial_battle_layout.js';
 import { TutorialBattleTutorialView } from '../project/engine/script/scene/tutorial/view/_tutorial_battle_tutorial_view.js';
 import { TutorialBattleWorldView } from '../project/engine/script/scene/tutorial/view/_tutorial_battle_world_view.js';
@@ -1279,6 +1281,46 @@ test('우하단 커맨드 전환은 90% 플립 뒤 보조 버튼을 펼치고 �
     assert.equal(commands.some((command) => command.image === assets.healIcon), false);
 });
 
+test('플레이어·로라 HP 수치는 원본 장식의 픽셀 중심을 1·2·3자리에서 공유한다', () => {
+    const playerLayout = TUTORIAL_GAME_DATA.LAYOUT.INVENTORY.PLAYER_PANEL;
+    const playerValue = playerLayout.HP_VALUE;
+    const loraValue = LORA_STATUS_PANEL_LAYOUT.HP_VALUE;
+    assert.deepEqual({
+        x: playerValue.X + (playerValue.WIDTH * 0.5),
+        y: playerValue.Y + (playerValue.HEIGHT * 0.5)
+    }, { x: 118, y: 51 });
+    assert.deepEqual({
+        x: loraValue.X + (loraValue.WIDTH * 0.5),
+        y: loraValue.Y + (loraValue.HEIGHT * 0.5)
+    }, { x: 133, y: 51 });
+
+    const commands = [];
+    const port = {
+        render(layer, command) {
+            commands.push({ layer, ...command });
+        }
+    };
+    for (const value of [7, 50, 100]) {
+        drawBattleHpValue(port, {
+            rect: { x: 101, y: 202, w: 39, h: 17 },
+            value,
+            font: '14px PFStardust',
+            fill: '#fff'
+        });
+    }
+    assert.deepEqual(commands.map((command) => ({
+        text: command.text,
+        x: command.x,
+        y: command.y,
+        align: command.align,
+        baseline: command.baseline
+    })), [
+        { text: '7', x: 121, y: 211, align: 'center', baseline: 'middle' },
+        { text: '50', x: 121, y: 211, align: 'center', baseline: 'middle' },
+        { text: '100', x: 121, y: 211, align: 'center', baseline: 'middle' }
+    ]);
+});
+
 test('로라·플레이어 상태와 아이템 설명은 원본 패널 내부에 맞춰진다', () => {
     const commands = [];
     const wrapRequests = [];
@@ -1288,7 +1330,7 @@ test('로라·플레이어 상태와 아이템 설명은 원본 패널 내부에
         turnBefore: { naturalWidth: 15, naturalHeight: 15 },
         turnDuring: { naturalWidth: 15, naturalHeight: 15 },
         turnPassed: { naturalWidth: 15, naturalHeight: 15 },
-        loraPanelFull: { naturalWidth: 247, naturalHeight: 90 },
+        loraPanel: { naturalWidth: 247, naturalHeight: 90 },
         loraPortraitIcon: { naturalWidth: 1254, naturalHeight: 1254 },
         loraHpBar: { naturalWidth: 80, naturalHeight: 4 },
         loraGaugeBar: { naturalWidth: 80, naturalHeight: 4 },
@@ -1330,7 +1372,7 @@ test('로라·플레이어 상태와 아이템 설명은 원본 패널 내부에
             loraActionsCompleted: 0,
             maxTurns: 12,
             player: { maxHp: 100 },
-            lora: { maxHp: 100 }
+            lora: { maxHp: 100, instability: 70 }
         },
         layout,
         colors: {
@@ -1358,8 +1400,9 @@ test('로라·플레이어 상태와 아이템 설명은 원본 패널 내부에
             cleanseSelected: false,
             focusedControlKey: 'item-item-0',
             movePreview: { ok: true, stepsUsed: 0 },
-            instabilityState: { label: '불안정' },
+            instabilityState: { id: 'unstable', label: '불안정' },
             readability: {
+                loraIntent: { actionType: 'area' },
                 playerPreview: null,
                 inspectedItem: {
                     label: '인형탈',
@@ -1380,7 +1423,8 @@ test('로라·플레이어 상태와 아이템 설명은 원본 패널 내부에
                 actions: TUTORIAL_GAME_DATA.LAYOUT.ACTIONS,
                 inventory: TUTORIAL_GAME_DATA.LAYOUT.INVENTORY,
                 itemIcon: TUTORIAL_GAME_DATA.SPRITES.ITEM,
-                floorTransitionAfterTurn: 6
+                floorTransitionAfterTurn: 6,
+                text: TUTORIAL_GAME_DATA.TEXT
             }
         }
     };
@@ -1414,7 +1458,7 @@ test('로라·플레이어 상태와 아이템 설명은 원본 패널 내부에
 
     view.draw(viewModel);
     const loraPanelLayers = commands.filter(
-        (command) => command.image === assets.loraPanelFull
+        (command) => command.image === assets.loraPanel
     );
     const loraPanel = loraPanelLayers[0];
     const loraPortrait = commands.find(
@@ -1425,6 +1469,15 @@ test('로라·플레이어 상태와 아이템 설명은 원본 패널 내부에
         (command) => command.image === assets.loraGaugeBar
     );
     const playerPanel = commands.find((command) => command.image === assets.playerPanel);
+    const playerHpValue = commands.find((command) => command.text === '50');
+    const loraHpValue = commands.find((command) => command.text === '100');
+    const instabilityValue = commands.find((command) => command.text === '70');
+    const loraStateText = commands.find(
+        (command) => command.text === '로라는 불안정해 보입니다.'
+    );
+    const loraIntentText = commands.find(
+        (command) => command.text === '다음에 전체 공격할 것 같습니다.'
+    );
     const occupiedSlots = commands.filter(
         (command) => command.image === assets.playerItemSelected
     );
@@ -1477,11 +1530,15 @@ test('로라·플레이어 상태와 아이템 설명은 원본 패널 내부에
         },
         { x: 975, y: 124, w: 123, h: 5 }
     );
-    assert.equal(
-        commands.some((command) => typeof command.text === 'string'
-            && /^(로라|HP|불안정)/.test(command.text)),
-        false
-    );
+    assert.ok(loraStateText);
+    assert.ok(loraIntentText);
+    assert.equal(loraStateText.x, 988);
+    assert.equal(loraIntentText.x, 988);
+    assert.equal(loraStateText.y < loraIntentText.y, true);
+    assert.equal(loraIntentText.x + renderPort.measureText(
+        loraIntentText.text,
+        loraIntentText.font
+    ) <= 1174, true);
     assert.equal(
         commands.some((command) => [
             assets.turnFrame,
@@ -1549,6 +1606,33 @@ test('로라·플레이어 상태와 아이템 설명은 원본 패널 내부에
     assert.deepEqual(
         { x: playerPanel.x, y: playerPanel.y, w: playerPanel.w, h: playerPanel.h },
         { x: 67, y: 585, w: 274, h: 92 }
+    );
+    assert.deepEqual(
+        {
+            x: playerHpValue.x,
+            y: playerHpValue.y,
+            align: playerHpValue.align,
+            baseline: playerHpValue.baseline
+        },
+        { x: 207, y: 645, align: 'center', baseline: 'middle' }
+    );
+    assert.deepEqual(
+        {
+            x: loraHpValue.x,
+            y: loraHpValue.y,
+            align: loraHpValue.align,
+            baseline: loraHpValue.baseline
+        },
+        { x: 1072, y: 102, align: 'center', baseline: 'middle' }
+    );
+    assert.deepEqual(
+        {
+            x: instabilityValue.x,
+            y: instabilityValue.y,
+            align: instabilityValue.align,
+            baseline: instabilityValue.baseline
+        },
+        { x: 1072, y: 133, align: 'center', baseline: 'middle' }
     );
     assert.equal(occupiedSlots.length, 5);
     assert.deepEqual(
@@ -1754,6 +1838,7 @@ test('전투 뷰는 장면·모델·저장·명령 큐를 직접 import하지 �
         '_tutorial_battle_world_view.js',
         '_tutorial_path_preview_view.js',
         '_tutorial_battle_hud_view.js',
+        '_tutorial_lora_status_view.js',
         '_tutorial_item_description_view.js',
         '_tutorial_battle_command_menu_view.js',
         '_tutorial_battle_feedback_view.js',

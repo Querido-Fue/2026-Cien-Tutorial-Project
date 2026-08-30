@@ -1,4 +1,4 @@
-import { getCanvas, getWW, getWH, render, shadowOn, shadowOff } from 'display/display_system.js';
+import { getCanvas, getWW, getWH, render } from 'display/display_system.js';
 import { getDelta } from 'engine/time_handler.js';
 import { animate, remove } from 'animation/animation_system.js';
 import { getMouseInput, isMousePressing } from 'input/input_system.js';
@@ -6,10 +6,10 @@ import { getData } from 'data/data_handler.js';
 import { ColorSchemes } from 'display/_theme_handler.js';
 import { toRadians } from 'util/math_util.js';
 import { clampFiniteNumber, resolveFiniteNumber } from 'util/number_util.js';
+import { UIAttackCursorRenderer } from './_ui_attack_cursor_renderer.js';
 
 const CURSOR_CONSTANTS = getData('CURSOR_CONSTANTS');
 const NORMAL_CURSOR_CONSTANTS = CURSOR_CONSTANTS.NORMAL;
-const ATTACK_CURSOR_CONSTANTS = CURSOR_CONSTANTS.ATTACK;
 const CURSOR_LAYER = 'top';
 const NORMAL_CURSOR_TYPE = 'normal';
 const ATTACK_CURSOR_TYPE = 'attack';
@@ -24,9 +24,8 @@ export class UICursor {
     #y;
     #defaultSubCircleRadius;
     #defaultSubCircleAlpha;
-    #lineLong;
-    #lineShort;
     #type;
+    #attackRenderer;
     #normalAnimTime;
     #normalAnimDuration;
     #normalRadiusAnimId;
@@ -47,9 +46,11 @@ export class UICursor {
         this._subCircleRadius = this.#defaultSubCircleRadius;
         this.#defaultSubCircleAlpha = NORMAL_CURSOR_CONSTANTS.SUB_CIRCLE_ALPHA;
         this._subCircleAlpha = this.#defaultSubCircleAlpha;
-        this.#lineLong = ATTACK_CURSOR_CONSTANTS.LINE_LONG_PX;
-        this.#lineShort = ATTACK_CURSOR_CONSTANTS.LINE_SHORT_PX;
         this.#type = NORMAL_CURSOR_TYPE;
+        this.#attackRenderer = new UIAttackCursorRenderer({
+            width: this.WW,
+            height: this.WH
+        });
         this.#normalAnimTime = 0;
         this.#normalAnimDuration = NORMAL_CURSOR_CONSTANTS.ANIM_DURATION;
         this.#normalRadiusAnimId = -1;
@@ -65,6 +66,7 @@ export class UICursor {
         this.WW = getWW();
         this.WH = getWH();
         this.#defaultSubCircleRadius = this.WH * NORMAL_CURSOR_CONSTANTS.SUB_CIRCLE_RADIUS_WH_RATIO;
+        this.#attackRenderer.resize(this.WW, this.WH);
         this.#syncNormalCursorSizeForResolution();
     }
 
@@ -166,6 +168,25 @@ export class UICursor {
     }
 
     /**
+     * 장면이 요청한 커서 종류와 포인터 옆 정보 표시를 반영합니다.
+     * null 또는 잘못된 요청은 일반 커서로 안전하게 되돌립니다.
+     * @param {object|null} presentation - 커서 종류와 선택적 정보 패널입니다.
+     */
+    setPresentation(presentation = null) {
+        const nextType = presentation?.type === ATTACK_CURSOR_TYPE
+            ? ATTACK_CURSOR_TYPE
+            : NORMAL_CURSOR_TYPE;
+        const typeChanged = nextType !== this.#type;
+        this.#type = nextType;
+        this.#attackRenderer.setPresentation(
+            nextType === ATTACK_CURSOR_TYPE ? presentation : null
+        );
+        if (typeChanged) {
+            this.#syncNormalCursorSizeForResolution();
+        }
+    }
+
+    /**
      * normal 커서 애니메이션을 시작합니다.
      * @param {string} variable - 애니메이션 대상 속성 이름입니다.
      * @param {number} endValue - 애니메이션 종료 값입니다.
@@ -245,38 +266,9 @@ export class UICursor {
      * attack 커서를 렌더링합니다.
      */
     _drawAttackCursor() {
-        shadowOn(CURSOR_LAYER, ATTACK_CURSOR_CONSTANTS.SHADOW_BLUR_PX, ColorSchemes.Cursor.White);
-        render(CURSOR_LAYER, {
-            shape: 'circle',
-            x: this.#x,
-            y: this.#y,
-            radius: ATTACK_CURSOR_CONSTANTS.CENTER_DOT_RADIUS_PX,
-            fill: ColorSchemes.Cursor.Active
-        });
-        this._drawAttackCursorLine(-this.#lineLong, 0, -this.#lineShort, 0);
-        this._drawAttackCursorLine(this.#lineShort, 0, this.#lineLong, 0);
-        this._drawAttackCursorLine(0, -this.#lineLong, 0, -this.#lineShort);
-        this._drawAttackCursorLine(0, this.#lineShort, 0, this.#lineLong);
-        shadowOff(CURSOR_LAYER);
-    }
-
-    /**
-     * attack 커서의 십자선 한 조각을 렌더링합니다.
-     * @param {number} startOffsetX - 시작점 X 오프셋입니다.
-     * @param {number} startOffsetY - 시작점 Y 오프셋입니다.
-     * @param {number} endOffsetX - 끝점 X 오프셋입니다.
-     * @param {number} endOffsetY - 끝점 Y 오프셋입니다.
-     */
-    _drawAttackCursorLine(startOffsetX, startOffsetY, endOffsetX, endOffsetY) {
-        render(CURSOR_LAYER, {
-            shape: 'line',
-            x1: this.#x + startOffsetX,
-            y1: this.#y + startOffsetY,
-            x2: this.#x + endOffsetX,
-            y2: this.#y + endOffsetY,
-            stroke: ColorSchemes.Cursor.Active,
-            lineWidth: ATTACK_CURSOR_CONSTANTS.LINE_WIDTH_PX
-        });
+        if (!this.#attackRenderer.draw(this.#x, this.#y)) {
+            this._drawNormalCursor();
+        }
     }
 
     /**

@@ -143,7 +143,12 @@ const LIGHT_TACTICS_THEME = Object.freeze({
         Stabilize: '#d49513',
         FlameOuter: '#ff5a1f',
         FlameCore: '#ffc04d',
-        FlameEmber: '#fff0a3'
+        FlameEmber: '#fff0a3',
+        CandleLight: '#f28a32',
+        UpperAmbient: '#2a1107',
+        BasementAmbient: '#071a35',
+        BasementMoteWarm: '#b7e5ff',
+        BasementMoteCool: '#4d8fc9'
     })
 });
 

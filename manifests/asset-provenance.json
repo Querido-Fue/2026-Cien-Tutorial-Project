@@ -21,39 +21,23 @@
       "blocker": "공개 배포 전 저장소 소유자가 코드 라이선스와 배포 권한을 확정해야 합니다."
     },
     {
-      "id": "pretendard-variable-font",
+      "id": "pf-stardust-font-family",
       "category": "font",
       "paths": [
-        "project/asset/old/font/PretendardVariable.woff2"
+        "project/asset/font/PFStardustS.ttf",
+        "project/asset/font/PFStardustBold.ttf",
+        "project/asset/font/PFStardustExtraBold.ttf"
       ],
-      "origin": "Pretendard 프로젝트",
-      "originStatus": "verified-third-party",
-      "license": "SIL Open Font License 1.1",
-      "notice": "project/license/pretendard.txt",
-      "releaseStatus": "approved"
-    },
-    {
-      "id": "lana-pixel-font",
-      "category": "font",
-      "paths": [
-        "project/asset/font/LanaPixel.ttf"
-      ],
-      "origin": "프로젝트 제공 폰트 파일; 사용자가 전체 사용 가능 권리를 확인함",
+      "origin": "사용자 제공 PF 스타더스트 3.0 S/Bold/ExtraBold 원본; Copyright © 2018 Pinnata",
+      "originUrl": "https://m.blog.naver.com/campanula913/221366697603",
       "originStatus": "user-confirmed-authorized",
-      "license": "전체 사용 가능(사용자 확인, 2026-08-28)",
-      "releaseStatus": "approved"
-    },
-    {
-      "id": "ownglyph-park-dahyun-font",
-      "category": "font",
-      "paths": [
-        "project/asset/font/OwnglyphParkDahyun.ttf"
-      ],
-      "origin": "사용자 제공 온글잎 박다현체; Copyright © 2023 VoyagerX, inc. & Dahyeon Park",
-      "originStatus": "user-confirmed-authorized",
-      "license": "상업적 사용 가능(사용자 확인, 2026-08-31); 파일 수정은 VoyagerX, inc. 사전 서면 허가 필요",
-      "notice": "THIRD_PARTY_NOTICES.md",
-      "sha256": "FBCC7E2E16ABD0C9192AFF6561871AB95C369BC58284879E813055BDE7C5568F",
+      "license": "개인·기업의 상업적 사용과 웹·프로그램 임베딩 허용; 제작자 허가 없는 폰트 파일 수정·재배포·유상 판매 금지",
+      "notice": "project/license/pf-stardust-notice.txt",
+      "sha256": {
+        "PFStardustS.ttf": "BFA5ABD54051F5A31A1D3E885BEA589CCB0E71FBA833097FAFDEC27E6C4D54DE",
+        "PFStardustBold.ttf": "D23021D127C8E020843B5A39D3FA27B4A92D62598F06DC541538318FD0A4F4C1",
+        "PFStardustExtraBold.ttf": "00FBBC852D15A5A5F6189D32BB31AB3AD74EE2DE5AB949947F562371F48C38EC"
+      },
       "releaseStatus": "approved"
     },
     {
@@ -61,6 +45,7 @@
       "category": "art",
       "paths": [
         "project/asset/img/**",
+        "project/asset/img2/**",
         "project/asset/old/ui/**",
         "project/asset/old/icon/**"
       ],

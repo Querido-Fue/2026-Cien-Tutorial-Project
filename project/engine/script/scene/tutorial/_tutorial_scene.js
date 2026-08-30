@@ -73,6 +73,7 @@ import { TutorialAssetLoader } from './_tutorial_asset_loader.js';
 import { TutorialAssetPort } from './_tutorial_asset_port.js';
 import { TutorialAudioDirector } from './_tutorial_audio_director.js';
 import { TutorialBattleCommandController } from './_tutorial_battle_command_controller.js';
+import { TutorialBattleAnimationCoordinator } from './_tutorial_battle_animation_coordinator.js';
 import { TutorialBattleOutcomeCoordinator } from './_tutorial_battle_outcome_coordinator.js';
 import { TutorialBattlePresenter } from './_tutorial_battle_presenter.js';
 import { TutorialBattleSelectionController } from './_tutorial_battle_selection_controller.js';
@@ -80,10 +81,6 @@ import { TutorialBattleViewModelFactory } from './_tutorial_battle_view_model_fa
 import { TutorialFeedbackQueue } from './_tutorial_feedback_queue.js';
 import { TutorialInventoryPresenter } from './_tutorial_inventory_presenter.js';
 import { TutorialLoraTurnController } from './_tutorial_lora_turn_controller.js';
-import { TutorialSpriteAnimator } from './_tutorial_sprite_animator.js';
-import { TutorialSpriteClipResolver } from './_tutorial_sprite_clip_resolver.js';
-import { TutorialSpriteCueRouter } from './_tutorial_sprite_cue_router.js';
-import { TutorialSpriteRoster } from './_tutorial_sprite_roster.js';
 import { TutorialRecordPopupController } from './_tutorial_record_popup_controller.js';
 import { TutorialResultController } from './_tutorial_result_controller.js';
 import { TutorialBattleFeedbackView } from './view/_tutorial_battle_feedback_view.js';
@@ -109,6 +106,7 @@ const TUTORIAL_ASSET_MANIFEST = getData('TUTORIAL_ASSET_MANIFEST');
 const TUTORIAL_GUIDANCE_PRESENTATION_DATA = getData('TUTORIAL_GUIDANCE_PRESENTATION_DATA');
 const TUTORIAL_RECORD_PRESENTATION_DATA = getData('TUTORIAL_RECORD_PRESENTATION_DATA');
 const TUTORIAL_SPRITE_CLIPS = getData('TUTORIAL_SPRITE_CLIPS');
+const TUTORIAL_BATTLE_EFFECT_DATA = getData('TUTORIAL_BATTLE_EFFECT_DATA');
 
 const PLAYER_ID = 'player';
 /**
@@ -282,7 +280,8 @@ export class TutorialScene extends BaseScene {
         );
         this.battlePresenter = new TutorialBattlePresenter({
             items: this.data.ITEMS,
-            animation: this.data.ANIMATION
+            animation: this.data.ANIMATION,
+            effects: TUTORIAL_BATTLE_EFFECT_DATA.IDS
         });
         this.combatReadability = new TutorialCombatReadabilityPresenter({
             items: this.data.ITEMS,
@@ -310,13 +309,9 @@ export class TutorialScene extends BaseScene {
                 (state) => state.id === 'unstable'
             )?.min ?? 61
         });
-        const spriteClipResolver = new TutorialSpriteClipResolver(TUTORIAL_SPRITE_CLIPS);
-        this.spriteAnimator = new TutorialSpriteAnimator({
-            resolver: spriteClipResolver
-        });
-        this.spriteRoster = new TutorialSpriteRoster(this.spriteAnimator);
-        this.spriteCueRouter = new TutorialSpriteCueRouter({
-            animator: this.spriteAnimator,
+        this.battleAnimations = new TutorialBattleAnimationCoordinator({
+            spriteClips: TUTORIAL_SPRITE_CLIPS,
+            effectData: TUTORIAL_BATTLE_EFFECT_DATA,
             onCue: (cue) => this.feedbackQueue.enqueue([cue])
         });
         this.achievementBanner = new TutorialAchievementBanner({
@@ -339,7 +334,7 @@ export class TutorialScene extends BaseScene {
         });
         this.battleOutcomes = new TutorialBattleOutcomeCoordinator({
             presenter: this.battlePresenter,
-            spriteCueRouter: this.spriteCueRouter,
+            animationCoordinator: this.battleAnimations,
             feedbackQueue: this.feedbackQueue,
             presentationTimeline: this.presentationTimeline,
             achievementEvaluator: this.achievementEvaluator,
@@ -456,8 +451,7 @@ export class TutorialScene extends BaseScene {
         this.#updatePointerState();
         this.#handlePointerInput();
         this.loraTurns.update(deltaSeconds);
-        this.#syncSpriteRoster();
-        this.spriteCueRouter.update(deltaSeconds);
+        this.#updateBattleAnimations(deltaSeconds);
         this.#enterResultIfNeeded();
         this.feedbackQueue.update(deltaSeconds);
         this.achievementBanner.update(deltaSeconds);
@@ -477,6 +471,7 @@ export class TutorialScene extends BaseScene {
         const view = getTutorialModePolicy(this.mode)?.view;
         const battleViewModel = view === 'battle' || view === 'pause'
             || this.mode === MODES.RECORD ? this.#createBattleViewModel() : null;
+        this.sceneSystem?.systemHandler?.uiSystem?.setCursorPresentation(battleViewModel?.cursor || null);
         if (battleViewModel) {
             this.battleWorldView.draw(battleViewModel);
             this.battleFeedbackView.draw(battleViewModel);
@@ -572,6 +567,9 @@ export class TutorialScene extends BaseScene {
                     break;
                 case COMMANDS.GALLERY_PLAY:
                     this.#applyGalleryPlay();
+                    break;
+                case COMMANDS.GALLERY_UNLOCK_ALL:
+                    this.#applyGalleryUnlockAll();
                     break;
                 case COMMANDS.CLOSE_RECORD:
                     this.#applyCloseRecord();
@@ -675,13 +673,14 @@ export class TutorialScene extends BaseScene {
     destroy() {
         this.metaSession.commitStaged();
         this.destroyed = true;
+        this.sceneSystem?.systemHandler?.uiSystem?.setCursorPresentation(null);
         this.timelineRevision += 1;
         this.presentationTimeline.destroy();
         this.titleFlow.destroy();
         this.battleCamera.destroy();
         this.battleCameraController.destroy();
         setPointerLockEnabled(false);
-        this.spriteCueRouter.destroy();
+        this.battleAnimations.destroy();
         this.loadingCoordinator.destroy();
         this.assetLoader.destroy();
         this.feedbackQueue.destroy();
@@ -715,7 +714,6 @@ export class TutorialScene extends BaseScene {
         this.mode = MODES.MENU;
         this.#appendEvent('진행도를 불러왔습니다.');
     }
-
     /** 메뉴 버튼 퇴장 뒤 같은 타이틀 무대의 스타터 선택을 엽니다. @private */
     #applyStart() {
         if (this.mode !== MODES.MENU) {
@@ -723,7 +721,6 @@ export class TutorialScene extends BaseScene {
         }
         this.titleFlow.openStarter({ onSwap: () => { this.mode = MODES.STARTER; } });
     }
-
     /**
      * 메뉴에서 컷씬 갤러리를 엽니다.
      * @private
@@ -734,7 +731,6 @@ export class TutorialScene extends BaseScene {
         }
         this.mode = MODES.GALLERY;
     }
-
     /** 타이틀 화면에서 현재 배포의 한글 변경 기록을 엽니다. @private */
     #applyOpenChangelog() {
         if (this.mode !== MODES.MENU) {
@@ -743,7 +739,6 @@ export class TutorialScene extends BaseScene {
         this.changelogPage = 0;
         this.mode = MODES.CHANGELOG;
     }
-
     /** @param {object} payload 체인지로그 페이지 이동량입니다. @private */
     #applyChangelogShift(payload) {
         if (this.mode !== MODES.CHANGELOG) {
@@ -760,7 +755,6 @@ export class TutorialScene extends BaseScene {
         ) % pageCount;
         this.presentationTimeline.startSelection('menu-selection');
     }
-
     /**
      * 현재 화면에서 메뉴로 돌아갑니다.
      * @private
@@ -771,7 +765,6 @@ export class TutorialScene extends BaseScene {
         }
         this.#leaveRun(MODES.MENU);
     }
-
     /** 스타터 선택 커서를 이동합니다. @param {object} payload - 이동량입니다. @private */
     #applyStarterShift(payload) {
         if (this.mode !== MODES.STARTER || this.cutscenes.isOpen()) {
@@ -779,7 +772,6 @@ export class TutorialScene extends BaseScene {
         }
         this.titleFlow.shift(payload?.delta);
     }
-
     /** 선택 아이콘 모핑 뒤 새 전투를 엽니다. @param {object} payload - 선택 아이템 ID입니다. @private */
     #applyChooseStarter(payload) {
         if (this.mode !== MODES.STARTER || this.cutscenes.isOpen()) {
@@ -795,7 +787,6 @@ export class TutorialScene extends BaseScene {
             }
         });
     }
-
     /** 안정된 전투 프레임을 파괴하지 않고 Pause 모드로 전환합니다. @private */
     #applyPause() {
         if (this.mode !== MODES.BATTLE
@@ -810,7 +801,6 @@ export class TutorialScene extends BaseScene {
         this.mode = MODES.PAUSE;
         this.buttonHost.invalidate();
     }
-
     /** Pause 이전과 동일한 모델·표현 상태로 전투를 재개합니다. @private */
     #applyResume() {
         if (this.mode !== MODES.PAUSE || !this.model) {
@@ -819,7 +809,6 @@ export class TutorialScene extends BaseScene {
         this.mode = MODES.BATTLE;
         this.buttonHost.invalidate();
     }
-
     /** Pause 세로 메뉴의 키보드 선택을 순환합니다. @param {object} payload @private */
     #applyPauseShift(payload) {
         if (this.mode !== MODES.PAUSE) {
@@ -854,7 +843,7 @@ export class TutorialScene extends BaseScene {
         this.presentationTimeline.cancel();
         this.battleCamera.clear();
         this.battleCameraController.clear();
-        this.spriteCueRouter.reset();
+        this.battleAnimations.reset();
         this.audioDirector.resetTransient();
         this.cutscenes.reset({ returnMode: nextMode });
         this.cutsceneTriggers.reset();
@@ -882,7 +871,7 @@ export class TutorialScene extends BaseScene {
     #beginRun(starterItemId) {
         this.timelineRevision += 1;
         this.presentationTimeline.cancel();
-        this.spriteCueRouter.reset();
+        this.battleAnimations.reset();
         this.audioDirector.resetTransient();
         this.metaSession.beginStaging();
         const knowledge = {
@@ -935,7 +924,7 @@ export class TutorialScene extends BaseScene {
             floorIndex: Number(this.model.floorIndex) || 0
         });
         this.#refreshBattleCache();
-        this.#syncSpriteRoster();
+        this.#updateBattleAnimations(0);
         this.#appendEvent('전투 시작 · 이동 경로를 지정하고 확정한 뒤 행동하세요.');
         return openingCutsceneIds;
     }
@@ -980,6 +969,13 @@ export class TutorialScene extends BaseScene {
             return;
         }
         this.cutscenes.open(entry.replayCutsceneId, this.mode, { repeat: true });
+    }
+
+    /** 메뉴 갤러리의 모든 항목을 영구 해금합니다. @private */
+    #applyGalleryUnlockAll() {
+        if (this.mode === MODES.GALLERY && !this.cutscenes.isOpen()) {
+            this.metaSession.unlockGallery(this.galleryController.getUnlockCatalog());
+        }
     }
 
     /** 현재 화면이 메뉴 갤러리 또는 전투 중 수집물 팝업인지 확인합니다. @private */
@@ -1121,7 +1117,7 @@ export class TutorialScene extends BaseScene {
             hasRecordWork: this.recordPopups.hasWork(),
             blocked: this.cutscenes.isOpen()
             || this.cutscenes.hasPending()
-            || this.spriteCueRouter.isBusy()
+            || this.battleAnimations.isBusy()
         });
         if (!transition.entered) {
             return;
@@ -1224,7 +1220,8 @@ export class TutorialScene extends BaseScene {
     #isPresentationLocked() {
         return this.presentationTimeline.isLocked()
             || this.titleFlow.isLocked()
-            || this.recordPopups.isLocked();
+            || this.recordPopups.isLocked()
+            || this.battleAnimations.isBusy();
     }
 
     /**
@@ -1461,17 +1458,20 @@ export class TutorialScene extends BaseScene {
             return null;
         }
         const floor = this.#getCurrentFloor();
+        const animations = this.battleAnimations.snapshot();
         return this.battleViewModels.create({
             model: this.model,
             floor,
             layout: this.#createBattleLayoutFrame(floor),
             fonts: this.fonts,
             colors: ColorSchemes.Tactics,
+            attackCursorIcon: this.assetPort.getUiAsset('attackIcon'),
             elapsedSeconds: this.elapsedSeconds,
             presentation: this.presentationTimeline.getState(),
             presentationLocked: this.#isPresentationLocked(),
             feedback: this.feedbackQueue.getSnapshot(),
-            spriteAnimations: this.spriteAnimator.getSnapshot(),
+            spriteAnimations: animations.spriteAnimations,
+            battleEffects: animations.battleEffects,
             floorActors: this.floorActorView,
             ready: this.#canAcceptBattleInput(),
             achievement: this.achievementBanner.getSnapshot(),
@@ -1808,13 +1808,13 @@ export class TutorialScene extends BaseScene {
         return this.model.floorStates?.[floorIndex] || null;
     }
 
-    /** 현재 표시 층 배우를 스프라이트 재생기 roster와 맞춥니다. @private */
-    #syncSpriteRoster() {
+    /** 현재 표시 층 배우와 월드 효과를 함께 갱신합니다. @param {number} deltaSeconds @private */
+    #updateBattleAnimations(deltaSeconds) {
         if (this.mode !== MODES.BATTLE || !this.model) {
-            this.spriteAnimator.syncActors([]);
+            this.battleAnimations.update(deltaSeconds, null);
             return;
         }
-        this.spriteRoster.sync({
+        this.battleAnimations.update(deltaSeconds, {
             floor: this.#getCurrentFloor(),
             floorActors: this.floorActorView,
             snapshot: this.#getSnapshot(),

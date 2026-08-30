@@ -519,7 +519,13 @@ export class TutorialGalleryView {
                 fitHitToBackground: true,
                 command: {
                     type: viewModel.closeCommandType || TUTORIAL_COMMANDS.RETURN_MENU
-                }
+                },
+                ...(viewModel.recordPopup === true ? {} : {
+                    longPressSeconds: viewModel.unlockAllHoldSeconds,
+                    longPressCommand: {
+                        type: TUTORIAL_COMMANDS.GALLERY_UNLOCK_ALL
+                    }
+                })
             }
         ];
         if (playable) {

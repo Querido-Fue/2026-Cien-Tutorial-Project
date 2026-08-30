@@ -1,4 +1,7 @@
-import { PRIMARY_GAME_FONT_STACK } from './font_family_constants.js';
+import {
+    GAME_FONT_WEIGHTS,
+    PRIMARY_GAME_FONT_STACK
+} from './font_family_constants.js';
 
 const UI_WIDTH_UNIT = 'WW';
 const DEFAULT_TEXT_FONT_FAMILY = PRIMARY_GAME_FONT_STACK;
@@ -35,16 +38,16 @@ function createTextPreset(sizeValue, weight) {
  * 텍스트 렌더링에 사용되는 타이포그래피 설정 상수 모음입니다.
  */
 export const TEXT_CONSTANTS = Object.freeze({
-    H1: createTextPreset(2, 400),
-    H2: createTextPreset(1.6, 400),
-    H3: createTextPreset(1.3, 400),
-    H3_BOLD: createTextPreset(1.3, 400),
-    H4: createTextPreset(1.1, 400),
-    H4_BOLD: createTextPreset(1.1, 400),
-    H5: createTextPreset(1, 400),
-    H5_BOLD: createTextPreset(1, 400),
-    H6: createTextPreset(0.85, 400),
-    H6_BOLD: createTextPreset(0.85, 400),
-    SETTINGS_DESC: createTextPreset(0.9, 400),
-    SETTINGS_SLIDER_VALUE: createTextPreset(0.9, 400)
+    H1: createTextPreset(2, GAME_FONT_WEIGHTS.DISPLAY),
+    H2: createTextPreset(1.6, GAME_FONT_WEIGHTS.DISPLAY),
+    H3: createTextPreset(1.3, GAME_FONT_WEIGHTS.EMPHASIS),
+    H3_BOLD: createTextPreset(1.3, GAME_FONT_WEIGHTS.DISPLAY),
+    H4: createTextPreset(1.1, GAME_FONT_WEIGHTS.EMPHASIS),
+    H4_BOLD: createTextPreset(1.1, GAME_FONT_WEIGHTS.DISPLAY),
+    H5: createTextPreset(1, GAME_FONT_WEIGHTS.BODY),
+    H5_BOLD: createTextPreset(1, GAME_FONT_WEIGHTS.EMPHASIS),
+    H6: createTextPreset(0.85, GAME_FONT_WEIGHTS.BODY),
+    H6_BOLD: createTextPreset(0.85, GAME_FONT_WEIGHTS.EMPHASIS),
+    SETTINGS_DESC: createTextPreset(0.9, GAME_FONT_WEIGHTS.BODY),
+    SETTINGS_SLIDER_VALUE: createTextPreset(0.9, GAME_FONT_WEIGHTS.EMPHASIS)
 });

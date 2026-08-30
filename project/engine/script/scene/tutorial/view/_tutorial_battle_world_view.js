@@ -1,17 +1,16 @@
-import { EFFECT_RENDER_CONSTANTS } from '../../../data/display/effect_render_constants.js';
 import { TutorialBattleLayout } from './_tutorial_battle_layout.js';
 import {
     drawBattleViewText,
     toBattleViewList
 } from './_tutorial_battle_view_helpers.js';
 import { TutorialBattleActorView } from './_tutorial_battle_actor_view.js';
+import { TutorialBattleEffectView } from './_tutorial_battle_effect_view.js';
+import { TutorialBattleLightingView } from './_tutorial_battle_lighting_view.js';
 import { TutorialFloatingPickupView } from './_tutorial_floating_pickup_view.js';
 import { TutorialPathPreviewView } from './_tutorial_path_preview_view.js';
 
 const WALL_FOOTPRINT_SCALE = 1;
 const WALL_HEIGHT_TILE_RATIO = 0.34;
-const EFFECT_TYPES = EFFECT_RENDER_CONSTANTS.TYPES;
-
 /**
  * @class TutorialBattleWorldView
  * @description 읽기 전용 전투 프레임으로 보드, 범위, 오브젝트와 액터를 그립니다.
@@ -20,6 +19,8 @@ export class TutorialBattleWorldView {
     #renderPort;
     #assetPort;
     #actorView;
+    #effectView;
+    #lightingView;
     #pickupView;
     #pathPreviewView;
     #frame;
@@ -32,6 +33,8 @@ export class TutorialBattleWorldView {
         this.#renderPort = renderPort;
         this.#assetPort = assetPort;
         this.#actorView = new TutorialBattleActorView(renderPort, assetPort);
+        this.#effectView = new TutorialBattleEffectView(renderPort, assetPort);
+        this.#lightingView = new TutorialBattleLightingView(renderPort);
         this.#pickupView = new TutorialFloatingPickupView(renderPort);
         this.#pathPreviewView = new TutorialPathPreviewView(renderPort);
         this.#frame = null;
@@ -61,10 +64,10 @@ export class TutorialBattleWorldView {
                 });
             }
             this.#drawMapArtwork(mapArtwork);
-            this.#drawAmbientDust();
-            this.#drawAmbientFire(Boolean(mapArtwork));
+            this.#lightingView.draw(this.#frame, Boolean(mapArtwork));
             this.#drawQuarterViewBoard(Boolean(mapArtwork));
             this.#drawWorldObjects();
+            this.#effectView.draw(this.#frame);
         } finally {
             this.#frame = null;
         }
@@ -86,48 +89,6 @@ export class TutorialBattleWorldView {
                 smoothing: false
             });
         }
-    }
-
-    /** 보드 월드 위·UI 아래에 희박한 픽셀 먼지 WebGL 명령을 그립니다. @private */
-    #drawAmbientDust() {
-        const { colors, layout, world } = this.#frame;
-        const bounds = layout.mapImageRect || layout.boardRect;
-        if (!bounds || !(bounds.w > 0) || !(bounds.h > 0)) {
-            return;
-        }
-        const particleCount = Math.max(24, Math.min(
-            48,
-            Math.round((bounds.w * bounds.h) / 36000)
-        ));
-        this.#renderPort.renderGL('effect', {
-            effectType: EFFECT_TYPES.AMBIENT_DUST,
-            bounds,
-            particleCount,
-            time: Number(world.elapsedSeconds) || 0,
-            alpha: 0.72,
-            pixelSize: 2,
-            pointSize: 2,
-            warmColor: colors.Effects?.FlameEmber,
-            coolColor: colors.Effects?.Debris
-        });
-    }
-
-    /** 원본 맵 촛대 좌표에 맞춘 WebGL 난류 화염 명령을 그립니다. @param {boolean} hasMapArtwork @private */
-    #drawAmbientFire(hasMapArtwork) {
-        const { colors, layout, world } = this.#frame;
-        const ambientFire = layout.ambientFire;
-        if (!hasMapArtwork || !ambientFire || ambientFire.emitters.length === 0) {
-            return;
-        }
-        this.#renderPort.renderGL('effect', {
-            effectType: EFFECT_TYPES.FLAME_PARTICLES,
-            emitters: ambientFire.emitters,
-            time: Number(world.elapsedSeconds) || 0,
-            alpha: ambientFire.alpha,
-            outerColor: colors.Effects?.FlameOuter,
-            coreColor: colors.Effects?.FlameCore,
-            emberColor: colors.Effects?.FlameEmber
-        });
     }
 
     /** 층 타일과 입력 표식을 그립니다. @param {boolean} hasMapArtwork @private */

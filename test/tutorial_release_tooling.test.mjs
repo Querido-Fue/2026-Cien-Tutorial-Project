@@ -46,8 +46,11 @@ async function createFakeRepository(root) {
         version: '1.0.0'
     }));
     await createFile(join(root, 'project', 'engine', 'index.html'));
-    await createFile(join(root, 'project', 'license', 'pretendard.txt'));
+    await createFile(join(root, 'project', 'license', 'pf-stardust-notice.txt'));
     await createFile(join(root, 'project', 'asset', 'tutorial', 'runtime.png'));
+    await createFile(join(root, 'project', 'asset', 'font', 'PFStardustS.ttf'));
+    await createFile(join(root, 'project', 'asset', 'font', 'PFStardustBold.ttf'));
+    await createFile(join(root, 'project', 'asset', 'font', 'PFStardustExtraBold.ttf'));
     await createFile(join(root, 'project', 'asset', 'font', 'LanaPixel.ttf'));
     await createFile(join(root, 'project', 'asset', 'font', 'OwnglyphParkDahyun.ttf'));
     await createFile(join(
@@ -136,9 +139,14 @@ test('패키징은 고정 NW.js 입력과 런타임 에셋만 새 폴더에 조�
     assert.equal(result.outputDirectory, outputDirectory);
     await access(join(outputDirectory, NWJS_PACKAGE_CONTRACT.executableName));
     await access(join(outputDirectory, 'asset', 'tutorial', 'runtime.png'));
-    await access(join(outputDirectory, 'asset', 'font', 'OwnglyphParkDahyun.ttf'));
+    await access(join(outputDirectory, 'asset', 'font', 'PFStardustS.ttf'));
+    await access(join(outputDirectory, 'asset', 'font', 'PFStardustBold.ttf'));
+    await access(join(outputDirectory, 'asset', 'font', 'PFStardustExtraBold.ttf'));
     await assert.rejects(() => access(join(outputDirectory, 'asset', 'font', 'LanaPixel.ttf')));
+    await assert.rejects(() => access(join(outputDirectory, 'asset', 'font', 'OwnglyphParkDahyun.ttf')));
+    await assert.rejects(() => access(join(outputDirectory, 'asset', 'old', 'font', 'PretendardVariable.woff2')));
     await access(join(outputDirectory, 'asset', 'old', 'icon', 'logo.png'));
+    await access(join(outputDirectory, 'license', 'pf-stardust-notice.txt'));
     await access(join(outputDirectory, 'THIRD_PARTY_NOTICES.md'));
     await assert.rejects(() => access(join(outputDirectory, 'nw.exe')));
     await assert.rejects(() => access(join(outputDirectory, 'asset', 'img')));

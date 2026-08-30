@@ -1,4 +1,10 @@
 import { UIPool, releaseUIItem } from 'ui/_ui_pool.js';
+import {
+    getMouseInput,
+    hasMouseState,
+    isMousePressing
+} from 'input/input_system.js';
+import { TutorialLongPressController } from '../_tutorial_long_press_controller.js';
 import { fitTutorialAssetRect } from './_tutorial_asset_view_helpers.js';
 
 /**
@@ -14,6 +20,7 @@ export class TutorialButtonHost {
     #buttons;
     #signature;
     #presentation;
+    #longPress;
 
     /**
      * @param {object} options - 버튼 호스트 의존성입니다.
@@ -38,6 +45,7 @@ export class TutorialButtonHost {
         this.#buttons = {};
         this.#signature = null;
         this.#presentation = Object.freeze({ alpha: 1, interactive: true });
+        this.#longPress = new TutorialLongPressController();
     }
 
     /**
@@ -92,8 +100,22 @@ export class TutorialButtonHost {
     update() {
         for (const button of Object.values(this.#buttons)) {
             this.#applyPresentation(button);
+        }
+        const pressing = isMousePressing('left');
+        const triggeredKey = this.#longPress.update({
+            pressStarted: hasMouseState('left', 'click'),
+            pressing,
+            released: hasMouseState('left', 'clicked', { includeConsumed: true }),
+            hoveredTarget: this.#findHoveredLongPressTarget(),
+            timestampSeconds: performance.now() / 1000
+        });
+        if (triggeredKey) {
+            this.#activateLongPress(triggeredKey);
+        }
+        for (const button of Object.values(this.#buttons)) {
             button.item.update();
         }
+        this.#longPress.completeFrame({ pressing });
     }
 
     /** 모든 버튼을 UI 레이어에 그립니다. */
@@ -137,6 +159,7 @@ export class TutorialButtonHost {
     destroy() {
         this.#releaseButtons();
         this.#signature = null;
+        this.#longPress.reset();
     }
 
     /**
@@ -217,6 +240,9 @@ export class TutorialButtonHost {
                 return spec.tooltip;
             },
             onClick: () => {
+                if (this.#longPress.shouldSuppressActivation()) {
+                    return;
+                }
                 if (enabled) {
                     this.#activate(spec);
                 } else if (typeof spec.disabledCommand?.type === 'string') {
@@ -237,7 +263,10 @@ export class TutorialButtonHost {
             item: button,
             text: textElement,
             baseAlpha: Number.isFinite(Number(spec.alpha)) ? Number(spec.alpha) : 1,
-            inspectable
+            inspectable,
+            enabled,
+            longPressSeconds: Number(spec.longPressSeconds),
+            longPressCommand: spec.longPressCommand
         };
         this.#applyPresentation(this.#buttons[spec.key]);
     }
@@ -249,6 +278,45 @@ export class TutorialButtonHost {
         }
         button.item.alpha = button.baseAlpha * this.#presentation.alpha;
         button.item.clickAble = button.inspectable && this.#presentation.interactive;
+    }
+
+    /**
+     * 현재 포인터 아래에서 롱프레스를 받을 수 있는 버튼을 찾습니다.
+     * @returns {{key:string,durationSeconds:number}|null} 호버한 대상입니다.
+     * @private
+     */
+    #findHoveredLongPressTarget() {
+        if (!this.#presentation.interactive) {
+            return null;
+        }
+        const x = Number(getMouseInput('x'));
+        const y = Number(getMouseInput('y'));
+        for (const [key, button] of Object.entries(this.#buttons)) {
+            const item = button?.item;
+            if (!button?.enabled
+                || !item?.clickAble
+                || typeof button.longPressCommand?.type !== 'string'
+                || !Number.isFinite(button.longPressSeconds)
+                || button.longPressSeconds <= 0) {
+                continue;
+            }
+            if (x >= item.x && x <= item.x + item.width
+                && y >= item.y && y <= item.y + item.height) {
+                return { key, durationSeconds: button.longPressSeconds };
+            }
+        }
+        return null;
+    }
+
+    /** @param {string} key - 완료된 롱프레스 버튼 키입니다. @private */
+    #activateLongPress(key) {
+        const button = this.#buttons[key];
+        if (button?.enabled && typeof button.longPressCommand?.type === 'string') {
+            this.#onCommand(
+                button.longPressCommand.type,
+                button.longPressCommand.payload
+            );
+        }
     }
 
     /**

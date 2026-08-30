@@ -1,4 +1,4 @@
-const DEFAULT_FONT_FAMILY = 'Pretendard Variable, arial';
+const DEFAULT_FONT_FAMILY = 'PFStardust, sans-serif';
 const DEFAULT_FONT_WEIGHT = 400;
 const DEFAULT_FONT_SIZE_PX = 12;
 

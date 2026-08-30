@@ -13,6 +13,7 @@ const SOURCE_URLS = Object.freeze({
     displaySystem: new URL('../project/engine/script/display/display_system.js', import.meta.url),
     handler: new URL('../project/engine/script/display/webgl/_webgl_handler.js', import.meta.url),
     pipeline: new URL('../project/engine/script/display/webgl/_world_postprocess_pipeline.js', import.meta.url),
+    distortionPass: new URL('../project/engine/script/display/webgl/_spatial_distortion_postprocess_pass.js', import.meta.url),
     shaderUtils: new URL('../project/engine/script/display/webgl/_shader_utils.js', import.meta.url),
     flamePass: new URL('../project/engine/script/display/webgl/_flame_particle_effect_pass.js', import.meta.url),
     shieldPass: new URL('../project/engine/script/display/webgl/_magnetic_shield_effect_pass.js', import.meta.url)
@@ -74,6 +75,22 @@ test('공유 FBO 명령은 background → object → effect 순서로 지연 실
     assert.match(pipeline, /queue\.push\(command\)/);
     assert.match(pipeline, /#flushWorldLayersInOrder\(\)/);
     assert.match(pipeline, /for \(const layerName of WORLD_LAYER_IDS\)/);
+});
+
+test('공격 공간 왜곡은 별도 full-resolution 타깃에서 월드만 방사형 굴절한다', async () => {
+    const { pipeline, distortionPass } = await readSources();
+    assert.equal(
+        EFFECT_RENDER_CONSTANTS.TYPES.SPATIAL_DISTORTION,
+        'spatialDistortion'
+    );
+    assert.ok(EFFECT_RENDER_CONSTANTS.SPATIAL_DISTORTION.MAX_COMMANDS_PER_FRAME <= 4);
+    assert.match(pipeline, /SpatialDistortionPostProcessPass/);
+    assert.match(pipeline, /this\.distortionCommands\.push\(command\)/);
+    assert.match(pipeline, /this\.distortionTarget\.texture/);
+    assert.match(distortionPass, /distanceFromCenter/);
+    assert.match(distortionPass, /ringDistance/);
+    assert.match(distortionPass, /texture2D\(u_scene, sampleUv\)/);
+    assert.doesNotMatch(distortionPass, /u_ui|texteffect/i);
 });
 
 test('절차적 WebGL 효과는 화면 좌표를 픽셀 격자에 고정한다', async () => {

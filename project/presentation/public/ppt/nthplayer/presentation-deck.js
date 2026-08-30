@@ -1,5 +1,6 @@
 const EASE_OUT_EXPO = 'cubic-bezier(0.16, 1, 0.3, 1)';
 const TRANSITION_GUARD_MS = 480;
+const SLIDE_TRANSITION_MS = 920;
 
 /**
  * 단일 클릭과 키보드 입력을 슬라이드·카메라 상태 전환으로 연결합니다.
@@ -183,7 +184,10 @@ export class PresentationDeck {
         document.body.classList.remove('is-transitioning');
         requestAnimationFrame(() => {
             document.body.classList.add('is-transitioning');
-            window.setTimeout(() => document.body.classList.remove('is-transitioning'), 1150);
+            window.setTimeout(
+                () => document.body.classList.remove('is-transitioning'),
+                SLIDE_TRANSITION_MS
+            );
         });
     }
 

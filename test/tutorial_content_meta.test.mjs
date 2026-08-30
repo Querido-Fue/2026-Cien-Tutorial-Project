@@ -20,6 +20,7 @@ import {
     TutorialMetaVersionError,
     unlockTutorialAchievement,
     unlockTutorialCutscene,
+    unlockTutorialGallery,
     unlockTutorialRecord
 } from '../project/engine/script/scene/tutorial/_tutorial_meta_progress.js';
 
@@ -222,6 +223,51 @@ test('갤러리는 업적·일기·엔딩·컷씬을 분리하고 저장 메타�
     assert.equal(snapshot.selectedSectionId, 'cutscenes');
     assert.equal(snapshot.selectedEntry.internalId, 'opening');
     assert.equal(snapshot.selectedEntry.playable, true);
+});
+
+test('전체 갤러리 해금은 모든 항목과 엔딩 재생 컷씬을 멱등 병합한다', () => {
+    const gallery = new TutorialGalleryController({
+        content: TUTORIAL_CONTENT_DATA,
+        cutscenes: TUTORIAL_GAME_DATA.CUTSCENES
+    });
+    const catalog = gallery.getUnlockCatalog();
+    assert.equal(gallery.getSnapshot(createDefaultTutorialMeta()).unlockAllHoldSeconds, 2);
+    assert.deepEqual(catalog.achievementIds, TUTORIAL_CONTENT_DATA.ACHIEVEMENTS.map(
+        ({ id }) => id
+    ));
+    assert.deepEqual(catalog.recordIds, [
+        ...TUTORIAL_CONTENT_DATA.RECORDS.LORA.map(({ id }) => id),
+        ...TUTORIAL_CONTENT_DATA.RECORDS.DEVELOPER.map(({ id }) => id)
+    ]);
+    assert.deepEqual(catalog.endingIds, TUTORIAL_CONTENT_DATA.ENDINGS.map(({ id }) => id));
+    assert.deepEqual(catalog.cutsceneIds, [
+        ...TUTORIAL_CONTENT_DATA.GALLERY.cutsceneIds,
+        'true',
+        'hollow',
+        'special'
+    ]);
+
+    const original = {
+        ...createDefaultTutorialMeta(),
+        unlockedAchievementIds: [catalog.achievementIds[0]]
+    };
+    const unlocked = unlockTutorialGallery(original, catalog);
+    assert.deepEqual(unlocked.unlockedAchievementIds, catalog.achievementIds);
+    assert.deepEqual(unlocked.unlockedRecordIds, catalog.recordIds);
+    assert.deepEqual(unlocked.endingIds, catalog.endingIds);
+    assert.deepEqual(unlocked.unlockedCutsceneIds, catalog.cutsceneIds);
+    assert.equal(unlocked.playCount, 0);
+    assert.equal(unlocked.openingWatched, false);
+    assert.deepEqual(unlockTutorialGallery(unlocked, catalog), unlocked);
+
+    for (const section of TUTORIAL_CONTENT_DATA.GALLERY.sections) {
+        gallery.selectSection(section.id);
+        assert.equal(
+            gallery.getSnapshot(unlocked).entries.every(({ unlocked: value }) => value),
+            true,
+            section.id
+        );
+    }
 });
 
 test('메타 저장은 해금 멱등성·손상 정규화·완료 횟수 경계를 보존한다', async () => {

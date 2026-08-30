@@ -47,7 +47,7 @@ function normalizeShadowFootFrames(value) {
 }
 
 /**
- * 격자 셀 목록을 sourceRect 레이어로 변환합니다.
+ * 격자 셀 목록을 sourceRect·미세 위치·그림자 레이어 계약으로 변환합니다.
  * @param {object} options - 셀 크기와 프레임별 셀 좌표입니다.
  * @returns {readonly object[]} 동결된 프레임 목록입니다.
  */
@@ -61,7 +61,10 @@ export function createTutorialSpriteFrames({ cellWidth, cellHeight, frameCells }
                 x: Number(cell.column) * width,
                 y: Number(cell.row) * height,
                 w: width,
-                h: height
+                h: height,
+                offsetXRatio: Number(cell.offsetXRatio) || 0,
+                offsetYRatio: Number(cell.offsetYRatio) || 0,
+                castsShadow: cell.castsShadow !== false
             }))
         };
     }));

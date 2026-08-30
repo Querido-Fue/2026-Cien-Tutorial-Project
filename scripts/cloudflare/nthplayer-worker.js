@@ -1,5 +1,7 @@
 const GAME_PATH_PREFIX = '/game/nthplayer';
 const PRESENTATION_PATH_PREFIX = '/ppt/nthplayer';
+const PRESENTATION_EMBED_QUERY = 'presentation';
+const PRESENTATION_INPUT_BRIDGE_PATH = `${PRESENTATION_PATH_PREFIX}/embed-input-bridge.js?v=6`;
 const UPSTREAM_ORIGIN = 'https://querido-fue.github.io';
 const UPSTREAM_PATH_PREFIX = '/2026-Cien-Tutorial-Project';
 const LANDING_PAGE_HTML = `<!DOCTYPE html>
@@ -147,7 +149,7 @@ const createPresentationResponse = async (request, environment) => {
 
     responseHeaders.set(
         'cache-control',
-        isDocument ? 'no-store, max-age=0' : 'public, max-age=300, must-revalidate'
+        isDocument ? 'no-store, max-age=0' : 'no-cache, max-age=0, must-revalidate'
     );
     responseHeaders.set('referrer-policy', 'no-referrer');
     responseHeaders.set('x-content-type-options', 'nosniff');
@@ -156,8 +158,10 @@ const createPresentationResponse = async (request, environment) => {
     if (isDocument) {
         responseHeaders.set(
             'content-security-policy',
-            "default-src 'none'; script-src 'self'; style-src 'self'; frame-src 'self'; "
-                + "connect-src 'self'; img-src 'self' data:; font-src 'self'; "
+            "default-src 'none'; script-src 'self'; "
+                + "style-src 'self' https://cdn.jsdelivr.net; frame-src 'self'; "
+                + "connect-src 'self'; img-src 'self' data:; "
+                + "font-src 'self' https://cdn.jsdelivr.net; "
                 + "base-uri 'none'; form-action 'none'; frame-ancestors 'self'"
         );
         responseHeaders.set(
@@ -171,6 +175,38 @@ const createPresentationResponse = async (request, environment) => {
         statusText: assetResponse.statusText,
         headers: responseHeaders,
     });
+};
+
+/**
+ * 발표 iframe 요청에만 포인터 잠금 대체 입력을 게임 부트스트랩보다 먼저 연결합니다.
+ * @param {Response} upstreamResponse - GitHub Pages 원본 응답입니다.
+ * @param {URL} publicUrl - jukchang.com 게임 요청 URL입니다.
+ * @param {Headers} responseHeaders - 공개 응답 헤더입니다.
+ * @param {string} requestMethod - 원본 요청 메서드입니다.
+ * @returns {Promise<BodyInit|null>} 변환된 HTML 또는 원본 스트림입니다.
+ */
+export const resolveGameResponseBody = async (
+    upstreamResponse,
+    publicUrl,
+    responseHeaders,
+    requestMethod
+) => {
+    const isPresentationEmbed = publicUrl.pathname === `${GAME_PATH_PREFIX}/`
+        && publicUrl.searchParams.get('embed') === PRESENTATION_EMBED_QUERY;
+    const isHtml = (responseHeaders.get('content-type') || '').includes('text/html');
+    if (!isPresentationEmbed || !isHtml || requestMethod === 'HEAD') {
+        return upstreamResponse.body;
+    }
+
+    const source = await upstreamResponse.text();
+    const bridgeTag = `<script src="${PRESENTATION_INPUT_BRIDGE_PATH}"></script>`;
+    const transformed = source.includes('</head>')
+        ? source.replace('</head>', `  ${bridgeTag}\n</head>`)
+        : `${bridgeTag}\n${source}`;
+    responseHeaders.delete('content-length');
+    responseHeaders.delete('content-encoding');
+    responseHeaders.delete('etag');
+    return transformed;
 };
 
 export default {
@@ -216,8 +252,14 @@ export default {
         responseHeaders.set('x-content-type-options', 'nosniff');
         responseHeaders.set('referrer-policy', 'strict-origin-when-cross-origin');
         responseHeaders.set('cache-control', resolvePublicCacheControl(publicUrl));
+        const responseBody = await resolveGameResponseBody(
+            upstreamResponse,
+            publicUrl,
+            responseHeaders,
+            request.method
+        );
 
-        return new Response(upstreamResponse.body, {
+        return new Response(responseBody, {
             status: upstreamResponse.status,
             statusText: upstreamResponse.statusText,
             headers: responseHeaders,

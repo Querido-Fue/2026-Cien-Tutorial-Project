@@ -32,15 +32,19 @@
 | `circle` | `x`, `y`, `radius` | `fill`, `stroke`, `alpha`, `lineWidth` |
 | `line` | `x1`, `y1`, `x2`, `y2` | `stroke`, `lineWidth`, `lineCap`, `alpha` |
 | `text` | `x`, `y`, `text` | `fill`, `font`, `align`, `baseline`, `alpha`, `rotation` |
-| `image` | `x`, `y`, `w`, `h`, `image` | `alpha` |
+| `image` | `x`, `y`, `w`, `h`, `image` | `alpha`, `sourceRect`, `smoothing`, `flipX`, `flipY`, `clipVertices` |
 | `arrow` | `x`, `y`, `w`, `h` | `fill`, `rotation`, `alpha` |
 
-`TEXT_RENDER_DATA.PIXEL_PROFILES`에 등록된 폰트는 동일한 `text` 명령을 유지하되
-`PixelTextRenderer`가 작은 문자열 Canvas로 래스터화한 뒤 최근접 확대합니다. 현재
-`OwnglyphParkDahyun`은 22px 이하에서 1px 알파 임계 처리, 그보다 큰 크기에서 2px 도트
-격자를 사용합니다. `measureText()`도 같은 저해상도 font 메트릭을 사용하므로 줄바꿈과 버튼
-배치는 실제 도트 결과 폭을 기준으로 계산합니다. 프로필 밖의 폰트와 그라디언트 텍스트는
-기존 `fillText()` 경로를 유지합니다.
+텍스트 명령은 Canvas 기본 `fillText()` 경로로 그리며 `measureText()`도 같은 네이티브 폰트
+메트릭을 사용합니다. 현재 `PFStardust`는 폰트 자체가 도트 디자인이므로 별도의 저해상도
+래스터화나 알파 임계 처리를 적용하지 않습니다. `_pixel_text_renderer.js`는 이전 실험 구현을
+보존하지만 `DrawHandler2D`와 연결되어 있지 않습니다.
+
+2D `image`의 `sourceRect`는 `{ x, y, w, h }` 원본 픽셀 사각형이며, 유효하면 Canvas 2D
+9인자 `drawImage(image, sx, sy, sw, sh, dx, dy, dw, dh)`로 현재 crop만 그립니다. `flipX`와
+`flipY`를 함께 써도 crop은 그대로 유지되고, `smoothing: false`는 명령 동안만 nearest를
+적용한 뒤 이전 컨텍스트 상태를 복원합니다. 로라의 12610×580 폭발처럼 WebGL 최대 텍스처
+크기를 넘을 수 있는 대형 시트는 이 2D crop 경로를 사용합니다.
 
 ## 3. 공통 스타일
 
@@ -58,7 +62,7 @@
 
 WebGL batch 레이어는 기본 도형/이미지 명령을 배치 렌더러로 전달합니다. 기본 도형 아틀라스에는 `rect`, `square`, `diamond`, `circle`, `triangle`, `pentagon`, `hexagon`, `octagon`, `arrow`가 있으며, `diamond`는 쿼터뷰 타일처럼 `w`/`h`를 다르게 스케일할 수 있습니다. overlay effect surface는 `OverlaySession.renderGlassPanel()` 경로에서 `glassPanel` 명령을 사용합니다.
 
-`background`, `object`, `effect` 명령은 프레임 끝에 그 순서로 공유 FBO에 지연 실행됩니다. 절차적 `flameParticles`, `magneticShield`, `ambientDust` 명령은 선택적 `pixelSize`를 받으며 기본값은 2픽셀입니다. `ambientDust`는 `bounds` 안에서만 소수의 WebGL point sprite를 그리며 `particleCount`, `pointSize`, `time`, `warmColor`, `coolColor`를 선택적으로 받습니다. 후처리 원본은 nearest-neighbor이고 Bloom 보조 텍스처만 linear filtering을 사용합니다.
+`background`, `object`, `effect` 명령은 프레임 끝에 그 순서로 공유 FBO에 지연 실행됩니다. 절차적 `flameParticles`, `magneticShield`, `ambientDust` 명령은 선택적 `pixelSize`를 받으며 기본값은 2픽셀입니다. `ambientDust`는 `bounds` 안에서만 소수의 WebGL point sprite를 그리며 `particleCount`, `pointSize`, `time`, `warmColor`, `coolColor`를 선택적으로 받습니다. `sceneLighting`은 월드 노출·암부 색상과 화면 좌표 점광원 배열을 받고, 광원별 scissor 원형 감쇠를 스크린 합성한 뒤 같은 불꽃 위상의 미세 떨림과 느린 호흡을 적용합니다. `spatialDistortion`은 `effect` surface에 제출하되 일반 배치 렌더러가 그리지 않는 월드 후처리 전용 명령입니다. 화면 좌표 `x`/`y`, `radius`, `ringWidth`, `strength`를 받고 한 프레임에 최대 4개만 full-resolution 굴절 패스에서 소비합니다. 명령이 없으면 패스를 건너뛰고, WebGL 폴백은 이 명령만 생략하므로 기존 월드 렌더링은 유지됩니다. 후처리 원본과 왜곡 중간 텍스처는 nearest-neighbor이고 Bloom 보조 텍스처만 linear filtering을 사용합니다.
 
 맵 투영처럼 축 정렬 사각형으로 표현할 수 없는 경우에는 `vertices` 옵션으로 `[좌상 x, 좌상 y, 우상 x, 우상 y, 우하 x, 우하 y, 좌하 x, 좌하 y]` 순서의 네 꼭짓점을 전달할 수 있습니다. 유효한 `vertices` 값은 `x`/`y`/`w`/`h` 기하보다 우선합니다.
 

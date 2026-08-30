@@ -6,6 +6,7 @@ import {
 
 const DIRECTIONS = Object.freeze({ left: 0, right: 1, up: 2, down: 3 });
 const HORIZONTAL_DIRECTIONS = Object.freeze({ left: 0, right: 1 });
+const BREATHING_HEAD_OFFSETS = Object.freeze([0, -1 / 64, -1 / 64, 0]);
 const WALK_SHADOW_FOOT_PIXELS = Object.freeze({
     left: [
         [[28.5, 54], [33.5, 56]],
@@ -87,26 +88,50 @@ function meleeFrames(actorRow) {
         cellWidth: 64,
         cellHeight: 64,
         frameCells: [0, 1, 2, 3].map((column) => [
-            { column, row: actorRow },
-            { column, row: effectRow }
+            { column, row: actorRow, castsShadow: true },
+            { column, row: effectRow, castsShadow: false }
+        ])
+    });
+}
+
+/**
+ * 좌우 대기의 몸을 고정하고 머리만 1픽셀 올리는 호흡 프레임을 만듭니다.
+ * @param {'left'|'right'} facing - 원본 좌우 방향입니다.
+ * @returns {readonly object[]} 몸·머리 합성 프레임입니다.
+ */
+function breathingFrames(facing) {
+    const bodyColumn = facing === 'left' ? 2 : 3;
+    const headColumn = facing === 'left' ? 0 : 1;
+    return createTutorialSpriteFrames({
+        cellWidth: 64,
+        cellHeight: 64,
+        frameCells: BREATHING_HEAD_OFFSETS.map((offsetYRatio) => [
+            { column: bodyColumn, row: 0, castsShadow: true },
+            {
+                column: headColumn,
+                row: 0,
+                offsetYRatio,
+                castsShadow: false
+            }
         ])
     });
 }
 
 const clips = [];
 for (const [facing, row] of Object.entries(DIRECTIONS)) {
+    const usesBreathingSheet = facing === 'left' || facing === 'right';
+    const idleFrameCount = usesBreathingSheet ? BREATHING_HEAD_OFFSETS.length : 1;
     clips.push(createTutorialSpriteClip({
         id: `player.idle.${facing}`,
         actorType: 'player',
         animationId: 'idle',
         facing,
-        assetId: ASSETS.playerWalk,
-        frames: rowFrames(row, [0]),
-        fps: 1,
+        assetId: usesBreathingSheet ? ASSETS.playerBreathing : ASSETS.playerWalk,
+        frames: usesBreathingSheet ? breathingFrames(facing) : rowFrames(row, [0]),
+        fps: usesBreathingSheet ? 4 : 1,
         loop: true,
-        shadowFootFrames: createShadowFootFrames([
-            WALK_SHADOW_FOOT_PIXELS[facing][0]
-        ])
+        visualTopInsetRatio: usesBreathingSheet ? 7 / 64 : undefined,
+        shadowFootFrames: repeatIdleShadowFeet(facing, idleFrameCount)
     }));
     clips.push(createTutorialSpriteClip({
         id: `player.walk.${facing}`,
@@ -178,12 +203,12 @@ for (const [facing, row] of Object.entries(HORIZONTAL_DIRECTIONS)) {
         actorType: 'player',
         animationId: 'ranged',
         facing,
-        available: false,
-        playbackFrameCount: 5,
-        fps: 10,
-        impactFrame: 3,
-        fallbackClipId: `player.item.${facing}`,
-        fallbackEffect: 'ranged'
+        assetId: ASSETS.playerRanged,
+        frames: rowFrames(row, [0, 1, 2, 3, 4, 5, 6]),
+        fps: 12,
+        impactFrame: 4,
+        visualTopInsetRatio: 7 / 64,
+        shadowFootFrames: repeatIdleShadowFeet(facing, 7)
     }));
     clips.push(createTutorialSpriteClip({
         id: `player.death.${facing}`,

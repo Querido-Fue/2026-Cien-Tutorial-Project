@@ -43,7 +43,7 @@ export class SliderElement extends BaseUIElement {
         this.trackColor = properties.trackColor || ColorSchemes.Overlay.Slider.Track;
         this.knobColor = properties.knobColor || ColorSchemes.Overlay.Slider.Knob;
         this.valueColor = properties.valueColor || ColorSchemes.Overlay.Slider.ValueInactive;
-        this.valueFont = properties.valueFont || '500 12px "Pretendard Variable", arial';
+        this.valueFont = properties.valueFont || '700 12px PFStardust, sans-serif';
         this.showValue = properties.showValue !== undefined ? properties.showValue : true;
         this.valueOffsetX = properties.valueOffsetX || 15;
         this.valueOffsetY = properties.valueOffsetY || 0;

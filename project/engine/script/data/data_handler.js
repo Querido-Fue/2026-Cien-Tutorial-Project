@@ -36,6 +36,8 @@ import { MOUSE_BUTTON_INPUT_DATA } from 'data/input/mouse_button_input_data.js';
 import { TUTORIAL_GAME_DATA } from 'data/game/tutorial_game_data.js';
 import { TUTORIAL_CONTENT_DATA } from 'data/game/tutorial_content_data.js';
 import { TUTORIAL_ASSET_MANIFEST } from 'data/game/tutorial_asset_manifest.js';
+import { TUTORIAL_BATTLE_EFFECT_DATA } from 'data/game/tutorial_battle_effect_data.js';
+import { TUTORIAL_BATTLE_LIGHTING_DATA } from 'data/game/tutorial_battle_lighting_data.js';
 import {
     TUTORIAL_GUIDANCE_PRESENTATION_DATA
 } from 'data/game/tutorial_guidance_presentation_data.js';
@@ -80,6 +82,8 @@ const DATA_REGISTRY = Object.freeze({
     TUTORIAL_GAME_DATA,
     TUTORIAL_CONTENT_DATA,
     TUTORIAL_ASSET_MANIFEST,
+    TUTORIAL_BATTLE_EFFECT_DATA,
+    TUTORIAL_BATTLE_LIGHTING_DATA,
     TUTORIAL_GUIDANCE_PRESENTATION_DATA,
     TUTORIAL_DIALOGUE_PRESENTATION_DATA,
     TUTORIAL_RECORD_PRESENTATION_DATA,

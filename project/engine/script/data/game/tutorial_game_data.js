@@ -1,4 +1,5 @@
 import {
+    GAME_FONT_WEIGHTS,
     PRIMARY_GAME_FONT_STACK
 } from '../ui/typography/font_family_constants.js';
 
@@ -756,7 +757,7 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
                     GAP_X: 0,
                     GAP_Y: 0
                 },
-                HP_VALUE: { X: 111, Y: 47, WIDTH: 20, HEIGHT: 8 },
+                HP_VALUE: { X: 108, Y: 47, WIDTH: 20, HEIGHT: 8 },
                 HP_BAR: { X: 47, Y: 55, WIDTH: 167, HEIGHT: 6 },
                 PAGE_PREVIOUS: { X: 12, Y: 14, WIDTH: 14, HEIGHT: 24 },
                 PAGE_NEXT: { X: 206, Y: 14, WIDTH: 14, HEIGHT: 24 }
@@ -807,13 +808,13 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
         ACTION_LORA_SCALE: 0.08
     },
     TYPOGRAPHY: {
-        TITLE: createTypographySpec(2.8, 34, 56, 400),
-        SUBTITLE: createTypographySpec(1.45, 19, 30, 400),
-        HEADING: createTypographySpec(1.65, 22, 34, 400),
-        BODY: createTypographySpec(1.25, 18, 26, 400),
-        SMALL: createTypographySpec(0.95, 14, 20, 400),
-        BUTTON: createTypographySpec(1.15, 17, 24, 400),
-        MONO: createTypographySpec(1, 14, 21, 400)
+        TITLE: createTypographySpec(2.8, 34, 56, GAME_FONT_WEIGHTS.DISPLAY),
+        SUBTITLE: createTypographySpec(1.45, 19, 30, GAME_FONT_WEIGHTS.EMPHASIS),
+        HEADING: createTypographySpec(1.65, 22, 34, GAME_FONT_WEIGHTS.DISPLAY),
+        BODY: createTypographySpec(1.25, 18, 26, GAME_FONT_WEIGHTS.BODY),
+        SMALL: createTypographySpec(0.95, 14, 20, GAME_FONT_WEIGHTS.BODY),
+        BUTTON: createTypographySpec(1.15, 17, 24, GAME_FONT_WEIGHTS.EMPHASIS),
+        MONO: createTypographySpec(1, 14, 21, GAME_FONT_WEIGHTS.EMPHASIS)
     },
     TEXT: {
         TITLE: 'N번째 플레이어',
@@ -843,6 +844,22 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
                 '매턴 최대 4칸 이동할 수 있습니다.'
             ],
             REPLAY: 'H로 언제든 다시 열 수 있습니다.'
+        },
+        LORA_STATUS: {
+            STATES: {
+                stable: '로라는 안정되어 보입니다.',
+                anxious: '로라는 불안해 보입니다.',
+                shaken: '로라는 크게 동요해 보입니다.',
+                unstable: '로라는 불안정해 보입니다.',
+                collapse: '로라는 붕괴 직전으로 보입니다.',
+                unknown: '로라의 상태를 살피고 있습니다.'
+            },
+            ACTIONS: {
+                melee: '다음에 근접 공격할 것 같습니다.',
+                area: '다음에 전체 공격할 것 같습니다.',
+                none: '다음에는 공격하지 않을 것 같습니다.',
+                unknown: '다음 행동을 가늠하기 어렵습니다.'
+            }
         },
         COMBAT_REASONS: {
             'action-available': '선택한 행동을 사용할 수 있습니다.',

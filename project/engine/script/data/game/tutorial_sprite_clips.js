@@ -10,7 +10,7 @@ const clipList = Object.freeze([
 ]);
 
 export const TUTORIAL_SPRITE_CLIPS = Object.freeze({
-    VERSION: 1,
+    VERSION: 2,
     LOGICAL_FRAME_SIZE: TUTORIAL_LOGICAL_SPRITE_FRAME_SIZE,
     CLIPS: Object.freeze(Object.fromEntries(clipList.map((clip) => [clip.id, clip])))
 });

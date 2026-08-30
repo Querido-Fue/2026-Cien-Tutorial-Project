@@ -16,10 +16,11 @@ function cloneGameData() {
  * 지정 스타터로 초기화한 전투 모델을 만듭니다.
  * @param {string} [starterItemId='mascot-costume'] - 지급할 스타터 ID입니다.
  * @param {object} [config=TUTORIAL_GAME_DATA] - 전투 설정입니다.
+ * @param {object} [options={}] - 모델 생성 옵션입니다.
  * @returns {TutorialBattleModel} 초기화된 전투 모델입니다.
  */
-function createModel(starterItemId = 'mascot-costume', config = TUTORIAL_GAME_DATA) {
-    const model = new TutorialBattleModel(config);
+function createModel(starterItemId = 'mascot-costume', config = TUTORIAL_GAME_DATA, options = {}) {
+    const model = new TutorialBattleModel(config, { random: () => 0, ...options });
     if (starterItemId !== 'mascot-costume') {
         model.reset({ starterItemId });
     }
@@ -206,8 +207,19 @@ test('이동을 먼저 써야 행동할 수 있고 W-A-D-D 경로는 재방문�
     assert.equal(model.getSnapshot().turn, 'lora');
 });
 
-test('맵 기록은 진입 순간 한 번만 획득하고 영구 해금 지식을 새 런에 복원한다', () => {
+test('맵 기록은 페이즈마다 하나만 등장하고 획득한 기록은 새 런 후보에서 제외한다', () => {
     const model = createModel();
+    assert.deepEqual(
+        model.getCurrentFloorState().records.map(({ recordId, x, y }) => ({ recordId, x, y })),
+        [{ recordId: 'lora-diary:1', x: 3, y: 4 }]
+    );
+    assert.deepEqual(
+        model.createCheckpoint().state.floorStates[1].records.map(
+            ({ recordId, x, y }) => ({ recordId, x, y })
+        ),
+        [{ recordId: 'lora-diary:2', x: 4, y: 3 }]
+    );
+
     const moved = model.commitPath([
         { x: 4, y: 4 },
         { x: 3, y: 4 },
@@ -219,29 +231,22 @@ test('맵 기록은 진입 순간 한 번만 획득하고 영구 해금 지식�
         moved.events.filter(({ type }) => type === 'record-picked').map(
             ({ recordId }) => recordId
         ),
-        ['lora-diary:1', 'lora-diary:2']
+        ['lora-diary:1']
     );
-    assert.deepEqual(model.getSnapshot().knowledge.unlockedRecordIds, [
-        'lora-diary:1',
-        'lora-diary:2'
-    ]);
+    assert.deepEqual(model.getSnapshot().knowledge.unlockedRecordIds, ['lora-diary:1']);
     assert.equal(model.getCurrentFloorState().records.filter(
         ({ collected }) => collected
-    ).length, 2);
+    ).length, 1);
 
     const replay = new TutorialBattleModel(TUTORIAL_GAME_DATA, {
-        knowledge: { unlockedRecordIds: ['lora-diary:1', 'developer-diary:1'] }
+        knowledge: { unlockedRecordIds: ['lora-diary:1', 'developer-diary:1'] },
+        random: () => 0
     });
     const replayFloor = replay.getCurrentFloorState();
-    assert.equal(replayFloor.records.find(
-        ({ recordId }) => recordId === 'lora-diary:1'
-    ).collected, true);
-    assert.equal(replayFloor.records.find(
-        ({ recordId }) => recordId === 'developer-diary:1'
-    ).collected, true);
-    assert.equal(replayFloor.records.find(
-        ({ recordId }) => recordId === 'lora-diary:2'
-    ).collected, false);
+    assert.deepEqual(replayFloor.records.map(({ recordId, collected }) => ({
+        recordId,
+        collected
+    })), [{ recordId: 'lora-diary:2', collected: false }]);
 });
 
 test('짝 포탈은 진입 즉시 반대편을 삽입하고 남은 이동력을 유지한다', () => {

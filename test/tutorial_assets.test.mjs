@@ -47,6 +47,10 @@ test('에셋 매니페스트는 유일 ID, 안전한 런타임 경로와 명시�
         'first-floor',
         'basement'
     ]);
+    assert.equal(
+        TUTORIAL_ASSET_MANIFEST.EFFECTS.loraAreaExplosion,
+        'effect.lora.area-explosion'
+    );
 });
 
 test('원본과 안전 복사본은 매니페스트의 PNG 헤더 크기 계약을 모두 만족한다', async () => {
@@ -296,6 +300,21 @@ test('픽셀 UI는 비율을 유지한 정수 사각형과 일시적 nearest 옵
         ['drawImage', 'arrow', 0, 0, 19, 32],
         ['restore']
     ]);
+
+    const sourceRectCalls = [];
+    const sourceRectContext = {
+        imageSmoothingEnabled: true,
+        drawImage(...args) { sourceRectCalls.push(args); }
+    };
+    renderDrawImage(sourceRectContext, {
+        image: 'explosion',
+        sourceRect: { x: 4850, y: 0, w: 970, h: 580 },
+        x: 10, y: 20, w: 194, h: 116,
+        smoothing: false
+    });
+    assert.deepEqual(sourceRectCalls, [[
+        'explosion', 4850, 0, 970, 580, 10, 20, 194, 116
+    ]]);
 
     const clipCalls = [];
     const clippedContext = {

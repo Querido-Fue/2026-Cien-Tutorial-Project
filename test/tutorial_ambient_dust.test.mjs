@@ -7,7 +7,7 @@ import { EFFECT_RENDER_CONSTANTS } from '../project/engine/script/data/display/e
 const SOURCE_URLS = Object.freeze({
     registry: new URL('../project/engine/script/display/webgl/_effect_pass_registry.js', import.meta.url),
     pass: new URL('../project/engine/script/display/webgl/_ambient_dust_effect_pass.js', import.meta.url),
-    worldView: new URL('../project/engine/script/scene/tutorial/view/_tutorial_battle_world_view.js', import.meta.url)
+    lightingView: new URL('../project/engine/script/scene/tutorial/view/_tutorial_battle_lighting_view.js', import.meta.url)
 });
 
 async function readSources() {
@@ -37,12 +37,12 @@ test('먼지는 작은 픽셀 격자에 고정되고 보드 영역 밖을 scisso
     assert.match(pass, /u_coolColor/);
 });
 
-test('전투 월드 뷰는 먼지를 effect 레이어에 제한된 밀도로 전달한다', async () => {
-    const { worldView } = await readSources();
+test('전투 조명 뷰는 먼지를 effect 레이어에 층별 제한 밀도로 전달한다', async () => {
+    const { lightingView } = await readSources();
 
-    assert.match(worldView, /#drawMapArtwork\(mapArtwork\);\s*this\.#drawAmbientDust\(\);/);
-    assert.match(worldView, /renderGL\('effect', \{/);
-    assert.match(worldView, /effectType: EFFECT_TYPES\.AMBIENT_DUST/);
-    assert.match(worldView, /layout\.mapImageRect \|\| layout\.boardRect/);
-    assert.match(worldView, /Math\.max\(24, Math\.min\(/);
+    assert.match(lightingView, /this\.#drawSceneLighting\(viewModel, profile, hasMapArtwork\);\s*this\.#drawAmbientDust\(viewModel, profile\);/);
+    assert.match(lightingView, /renderGL\('effect', \{/);
+    assert.match(lightingView, /effectType: EFFECT_TYPES\.AMBIENT_DUST/);
+    assert.match(lightingView, /layout\.mapImageRect \|\| layout\.boardRect/);
+    assert.match(lightingView, /particles\.MIN_COUNT/);
 });

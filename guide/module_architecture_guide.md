@@ -66,7 +66,7 @@ background(WebGL)
 ```
 
 - `background`, `object`, `effect`는 WebGL surface입니다.
-- `world-postprocess`는 세 월드 레이어를 후처리한 합성 WebGL surface입니다.
+- `world-postprocess`는 세 월드 레이어를 후처리한 합성 WebGL surface입니다. 공격 충돌의 `spatialDistortion` 명령은 여기에서만 소비되어 full-resolution nearest 중간 텍스처에 방사형 굴절을 적용합니다.
 - `texteffect`, `ui`, `vignette`, `top`은 2D Canvas surface입니다.
 - `tutorial-guidance-focus-backdrop`은 `ui`와 `top` 사이에서 네 패널로 포커스 구멍을 만들며, 안내 대상 밖에만 최대 8px CSS backdrop blur를 적용합니다.
 - 오버레이는 필요에 따라 `dimSurface`(2D), `effectSurface`(WebGL), `uiSurface`(2D)를 동적으로 점유합니다.
@@ -90,8 +90,9 @@ background(WebGL)
 - 전투 월드·HUD·피드백·발견 업적·안내 뷰도 같은 단방향 규칙을 따릅니다. `TutorialBattleCommandMenuView`는 이동 단계의 초기화/동적 `n칸 이동 확정`과 행동 단계의 공격·회복·대기 배치, 정·역순 expo 플립 표현과 동일 히트 영역만 소유하고 HUD 뷰가 이를 조합합니다. `TutorialCombatReadabilityPresenter`는 모델 의도·행동 미리보기의 표시값만 만들고, `TutorialBattleFocusController`는 공통 조사 포커스를, `TutorialGuidanceController`는 한 번에 한 안내만 보이는 단계·`easeOutExpo` 페이드/포커스 전환을 맡습니다. `TutorialGuidanceBackdropView`는 대상 사각형을 제외한 네 DOM 패널만 흐리고 양피지는 `top`에서 선명하게 유지합니다. `TutorialScene`이 이 결과를 하나의 읽기 전용 BattleViewModel로 조립하고 이미지 객체만 `TutorialAssetPort`로 제공합니다.
 - `TutorialBattleLayout`이 보드·HUD 기하와 타일 투영·히트테스트를 소유합니다. 에셋 맵에서는 매니페스트의 970×580 원본 격자 네 꼭짓점으로 두 타일 축을 구하고 aspect-fit된 맵 사각형에 투영합니다. 월드 렌더링과 입력 판정은 같은 layout frame을 사용합니다.
 - 카메라 줌은 장치별 휠을 정규화한 누적값의 차분만 한 번 소비하고, 최신 목표를 기본 배율의 1.2배와 맵 이미지 좌우 맞춤 배율 사이로 제한합니다. `TutorialBattleCamera`는 진행 중 줌을 현재 표시값에서 0.4초 `easeOutExpo`로 재지정하며, 레이아웃이 같은 줌으로 맵·격자·오브젝트·히트테스트 축을 함께 계산합니다.
-- 맵 프로필의 `ambientFire`는 원본 이미지의 촛불 심지 좌표와 크기만 소유합니다. `TutorialBattleLayout`이 이를 현재 `mapImageRect` 화면 좌표로 변환하고, 전투 월드 뷰는 `flameParticles` 명령 하나만 effect 레이어에 전달합니다. `FlameParticleEffectPass`는 촛불별 작은 scissor 영역에서 난류 화염과 상승 불씨를 GPU로 합성합니다.
-- 전투 월드 뷰는 현재 `mapImageRect`를 경계로 한 `ambientDust` 명령을 effect 레이어에 전달합니다. `AmbientDustEffectPass`는 고정 seed 버퍼의 소수 point sprite만 사용해 2픽셀 격자 먼지를 합성하며, 월드 후처리는 적용하되 이후 `texteffect`·UI 레이어에는 영향을 주지 않습니다.
+- 맵 프로필의 `ambientFire`는 원본 이미지의 촛불 심지 좌표와 크기만 소유합니다. `TutorialBattleLayout`이 이를 현재 `mapImageRect` 화면 좌표로 변환하고, `TutorialBattleLightingView`가 두 심지를 촛대 하나의 점광원으로 묶습니다. 1층은 맵 중심 점대칭의 반대편 가상 벽 광원을 42% 세기로 추가하고, `SceneLightingEffectPass`는 과노출을 막는 스크린 합성·광원별 작은 scissor 원형 감쇠와 불꽃 위상 기반 빠른 떨림/느린 호흡을 GPU로 합성합니다. 실제 심지의 난류 화염과 상승 불씨는 `FlameParticleEffectPass`가 별도 처리합니다.
+- `TutorialBattleLightingView`는 현재 `mapImageRect`를 경계로 한 `ambientDust` 명령도 effect 레이어에 전달합니다. 지하는 월드 노출을 0.6으로 낮추고 청색 암부와 더 선명한 저밀도 부유 입자를 사용합니다. `AmbientDustEffectPass`는 고정 seed 버퍼의 소수 point sprite만 사용해 2픽셀 격자 먼지를 합성하며, 월드 후처리는 적용하되 이후 `texteffect`·UI 레이어에는 영향을 주지 않습니다.
+- `TutorialAttackDistortionAnimator`는 플레이어 target-hit cue를 근접 배우 impact 또는 원거리 화살 도착에 맞춰 시작하고, 반경·강도·수명 snapshot만 제공합니다. effect 뷰가 이를 대상 타일의 화면 좌표와 `spatialDistortion` 명령으로 변환하며, `SpatialDistortionPostProcessPass`는 최대 4개의 링을 월드 합성본에만 굴절시킵니다.
 - `TutorialFeedbackQueue`는 cue 순번과 로그·일시 피드백·오디오 ID 대기열을, `TutorialAnimationTimeline`은 표시 보간·animation slot·잠금 토큰과 취소 세대를 소유합니다. 장면은 모델 결과 적용 시점과 연출 완료 시점을 분리해 조율합니다.
 - `TUTORIAL_ASSET_MANIFEST`는 원본·런타임 경로, PNG 크기, crop, layer/usage/required/fallback과 맵 격자 기준을 소유합니다. `TutorialAssetLoader`는 readiness·크기 검증·crop canvas·nearest·fallback과 callback 정리를, `TutorialAssetPort`는 도메인별 논리 조회와 분리 맵 우선 정책을 소유합니다. 뷰는 원본 이름이나 브라우저 로드 콜백을 알지 않습니다.
 - 플레이어와 로라 스프라이트 클립은 원본 셀에서 실측한 프레임별 좌·우 발 접점을 함께 소유합니다. 배우 뷰는 이 접점을 기준으로 실루엣을 두 메시로 나눠 격자 동남쪽 지면에 투영하며, 부유 높이는 그림자 이동 거리·농도·픽셀 반그림자 폭으로만 변환합니다. 접점이 없는 몹·폴백은 기존 단일 앵커 투영을 유지합니다.

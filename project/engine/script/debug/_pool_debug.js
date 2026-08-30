@@ -27,9 +27,9 @@ export class PoolDebugger {
 
         const fontSize = Math.max(12, Math.floor(ch * 0.015));
         const font = createFontString({
-            weight: 600,
+            weight: 700,
             sizePx: fontSize,
-            family: "Pretendard Variable, arial"
+            family: "PFStardust, sans-serif"
         });
         const lineHeight = fontSize + Math.max(4, Math.floor(ch * 0.005));
         const startX = Math.max(10, Math.floor(ch * 0.01));

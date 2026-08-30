@@ -51,7 +51,7 @@ test('로라는 플레이어 위치를 따라 전면 좌우 방향만 선택한�
     }
 });
 
-test('로라의 동·서 방향은 같은 전면 프레임을 사용하고 기존 방향을 좌우 반전한다', () => {
+test('로라의 동·서 방향은 전용 전면 프레임을 사용하고 런타임 좌우 반전을 하지 않는다', () => {
     const animator = createAnimator();
     animator.syncActors([{
         id: 'lora', actorType: 'lora', x: 4, y: 0,
@@ -64,10 +64,32 @@ test('로라의 동·서 방향은 같은 전면 프레임을 사용하고 기�
     }]);
     const west = animator.getSnapshot().lora;
 
-    assert.deepEqual(west.layers, east.layers);
-    assert.equal(east.flipX, true);
+    assert.notDeepEqual(west.layers, east.layers);
+    assert.deepEqual(west.layers.map(({ x }) => x), [0, 64]);
+    assert.deepEqual(east.layers.map(({ x }) => x), [192, 128]);
+    assert.equal(east.flipX, false);
     assert.equal(west.flipX, false);
     assert.notDeepEqual(west.shadowFootAnchors, east.shadowFootAnchors);
+});
+
+test('로라 숨쉬기는 몸을 고정한 채 머리 레이어만 1픽셀 올렸다가 내린다', () => {
+    const animator = createAnimator();
+    animator.syncActors([{
+        id: 'lora', actorType: 'lora', x: 4, y: 0,
+        alive: true, facing: 'left', ambientAnimationId: 'idle'
+    }]);
+    const first = animator.getSnapshot().lora;
+    animator.update(0.26);
+    const second = animator.getSnapshot().lora;
+
+    assert.deepEqual(first.layers.map(({ x, y }) => ({ x, y })), [
+        { x: 0, y: 0 },
+        { x: 64, y: 0 }
+    ]);
+    assert.equal(second.layers[0].offsetYRatio, 0);
+    assert.equal(second.layers[1].offsetYRatio, -1 / 64);
+    assert.equal(second.layers[0].castsShadow, true);
+    assert.equal(second.layers[1].castsShadow, false);
 });
 
 test('걷기 루프는 델타로 진행하고 지정 프레임에서 발걸음을 발생시킨다', () => {
@@ -114,7 +136,7 @@ test('비루프 타격은 impact를 한 번만 내고 완료 뒤 ambient로 복�
     assert.equal(animator.hasBlockingAnimation(), false);
 });
 
-test('로라 공격 뒤 붕괴 상태도 확대·축소 없이 느린 부유로 복귀한다', () => {
+test('로라 공격 뒤 붕괴 상태는 전용 4프레임 루프로 복귀한다', () => {
     const animator = createAnimator();
     animator.syncActors([{
         id: 'lora', actorType: 'lora', x: 4, y: 0, alive: true,
@@ -129,7 +151,9 @@ test('로라 공격 뒤 붕괴 상태도 확대·축소 없이 느린 부유로 
     animator.update(1);
     const snapshot = animator.getSnapshot().lora;
     assert.equal(snapshot.animationId, 'collapse');
-    assert.equal(snapshot.fallbackEffect, 'breathing');
+    assert.equal(snapshot.resolvedClipId, 'lora.collapse.left');
+    assert.equal(snapshot.fallbackEffect, null);
+    assert.equal(snapshot.fallbackUsed, false);
     assert.equal(snapshot.locked, false);
 });
 

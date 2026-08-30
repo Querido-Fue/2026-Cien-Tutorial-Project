@@ -40,9 +40,9 @@ export class MouseDebugger {
 
         const fontSize = WW * 0.008;
         const font = createFontString({
-            weight: 300,
+            weight: 400,
             sizePx: fontSize,
-            family: 'Pretendard Variable'
+            family: 'PFStardust, sans-serif'
         });
 
         lines.forEach((text, i) => {

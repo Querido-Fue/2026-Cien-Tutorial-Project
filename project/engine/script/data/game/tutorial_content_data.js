@@ -195,6 +195,7 @@ export const TUTORIAL_CONTENT_DATA = deepFreeze({
         ]
     },
     GALLERY: {
+        unlockAllHoldSeconds: 2,
         sections: [
             {
                 id: 'achievements',

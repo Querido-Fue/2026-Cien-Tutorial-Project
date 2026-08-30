@@ -33,6 +33,15 @@ function appendUniqueId(ids, candidate) {
     return [...ids, id];
 }
 
+/** @param {string[]} ids @param {*} candidates @returns {string[]} */
+function appendUniqueIds(ids, candidates) {
+    let nextIds = [...ids];
+    for (const candidate of Array.isArray(candidates) ? candidates : []) {
+        nextIds = appendUniqueId(nextIds, candidate);
+    }
+    return nextIds;
+}
+
 /**
  * 주입된 저장 함수 또는 NW.js 기본 SaveSystem 함수를 지연 해석합니다.
  * @param {object|undefined} dependencies - 테스트 또는 대체 저장소 의존성입니다.
@@ -129,6 +138,32 @@ export function unlockTutorialRecord(meta, id) {
     return {
         ...normalizedMeta,
         unlockedRecordIds: appendUniqueId(normalizedMeta.unlockedRecordIds, id)
+    };
+}
+
+/**
+ * 현재 플레이 결과와 오프닝 확인 여부는 건드리지 않고 모든 갤러리 ID를 병합합니다.
+ * @param {*} meta - 현재 메타 진행도입니다.
+ * @param {object} [catalog={}] - 갤러리 종류별 전체 ID 목록입니다.
+ * @returns {object} 전체 갤러리 해금이 반영된 메타입니다.
+ */
+export function unlockTutorialGallery(meta, catalog = {}) {
+    const normalizedMeta = normalizeTutorialMeta(meta);
+    return {
+        ...normalizedMeta,
+        unlockedCutsceneIds: appendUniqueIds(
+            normalizedMeta.unlockedCutsceneIds,
+            catalog.cutsceneIds
+        ),
+        unlockedAchievementIds: appendUniqueIds(
+            normalizedMeta.unlockedAchievementIds,
+            catalog.achievementIds
+        ),
+        unlockedRecordIds: appendUniqueIds(
+            normalizedMeta.unlockedRecordIds,
+            catalog.recordIds
+        ),
+        endingIds: appendUniqueIds(normalizedMeta.endingIds, catalog.endingIds)
     };
 }
 

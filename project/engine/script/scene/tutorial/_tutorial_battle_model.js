@@ -2,6 +2,7 @@ import { TutorialCombatRules } from './_tutorial_combat_rules.js';
 import { TutorialEffectExecutor } from './_tutorial_effect_executor.js';
 import { TutorialLoraIntentPlanner } from './_tutorial_lora_intent_planner.js';
 import { TutorialPlayerActionPreviewer } from './_tutorial_player_action_previewer.js';
+import { TutorialRecordSpawnPlanner } from './_tutorial_record_spawn_planner.js';
 
 const PLAYER_ID = 'player';
 const LORA_ID = 'lora';
@@ -15,9 +16,7 @@ const DIRECTIONS = Object.freeze([
     Object.freeze({ x: -1, y: 0 })
 ]);
 
-/**
- * ver 3.5 전투의 직접 경로 이동, 행동 충전, 적 행동과 두 층 상태를 결정적으로 관리합니다.
- */
+/** ver 3.5 전투의 직접 경로 이동, 행동 충전, 적 행동과 두 층 상태를 관리합니다. */
 export class TutorialBattleModel {
     #config;
     #configSignature;
@@ -25,16 +24,18 @@ export class TutorialBattleModel {
     #combatRules;
     #loraIntentPlanner;
     #playerActionPreviewer;
+    #recordSpawnPlanner;
     #knowledge;
     #loraTurnPerformed;
 
     /**
      * @param {object} config - `TUTORIAL_GAME_DATA` 형식의 전투 설정입니다.
-     * @param {{knowledge?:object}} [options={}] - 반복 플레이에서 이어받을 발견 정보입니다.
+     * @param {{knowledge?:object,random?:()=>number}} [options={}] - 발견 정보와 기록 배치 난수입니다.
      */
     constructor(config, options = {}) {
         this.#config = this.#normalizeConfig(config);
         this.#configSignature = this.#createConfigSignature();
+        this.#recordSpawnPlanner = new TutorialRecordSpawnPlanner(this.#config.floors, { random: options.random });
         this.#effectExecutor = new TutorialEffectExecutor({
             items: this.#config.items,
             eventTileEffects: this.#config.eventTileEffects
@@ -66,6 +67,7 @@ export class TutorialBattleModel {
             throw new RangeError(`TutorialBattleModel: 지원하지 않는 시작 아이템 ${starterItemId}입니다.`);
         }
 
+        const spawnedRecords = this.#recordSpawnPlanner.createFloorRecords(this.#knowledge.unlockedRecordIds);
         this.floorStates = this.#config.floors.map((floor, index) => ({
             index,
             id: floor.id,
@@ -77,10 +79,7 @@ export class TutorialBattleModel {
             heights: floor.heights.map((row) => [...row]),
             walls: floor.walls.map((wall) => ({ ...wall, destroyed: false })),
             items: floor.items.map((item) => ({ ...item, collected: false })),
-            records: floor.records.map((record) => ({
-                ...record,
-                collected: this.#knowledge.unlockedRecordIds.has(record.recordId)
-            })),
+            records: spawnedRecords[index].map((record) => ({ ...record, collected: false })),
             eventTiles: floor.eventTiles.map((eventTile) => ({
                 ...eventTile,
                 originalType: eventTile.type,

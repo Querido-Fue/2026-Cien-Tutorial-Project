@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { resolveImageTextureCoordinates } from '../project/engine/script/display/webgl/_image_texture_coordinates.js';
 import { TutorialBattleActorView } from '../project/engine/script/scene/tutorial/view/_tutorial_battle_actor_view.js';
+import { TutorialSpriteFrameRenderer } from '../project/engine/script/scene/tutorial/view/_tutorial_sprite_frame_renderer.js';
 
 const SHADOW_PROJECTION = Object.freeze({
     GRID_AXIS_X_WEIGHT: 1,
@@ -41,6 +42,38 @@ test('sourceRect와 축 반전은 이미지 크기에 맞는 WebGL UV로 변환�
         image,
         { x: -1, y: 0, w: 64, h: 64 }
     ), { u0: 0, v0: 0, u1: 1, v1: 1 });
+});
+
+test('숨쉬기 합성 렌더러는 몸을 고정하고 머리 레이어만 정확히 1픽셀 이동한다', () => {
+    const commands = [];
+    const image = { width: 256, height: 64 };
+    const renderer = new TutorialSpriteFrameRenderer({
+        renderGL(layer, options) {
+            commands.push({ layer, ...options });
+        }
+    }, {
+        getImage: () => image
+    });
+
+    assert.equal(renderer.draw({
+        animation: {
+            assetId: 'sprite.lora.breathing',
+            layers: [
+                { x: 0, y: 0, w: 64, h: 64, offsetYRatio: 0, castsShadow: true },
+                { x: 64, y: 0, w: 64, h: 64, offsetYRatio: -1 / 64, castsShadow: false }
+            ]
+        },
+        geometry: { x: 100, y: 200, width: 64, height: 64 },
+        alpha: 0.8,
+        effectAlpha: 0.5
+    }), true);
+
+    assert.deepEqual(commands.map(({ x, y }) => ({ x, y })), [
+        { x: 100, y: 200 },
+        { x: 100, y: 199 }
+    ]);
+    assert.equal(commands.every(({ smoothing }) => smoothing === false), true);
+    assert.equal(commands.every(({ alpha }) => alpha === 0.4), true);
 });
 
 test('배우 뷰는 정수 좌표·nearest·발 앵커를 유지하며 다중 레이어를 같은 위치에 그린다', () => {
@@ -221,8 +254,8 @@ test('플레이어 그림자는 프레임별 양발 접점에서 시작하고 �
                 player: {
                     assetId: 'sprite.player.melee',
                     layers: [
-                        { x: 0, y: 0, w: 64, h: 64 },
-                        { x: 0, y: 64, w: 64, h: 64 }
+                        { x: 0, y: 0, w: 64, h: 64, castsShadow: true },
+                        { x: 0, y: 64, w: 64, h: 64, castsShadow: false }
                     ],
                     logicalSize: { width: 32, height: 32 },
                     anchor: { x: 0.5, y: 0.88 },

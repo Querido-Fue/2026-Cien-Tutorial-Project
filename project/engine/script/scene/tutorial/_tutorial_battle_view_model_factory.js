@@ -88,12 +88,19 @@ export class TutorialBattleViewModelFactory {
             selectionLabel: actionSelection.label,
             inspectedItem
         });
+        const cursor = this.#createCursorPresentation({
+            input,
+            selection,
+            actionReady,
+            readability
+        });
 
         return Object.freeze({
             viewport: input.layout.viewport,
             layout: input.layout,
             fonts: Object.freeze({ ...input.fonts }),
             colors: input.colors,
+            cursor,
             snapshot: Object.freeze(snapshot),
             floor: Object.freeze(floor || {}),
             world: this.#createWorldView({
@@ -166,6 +173,9 @@ export class TutorialBattleViewModelFactory {
             elapsedSeconds: input.elapsedSeconds,
             presentation,
             spriteAnimations: input.spriteAnimations,
+            battleEffects: Object.freeze(toList(input.battleEffects).map(
+                (effect) => Object.freeze(cloneValue(effect))
+            )),
             floorActors: input.floorActors
                 ? Object.freeze(cloneValue(input.floorActors))
                 : null,
@@ -280,6 +290,43 @@ export class TutorialBattleViewModelFactory {
             };
         }
         return { preview: null, label: '행동을 선택하세요' };
+    }
+
+    /**
+     * 공격 선택과 실제 호버 대상을 공용 UI 커서 표시 모델로 변환합니다.
+     * @param {object} values - 프레임 입력, 선택 상태와 모델 기반 표시값입니다.
+     * @returns {object} 일반 또는 공격 커서 표시 모델입니다.
+     * @private
+     */
+    #createCursorPresentation({ input, selection, actionReady, readability }) {
+        if (!actionReady || selection.attackSelected !== true) {
+            return Object.freeze({ type: 'normal', info: null });
+        }
+        const hoveredTarget = selection.hoveredTile
+            ? selection.actionTargets.find((target) => (
+                target.x === selection.hoveredTile.x
+                && target.y === selection.hoveredTile.y
+            ))
+            : null;
+        const previewTarget = readability.playerPreview?.target;
+        const matchesHoveredTarget = hoveredTarget?.id
+            && previewTarget?.id === hoveredTarget.id;
+        const colors = input.colors?.UI || {};
+        const info = matchesHoveredTarget
+            ? Object.freeze({
+                title: previewTarget.label,
+                detail: `HP ${previewTarget.hpBefore} → ${previewTarget.hpAfter}`,
+                titleFont: input.fonts?.BUTTON,
+                detailFont: input.fonts?.SMALL,
+                colors: Object.freeze({
+                    panel: colors.Panel,
+                    border: colors.Accent,
+                    title: colors.Text,
+                    detail: colors.Danger
+                })
+            })
+            : null;
+        return Object.freeze({ type: 'attack', icon: input.attackCursorIcon || null, info });
     }
 
     /** 모델 반환 경로를 정수 좌표 배열로 정규화합니다. */

@@ -3,6 +3,10 @@ import {
     TUTORIAL_ITEM_ASSET_IDS
 } from './tutorial_assets/_tutorial_item_asset_entries.js';
 import {
+    TUTORIAL_EFFECT_ASSET_ENTRIES,
+    TUTORIAL_EFFECT_ASSET_IDS
+} from './tutorial_assets/_tutorial_effect_asset_entries.js';
+import {
     TUTORIAL_LEGACY_ASSET_ENTRIES,
     TUTORIAL_LEGACY_ASSET_IDS
 } from './tutorial_assets/_tutorial_legacy_asset_entries.js';
@@ -24,6 +28,7 @@ const ENTRIES = Object.freeze([
     ...TUTORIAL_UI_ASSET_ENTRIES,
     ...TUTORIAL_ITEM_ASSET_ENTRIES,
     ...TUTORIAL_SPRITE_ASSET_ENTRIES,
+    ...TUTORIAL_EFFECT_ASSET_ENTRIES,
     ...TUTORIAL_LEGACY_ASSET_ENTRIES
 ]);
 
@@ -31,7 +36,7 @@ const ENTRIES = Object.freeze([
  * 튜토리얼 원본과 안전한 런타임 복사본 사이의 단일 에셋 계약입니다.
  */
 export const TUTORIAL_ASSET_MANIFEST = Object.freeze({
-    VERSION: 2,
+    VERSION: 3,
     SOURCE_ROOT: 'project/asset',
     RUNTIME_ROOT: 'project/asset/tutorial',
     ENTRIES,
@@ -39,5 +44,6 @@ export const TUTORIAL_ASSET_MANIFEST = Object.freeze({
     UI: TUTORIAL_UI_ASSET_IDS,
     ITEMS: TUTORIAL_ITEM_ASSET_IDS,
     SPRITES: TUTORIAL_SPRITE_ASSET_IDS,
+    EFFECTS: TUTORIAL_EFFECT_ASSET_IDS,
     LEGACY: TUTORIAL_LEGACY_ASSET_IDS
 });

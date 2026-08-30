@@ -20,6 +20,6 @@ export const DEBUG_CONSTANTS = Object.freeze({
         TRUNCATE_EDGE_MIN_LENGTH: 4,
         PANEL_FILL: 'rgba(0, 0, 0, 0.78)',
         TEXT_FILL: '#FFFFFF',
-        FONT_WEIGHT: 600
+        FONT_WEIGHT: 700
     })
 });

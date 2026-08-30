@@ -40,8 +40,16 @@ export const NWJS_PACKAGE_CONTRACT = Object.freeze({
         Object.freeze({ source: 'project/license', target: 'license' }),
         Object.freeze({ source: 'project/asset/tutorial', target: 'asset/tutorial' }),
         Object.freeze({
-            source: 'project/asset/font/OwnglyphParkDahyun.ttf',
-            target: 'asset/font/OwnglyphParkDahyun.ttf'
+            source: 'project/asset/font/PFStardustS.ttf',
+            target: 'asset/font/PFStardustS.ttf'
+        }),
+        Object.freeze({
+            source: 'project/asset/font/PFStardustBold.ttf',
+            target: 'asset/font/PFStardustBold.ttf'
+        }),
+        Object.freeze({
+            source: 'project/asset/font/PFStardustExtraBold.ttf',
+            target: 'asset/font/PFStardustExtraBold.ttf'
         }),
         Object.freeze({
             source: 'project/asset/old/icon/logo.ico',

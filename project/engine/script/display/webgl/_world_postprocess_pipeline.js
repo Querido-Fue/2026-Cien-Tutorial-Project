@@ -2,10 +2,13 @@ import { getData } from 'data/data_handler.js';
 import { resolveWorldPostProcessQuality } from 'data/display/world_postprocess_constants.js';
 import { EffectRenderer } from './_effect_renderer.js';
 import { compileShader, createProgram, FULLSCREEN_VERTEX_SHADER } from './_shader_utils.js';
+import { SpatialDistortionPostProcessPass } from './_spatial_distortion_postprocess_pass.js';
 import { WebGLBatch } from './_webgl_batch.js';
 
 const POSTPROCESS_CONSTANTS = getData('WORLD_POSTPROCESS_CONSTANTS');
 const WORLD_LAYER_IDS = POSTPROCESS_CONSTANTS.SOURCE_LAYER_IDS;
+const SPATIAL_DISTORTION_TYPE = getData('EFFECT_RENDER_CONSTANTS')
+    .TYPES.SPATIAL_DISTORTION;
 const MIN_TARGET_SIZE = 1;
 
 const BLOOM_EXTRACT_FRAGMENT_SHADER = `
@@ -155,7 +158,9 @@ export class WorldPostProcessPipeline {
         this.vignetteAlpha = POSTPROCESS_CONSTANTS.VIGNETTE.BASE_ALPHA
             * POSTPROCESS_CONSTANTS.VIGNETTE.DEFAULT_ALPHA_MULTIPLIER;
         this.sceneTarget = null;
+        this.distortionTarget = null;
         this.bloomTargets = [];
+        this.distortionCommands = [];
 
         this.#validateCapabilities();
         this.quadBuffer = this.#createFullscreenBuffer();
@@ -172,6 +177,7 @@ export class WorldPostProcessPipeline {
             'u_vignetteColor', 'u_vignetteAlpha', 'u_vignetteEdgeWidth',
             'u_vignetteCornerRadius'
         ]);
+        this.distortionPass = new SpatialDistortionPostProcessPass(gl);
 
         const renderTargetOptions = { getFramebuffer: () => this.sceneTarget?.framebuffer || null };
         this.renderers = new Map([
@@ -215,6 +221,11 @@ export class WorldPostProcessPipeline {
         this.bloomHeight = nextBloomHeight;
         this.#destroyTargets();
         this.sceneTarget = this.#createRenderTarget(nextWidth, nextHeight, this.gl.NEAREST);
+        this.distortionTarget = this.#createRenderTarget(
+            nextWidth,
+            nextHeight,
+            this.gl.NEAREST
+        );
         this.bloomTargets = [
             this.#createRenderTarget(nextBloomWidth, nextBloomHeight, this.gl.LINEAR),
             this.#createRenderTarget(nextBloomWidth, nextBloomHeight, this.gl.LINEAR)
@@ -254,12 +265,19 @@ export class WorldPostProcessPipeline {
         for (const queue of this.commandQueues.values()) {
             queue.length = 0;
         }
+        this.distortionCommands.length = 0;
         this.frameDirty = true;
         this.frameIndex = (this.frameIndex + 1) % 4096;
     }
 
     /** @param {string} layerName @param {object} command */
     render(layerName, command) {
+        if (layerName === 'effect'
+            && (command?.effectType || command?.shape) === SPATIAL_DISTORTION_TYPE) {
+            this.distortionCommands.push(command);
+            this.frameDirty = true;
+            return;
+        }
         const queue = this.commandQueues.get(layerName);
         if (!queue || !command) {
             return;
@@ -276,11 +294,12 @@ export class WorldPostProcessPipeline {
         const startedAt = this.#now();
         const gl = this.gl;
         this.#flushWorldLayersInOrder();
+        const sceneTexture = this.#drawSpatialDistortion();
 
         const quality = POSTPROCESS_CONSTANTS.QUALITY_TIERS[this.quality];
-        this.#drawBloomExtract(quality);
+        this.#drawBloomExtract(quality, sceneTexture);
         const bloomTarget = this.#drawBloomBlur(quality);
-        this.#drawFinalComposite(quality, bloomTarget.texture);
+        this.#drawFinalComposite(quality, bloomTarget.texture, sceneTexture);
         this.#throwOnGlError('frame composite');
         this.frameDirty = false;
 
@@ -338,6 +357,9 @@ export class WorldPostProcessPipeline {
             }
         }
         this.renderers.clear();
+        this.distortionPass?.destroy();
+        this.distortionPass = null;
+        this.distortionCommands.length = 0;
         for (const queue of this.commandQueues.values()) {
             queue.length = 0;
         }
@@ -355,13 +377,13 @@ export class WorldPostProcessPipeline {
     }
 
     /** @private */
-    #drawBloomExtract(quality) {
+    #drawBloomExtract(quality, sceneTexture) {
         const gl = this.gl;
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.bloomTargets[0].framebuffer);
         gl.viewport(0, 0, this.bloomWidth, this.bloomHeight);
         gl.disable(gl.BLEND);
         this.#bindFullscreenProgram(this.extractProgram);
-        this.#bindTexture(this.sceneTarget.texture, 0, this.extractProgram.uniforms.u_scene);
+        this.#bindTexture(sceneTexture, 0, this.extractProgram.uniforms.u_scene);
         gl.uniform1f(this.extractProgram.uniforms.u_threshold, quality.bloomThreshold);
         gl.uniform1f(this.extractProgram.uniforms.u_softKnee, quality.bloomSoftKnee);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -386,6 +408,19 @@ export class WorldPostProcessPipeline {
             renderer.flush();
             queue.length = 0;
         }
+    }
+
+    /** @returns {WebGLTexture} 왜곡 적용 여부에 따른 현재 월드 텍스처입니다. @private */
+    #drawSpatialDistortion() {
+        const applied = this.distortionPass.draw({
+            sourceTexture: this.sceneTarget.texture,
+            targetFramebuffer: this.distortionTarget.framebuffer,
+            width: this.width,
+            height: this.height,
+            commands: this.distortionCommands
+        });
+        this.distortionCommands.length = 0;
+        return applied ? this.distortionTarget.texture : this.sceneTarget.texture;
     }
 
     /** @private */
@@ -424,7 +459,7 @@ export class WorldPostProcessPipeline {
     }
 
     /** @private */
-    #drawFinalComposite(quality, bloomTexture) {
+    #drawFinalComposite(quality, bloomTexture, sceneTexture) {
         const gl = this.gl;
         const vignette = POSTPROCESS_CONSTANTS.VIGNETTE;
         const minDimension = Math.min(this.width, this.height);
@@ -438,7 +473,7 @@ export class WorldPostProcessPipeline {
         gl.viewport(0, 0, this.width, this.height);
         gl.disable(gl.BLEND);
         this.#bindFullscreenProgram(this.compositeProgram);
-        this.#bindTexture(this.sceneTarget.texture, 0, this.compositeProgram.uniforms.u_scene);
+        this.#bindTexture(sceneTexture, 0, this.compositeProgram.uniforms.u_scene);
         this.#bindTexture(bloomTexture, 1, this.compositeProgram.uniforms.u_bloom);
         gl.uniform2f(this.compositeProgram.uniforms.u_resolution, this.width, this.height);
         gl.uniform1f(this.compositeProgram.uniforms.u_frameIndex, this.frameIndex);
@@ -543,12 +578,17 @@ export class WorldPostProcessPipeline {
 
     /** @private */
     #destroyTargets() {
-        const targets = [this.sceneTarget, ...this.bloomTargets].filter(Boolean);
+        const targets = [
+            this.sceneTarget,
+            this.distortionTarget,
+            ...this.bloomTargets
+        ].filter(Boolean);
         for (const target of targets) {
             this.gl.deleteFramebuffer(target.framebuffer);
             this.gl.deleteTexture(target.texture);
         }
         this.sceneTarget = null;
+        this.distortionTarget = null;
         this.bloomTargets = [];
     }
 

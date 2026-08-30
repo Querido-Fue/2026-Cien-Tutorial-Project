@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import { TUTORIAL_GAME_DATA } from '../project/engine/script/data/game/tutorial_game_data.js';
+import { TUTORIAL_BATTLE_EFFECT_DATA } from '../project/engine/script/data/game/tutorial_battle_effect_data.js';
 import { TutorialAnimationTimeline } from '../project/engine/script/scene/tutorial/_tutorial_animation_timeline.js';
 import { TutorialBattleCamera } from '../project/engine/script/scene/tutorial/_tutorial_battle_camera.js';
 import { TutorialAssetLoader } from '../project/engine/script/scene/tutorial/_tutorial_asset_loader.js';
@@ -51,7 +52,8 @@ test('모델의 전체 이벤트 타입이 명시적 프레젠테이션 계약�
 test('대표 모델 이벤트는 같은 입력에서 같은 직렬화 가능한 cue를 만든다', () => {
     const presenter = new TutorialBattlePresenter({
         items: TUTORIAL_GAME_DATA.ITEMS,
-        animation: TUTORIAL_GAME_DATA.ANIMATION
+        animation: TUTORIAL_GAME_DATA.ANIMATION,
+        effects: TUTORIAL_BATTLE_EFFECT_DATA.IDS
     });
     const input = {
         previousSnapshot: createSnapshot(),
@@ -245,7 +247,8 @@ test('HUD 안내 텍스트는 배경보다 위의 UI 레이어에 그린다', ()
 test('플레이어·로라 공격 cue는 피해 대상 연출에 impact 동기화 정보를 전달한다', () => {
     const presenter = new TutorialBattlePresenter({
         items: TUTORIAL_GAME_DATA.ITEMS,
-        animation: TUTORIAL_GAME_DATA.ANIMATION
+        animation: TUTORIAL_GAME_DATA.ANIMATION,
+        effects: TUTORIAL_BATTLE_EFFECT_DATA.IDS
     });
     const previous = createSnapshot();
     const next = createSnapshot({ playerHp: 80, loraHp: 50 });
@@ -270,6 +273,16 @@ test('플레이어·로라 공격 cue는 피해 대상 연출에 impact 동기�
         && cue.impactActorId === 'player'
         && cue.impactAnimationId === 'ranged'
     )));
+    const arrowCue = playerAttackCues.find((cue) => (
+        cue.type === TUTORIAL_PRESENTATION_CUE_TYPES.WORLD_ANIMATION
+        && cue.animationId === TUTORIAL_BATTLE_EFFECT_DATA.IDS.PLAYER_ARROW
+    ));
+    assert.deepEqual(arrowCue.from, { x: previous.player.x, y: previous.player.y });
+    assert.deepEqual(arrowCue.to, { x: 7, y: 4 });
+    assert.equal(playerAttackCues.some((cue) => (
+        cue.actorId === 'f1-mob'
+        && cue.impactEffectId === arrowCue.effectId
+    )), true);
 
     const bossAttackCues = presenter.createCues({
         previousSnapshot: previous,
@@ -306,6 +319,15 @@ test('플레이어·로라 공격 cue는 피해 대상 연출에 impact 동기�
         && cue.impactActorId === 'lora'
         && cue.impactAnimationId === 'area'
     )));
+    const explosionCue = loraAttackCues.find((cue) => (
+        cue.type === TUTORIAL_PRESENTATION_CUE_TYPES.WORLD_ANIMATION
+        && cue.animationId === TUTORIAL_BATTLE_EFFECT_DATA.IDS.LORA_AREA_EXPLOSION
+    ));
+    assert.ok(explosionCue);
+    assert.equal(loraAttackCues.some((cue) => (
+        cue.actorId === 'player'
+        && cue.impactEffectId === explosionCue.effectId
+    )), true);
 });
 
 test('로라의 대기·공격·피격 cue는 플레이어가 뒤쪽에 있어도 전면 방향을 유지한다', () => {

@@ -20,7 +20,7 @@
 | `test/tutorial_effect_contract.test.mjs` | 선언형 아이템·이벤트 효과의 ID·조건·순서 검증과 preview/apply 동등성 계약 테스트 |
 | `test/tutorial_scene_seams.test.mjs` | 튜토리얼 모드·명령·키·값 유틸·모드 정책과 scene seam의 비순환 의존성을 고정하는 계약 테스트 |
 | `test/tutorial_content_meta.test.mjs` | 확정 기록·업적명·설명·사건 조건, 컷씬 트리거, 갤러리 잠금·재생, 메타 멱등성·손상 정규화·완료 횟수 경계를 검증하는 콘텐츠 계약 테스트 |
-| `test/tutorial_records.test.mjs` | 안정된 기록 ID, 층별 배치, 해금 전후 갤러리, 직접 선택과 전투 팝업 큐 계약을 검증하는 기록 수집 테스트 |
+| `test/tutorial_records.test.mjs` | 안정된 기록 ID, 페이즈당 한 개 무작위 배치, 해금 전후 갤러리, 직접 선택과 전투 팝업 큐 계약을 검증하는 기록 수집 테스트 |
 | `test/tutorial_record_presentation.test.mjs` | 기록 책의 expo 진입·퇴장, vignette 블러·감광 복원, top 레이어 확대·페이드·페이지 프레임 계약을 검증하는 테스트 |
 | `test/tutorial_nonbattle_views.test.mjs` | 비전투 뷰의 기준·와이드·최소 높이 순수 레이아웃, 직렬화 가능한 버튼 명령, 단방향 의존 계약 테스트 |
 | `test/web_release_manifest_builder.test.mjs` | KST 버전 형식과 실제 Git 기록→한글 체인지로그 매핑을 검증하는 빌드 계약 테스트 |
@@ -28,6 +28,7 @@
 | `test/web_release_manager.test.mjs` | 최신/구버전/조회 실패 시 웹 릴리스 확인과 재접속 안전장치를 검증하는 테스트 |
 | `test/tutorial_battle_views.test.mjs` | 전투 타일 투영·히트테스트 일치, HUD 경계·비중첩, 인벤토리 페이지 범위와 뷰 의존 방향 계약 테스트 |
 | `test/tutorial_presentation.test.mjs` | 모델 event 목록, 결정론적 cue, 피드백 수명·순서, 겹친 잠금, 주입형 이미지 loader의 크기 검증과 단방향 의존 계약 테스트 |
+| `test/tutorial_battle_effect_animation.test.mjs` | 화살 이동·폭발 프레임/플래시 제한·effect impact 동기화·통합 잠금·2D/WebGL 효과 렌더 경계를 검증하는 테스트 |
 | `test/tutorial_assets.test.mjs` | 매니페스트 유일성, PNG 원본/복사본 규격, loader crop·fallback, 맵 9×8 투영 왕복, 픽셀 보간 계약 테스트 |
 | `test/tutorial_balance_simulation.test.mjs` | 스타터×전략 8개 시나리오의 재현성, 명령 상한, preview 일치와 공개 모델 API 경계 테스트 |
 | `scripts/simulate-tutorial-balance.mjs` | 밸런스 시뮬레이션 CLI와 고정 `reports/` JSON 출력 진입점 |
@@ -78,10 +79,17 @@
 | `script/scene/tutorial/_tutorial_lora_turn_controller.js` | 로라 턴의 행동 전 대기·행동 표시·완료 명령을 타임라인 세대별로 한 번씩 예약하고 적용하는 클래스 |
 | `script/scene/tutorial/_tutorial_result_controller.js` | 모델 종료 결과를 엔딩 표시 데이터로 정규화하고 결과 1회 기록·엔딩 컷씬 대기 상태를 소유하는 클래스 |
 | `script/scene/tutorial/_tutorial_battle_outcome_coordinator.js` | 모델 결과를 전투 cue·진행도·기록·컷씬 트리거 구독자에게 고정 순서로 배포하는 클래스 |
+| `script/scene/tutorial/_tutorial_battle_animation_coordinator.js` | 표시 배우 roster·sprite cue router·화살/폭발·공격 왜곡 animator를 `route/update/snapshot/isBusy/reset/destroy` 단일 경계로 조립하는 클래스 |
+| `script/scene/tutorial/_tutorial_battle_effect_animator.js` | 화살 발사·타일 이동과 로라 광역 폭발 프레임, effect impact·pause/reset/destroy 수명을 소유하는 클래스 |
+| `script/scene/tutorial/_tutorial_attack_distortion_animator.js` | 플레이어 target-hit cue를 근접 배우 impact·원거리 화살 도착에 동기화해 방사형 공간 왜곡 snapshot과 수명을 소유하는 클래스 |
+| `script/display/webgl/_spatial_distortion_postprocess_pass.js` | 최대 4개의 화면 좌표 링으로 월드 합성 텍스처만 굴절시키는 full-resolution WebGL 후처리 패스 |
 | `script/scene/tutorial/view/_tutorial_*_view.js` | 로딩·메뉴·스타터·책 기반 갤러리·체인지로그·결과·컷씬을 직렬화 가능한 view model과 render/asset port로 그리는 파일당 한 클래스의 비전투 뷰 |
 | `script/scene/tutorial/view/_tutorial_battle_layout.js` | 전투 보드·HUD 기하와 흔들림이 적용된 타일 투영·히트테스트를 같은 프레임으로 제공하는 순수 레이아웃 클래스 |
 | `script/scene/tutorial/_tutorial_battle_camera.js` | 플레이어 표시 좌표를 0.3초 `easeOutExpo` 감쇠로 추적해 레이아웃에 카메라 snapshot을 제공하는 전투 표현 컨트롤러 |
 | `script/scene/tutorial/view/_tutorial_battle_world_view.js` | 읽기 전용 BattleViewModel로 타일·경로·월드 오브젝트·액터를 그리는 전투 월드 뷰 |
+| `script/scene/tutorial/view/_tutorial_battle_lighting_view.js` | 층별 노출·색온도, 촛대 단위 실제/점대칭 가상 점광원, 불꽃 위상 호흡과 저밀도 부유 입자 명령을 조립하는 전투 조명 뷰 |
+| `script/scene/tutorial/view/_tutorial_battle_effect_view.js` | 화살은 WebGL `effect`, 폭발 프레임 crop은 2D `texteffect`, 공격 왜곡은 대상 타일에 투영한 파이프라인 전용 명령으로 조립하는 뷰 |
+| `script/scene/tutorial/view/_tutorial_sprite_frame_renderer.js` | 몸·머리 source rect 레이어의 미세 오프셋을 정수 좌표·nearest 이미지 명령으로 합성하는 렌더러 |
 | `script/scene/tutorial/view/_tutorial_battle_hud_view.js` | 전투 상태·미션·인벤토리 HUD를 그리고 커맨드 메뉴·인벤토리 버튼 사양을 조합하는 HUD 뷰 |
 | `script/scene/tutorial/view/_tutorial_battle_command_menu_view.js` | 이동 확정/초기화와 공격·회복·대기 배치, X축 플립·보조 버튼 이동/페이드, 동일 히트 영역을 소유하는 커맨드 메뉴 뷰 |
 | `script/scene/tutorial/view/_tutorial_battle_feedback_view.js` | 장면이 조립한 피드백 snapshot으로 입자와 떠오르는 텍스트를 그리는 피드백 뷰 |
@@ -102,6 +110,7 @@
 | `script/scene/tutorial/_tutorial_achievement_banner.js` | 판정이 끝난 업적 알림의 중복 제거, 큐와 표시 수명만 소유하는 상태 클래스 |
 | `script/scene/tutorial/_tutorial_cutscene_trigger_router.js` | 첫 실행 메타와 실제 모델 사건을 기존 컷씬 ID로만 변환하는 런 단위 라우터 |
 | `script/scene/tutorial/_tutorial_gallery_controller.js` | 업적·일기·엔딩·컷씬 섹션 선택과 메타 기반 열람·재생 스냅샷을 소유하는 클래스 |
+| `script/scene/tutorial/_tutorial_record_spawn_planner.js` | 미해금 기록 풀과 층별 기존 후보 좌표를 독립 추첨해 페이즈당 최대 한 개를 배치하는 클래스 |
 | `script/scene/tutorial/_tutorial_record_popup_queue.js` | 한 경로에서 여러 기록을 획득해도 순서대로 갤러리 책을 열도록 활성·대기 기록과 중복 제거를 소유하는 클래스 |
 | `script/scene/tutorial/_tutorial_record_popup_controller.js` | 기록 대기열을 0.6초 `easeOutExpo` 진입·0.4초 `easeInExpo` 퇴장과 결합하고 입력 잠금·배경 표현 수명을 조율하는 클래스 |
 | `script/scene/tutorial/view/_tutorial_record_backdrop_view.js` | 기록 책 아래 vignette surface에 진행도 기반 블러·감광을 적용하고 닫힐 때 기존 inline style을 복원하는 뷰 |
@@ -129,13 +138,15 @@
 | `script/scene/tutorial/_tutorial_input_bindings.js` | 방향·선택·명령 키 코드와 감시 키 목록의 단일 원본 |
 | `script/scene/tutorial/_tutorial_value_utils.js` | 타일·목록·체크포인트 값 복제 및 직렬화 비교를 담당하는 순수 함수 |
 | `script/scene/tutorial/_tutorial_mode_policy.js` | 모드별 view/button 정책과 메뉴 복귀·재시작·전투 입력 허용 판정 |
-| `script/data/game/tutorial_game_data.js` | 가로 9×세로 8 두 층, 유닛, 공개 이벤트 타일·짝 포탈·기록 배치, `ITEMS[*].effects`·`EVENT_TILE_EFFECTS`, 활성 고정 컷씬, 규칙, 레이아웃과 문구를 제공하는 `TUTORIAL_GAME_DATA` |
+| `script/data/game/tutorial_game_data.js` | 가로 9×세로 8 두 층, 유닛, 공개 이벤트 타일·짝 포탈·기록 후보 좌표, `ITEMS[*].effects`·`EVENT_TILE_EFFECTS`, 활성 고정 컷씬, 규칙, 레이아웃과 문구를 제공하는 `TUTORIAL_GAME_DATA` |
 | `script/data/game/tutorial_content_data.js` | 확정 업적명·설명·사건 조건, 안정된 기록 ID와 본문, 엔딩 표시명, 갤러리 순서를 제공하는 `TUTORIAL_CONTENT_DATA` |
 | `script/data/game/tutorial_record_presentation_data.js` | 기록 책 진입·퇴장 시간, expo easing, 최소 배율과 backdrop 블러·감광 강도를 제공하는 정적 데이터 |
 | `script/data/game/tutorial_guidance_presentation_data.js` | 전투 안내 expo 시간, 8px 아웃포커스와 양피지 중앙 안전 영역을 제공하는 정적 데이터 |
 | `script/data/game/tutorial_changelog_data.js` | 실제 Git 커밋/제목과 사용자에게 표시할 한글 변경 요약을 연결하는 카탈로그 |
-| `script/data/game/tutorial_asset_manifest.js` | 맵·UI·아이템·정적 인물 에셋 선언과 실제 맵 격자 꼭짓점을 조합하는 단일 매니페스트 |
-| `script/data/game/tutorial_assets/` | 매니페스트 항목 생성을 맵·UI·아이템·레거시 도메인으로 분리한 데이터 모듈 |
+| `script/data/game/tutorial_asset_manifest.js` | 맵·UI·아이템·스프라이트·전투 effect·레거시 에셋 선언과 실제 맵 격자 꼭짓점을 조합하는 단일 매니페스트 |
+| `script/data/game/tutorial_assets/` | 매니페스트 항목 생성을 맵·UI·아이템·스프라이트·effect·레거시 도메인으로 분리한 데이터 모듈 |
+| `script/data/game/tutorial_sprite_clips.js` | 32×32 논리 클립, source rect 레이어 오프셋·그림자 여부, FPS·impact·폴백을 조합하는 스프라이트 데이터 |
+| `script/data/game/tutorial_battle_effect_data.js` | 플레이어 화살 crop·속도와 로라 폭발 프레임 목록·알파·impact를 선언하는 월드 효과 데이터 |
 | `script/data/theme/light_theme.js`, `script/data/theme/dark_theme.js` | `ColorSchemes.Tactics`로 노출되는 전술 화면 색상 |
 
 ## 4. 데이터 경로

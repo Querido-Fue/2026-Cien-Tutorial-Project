@@ -65,6 +65,7 @@ function freezeCue(cue) {
 export class TutorialBattlePresenter {
     #itemLabels;
     #animation;
+    #effects;
 
     /**
      * @param {object} config - 아이템 표시명과 기존 애니메이션 시간 설정입니다.
@@ -76,6 +77,7 @@ export class TutorialBattlePresenter {
             ))
         ));
         this.#animation = Object.freeze({ ...(config.animation || {}) });
+        this.#effects = Object.freeze({ ...(config.effects || {}) });
     }
 
     /**
@@ -308,6 +310,15 @@ export class TutorialBattlePresenter {
                 facing: resolveLoraFrontFacing(previous.lora, previous.player),
                 sourceEventType: event.type
             }));
+            if (event.action === 'area') {
+                this.#appendWorldEffectCue(cues, {
+                    effectId: this.#createEffectId(
+                        this.#effects.LORA_AREA_EXPLOSION,
+                        eventIndex
+                    ),
+                    effectAnimationId: this.#effects.LORA_AREA_EXPLOSION
+                }, event.type);
+            }
             if (event.action !== 'idle') {
                 cues.push(freezeCue({
                     type: CUE_TYPES.AUDIO,
@@ -358,6 +369,7 @@ export class TutorialBattlePresenter {
                     facing: impact.facing,
                     sourceEventType: event.type
                 }));
+                this.#appendWorldEffectCue(cues, impact, event.type);
                 const attackAudioId = impact.actorId === 'player'
                     ? impact.animationId === 'ranged'
                         ? AUDIO_IDS.PLAYER_RANGED
@@ -386,7 +398,8 @@ export class TutorialBattlePresenter {
         const impactFields = impact ? {
             impactActorId: impact.actorId,
             impactAnimationId: impact.animationId,
-            impactFacing: impact.facing
+            impactFacing: impact.facing,
+            ...(impact.effectId ? { impactEffectId: impact.effectId } : {})
         } : {};
         cues.push(freezeCue({
             type: CUE_TYPES.FLOATING_TEXT,
@@ -439,13 +452,20 @@ export class TutorialBattlePresenter {
             || (targetActorId === 'lora' && ['melee', 'bow'].includes(weapon));
         if (isPlayerAttack) {
             const target = targetActorId === 'lora' ? next.lora : event;
+            const isRanged = weapon === 'bow';
             return {
                 actorId: 'player',
-                animationId: weapon === 'bow' ? 'ranged' : 'melee',
+                animationId: isRanged ? 'ranged' : 'melee',
                 facing: getCueFacing(previous.player, target, 'right'),
                 targetFacing: targetActorId === 'lora'
                     ? resolveLoraFrontFacing(target, previous.player)
                     : getCueFacing(target, previous.player, 'left'),
+                effectId: isRanged
+                    ? this.#createEffectId(this.#effects.PLAYER_ARROW, eventIndex)
+                    : null,
+                effectAnimationId: isRanged ? this.#effects.PLAYER_ARROW : null,
+                effectFrom: isRanged ? previous.player : null,
+                effectTo: isRanged ? target : null,
                 startSource: true
             };
         }
@@ -454,11 +474,20 @@ export class TutorialBattlePresenter {
         }
         if (typeof event.source === 'string' && event.source.startsWith('lora-')) {
             const animationId = event.source === 'lora-area' ? 'area' : 'melee';
+            const areaAttackIndex = animationId === 'area'
+                ? this.#findPreviousLoraAreaAttackIndex(events, eventIndex)
+                : -1;
             return {
                 actorId: 'lora',
                 animationId,
                 facing: resolveLoraFrontFacing(previous.lora, previous.player),
                 targetFacing: getCueFacing(previous.player, previous.lora),
+                effectId: areaAttackIndex >= 0
+                    ? this.#createEffectId(
+                        this.#effects.LORA_AREA_EXPLOSION,
+                        areaAttackIndex
+                    )
+                    : null,
                 startSource: false
             };
         }
@@ -478,6 +507,47 @@ export class TutorialBattlePresenter {
             };
         }
         return null;
+    }
+
+    /**
+     * 실제 월드 효과가 있는 공격에 직렬화 가능한 시작 cue를 추가합니다.
+     * @param {object[]} cues - 출력 cue 배열입니다.
+     * @param {object} impact - 피해 원본과 월드 효과 정보입니다.
+     * @param {string} sourceEventType - 원본 모델 이벤트입니다.
+     * @private
+     */
+    #appendWorldEffectCue(cues, impact, sourceEventType) {
+        if (typeof impact?.effectId !== 'string'
+            || typeof impact?.effectAnimationId !== 'string') {
+            return;
+        }
+        cues.push(freezeCue({
+            type: CUE_TYPES.WORLD_ANIMATION,
+            effectId: impact.effectId,
+            animationId: impact.effectAnimationId,
+            from: impact.effectFrom,
+            to: impact.effectTo,
+            facing: impact.facing,
+            sourceEventType
+        }));
+    }
+
+    /** @param {string} animationId @param {number} eventIndex @returns {string|null} @private */
+    #createEffectId(animationId, eventIndex) {
+        return typeof animationId === 'string' && animationId
+            ? `${animationId}:${eventIndex}`
+            : null;
+    }
+
+    /** @param {object[]} events @param {number} eventIndex @returns {number} @private */
+    #findPreviousLoraAreaAttackIndex(events, eventIndex) {
+        for (let index = eventIndex; index >= 0; index--) {
+            const candidate = events[index];
+            if (candidate?.type === 'lora-attack' && candidate.action === 'area') {
+                return index;
+            }
+        }
+        return -1;
     }
 
     /** @param {object[]} cues @param {object} event @param {object} tracker @param {object} next @private */
