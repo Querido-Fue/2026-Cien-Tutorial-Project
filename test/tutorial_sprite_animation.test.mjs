@@ -51,6 +51,25 @@ test('로라는 플레이어 위치를 따라 전면 좌우 방향만 선택한�
     }
 });
 
+test('로라의 동·서 방향은 같은 전면 프레임을 사용하고 서쪽만 좌우 반전한다', () => {
+    const animator = createAnimator();
+    animator.syncActors([{
+        id: 'lora', actorType: 'lora', x: 4, y: 0,
+        alive: true, facing: 'right', ambientAnimationId: 'idle'
+    }]);
+    const east = animator.getSnapshot().lora;
+    animator.syncActors([{
+        id: 'lora', actorType: 'lora', x: 4, y: 0,
+        alive: true, facing: 'left', ambientAnimationId: 'idle'
+    }]);
+    const west = animator.getSnapshot().lora;
+
+    assert.deepEqual(west.layers, east.layers);
+    assert.equal(east.flipX, false);
+    assert.equal(west.flipX, true);
+    assert.notDeepEqual(west.shadowFootAnchors, east.shadowFootAnchors);
+});
+
 test('걷기 루프는 델타로 진행하고 지정 프레임에서 발걸음을 발생시킨다', () => {
     const animator = createAnimator();
     animator.syncActors([{

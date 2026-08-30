@@ -81,6 +81,7 @@ export function createTutorialSpriteClip(entry) {
         actorType: String(entry.actorType),
         animationId: String(entry.animationId),
         facing: entry.facing ? String(entry.facing) : null,
+        flipX: entry.flipX === true,
         available: entry.available !== false,
         assetId: typeof entry.assetId === 'string' ? entry.assetId : null,
         assetIds: entry.assetIds ? { ...entry.assetIds } : null,

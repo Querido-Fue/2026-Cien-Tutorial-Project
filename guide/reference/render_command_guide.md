@@ -51,7 +51,7 @@
 
 WebGL batch 레이어는 기본 도형/이미지 명령을 배치 렌더러로 전달합니다. 기본 도형 아틀라스에는 `rect`, `square`, `diamond`, `circle`, `triangle`, `pentagon`, `hexagon`, `octagon`, `arrow`가 있으며, `diamond`는 쿼터뷰 타일처럼 `w`/`h`를 다르게 스케일할 수 있습니다. overlay effect surface는 `OverlaySession.renderGlassPanel()` 경로에서 `glassPanel` 명령을 사용합니다.
 
-`background`, `object`, `effect` 명령은 프레임 끝에 그 순서로 공유 FBO에 지연 실행됩니다. 절차적 `flameParticles`와 `magneticShield` 명령은 선택적 `pixelSize`를 받으며 기본값은 2픽셀입니다. 후처리 원본은 nearest-neighbor이고 Bloom 보조 텍스처만 linear filtering을 사용합니다.
+`background`, `object`, `effect` 명령은 프레임 끝에 그 순서로 공유 FBO에 지연 실행됩니다. 절차적 `flameParticles`, `magneticShield`, `ambientDust` 명령은 선택적 `pixelSize`를 받으며 기본값은 2픽셀입니다. `ambientDust`는 `bounds` 안에서만 소수의 WebGL point sprite를 그리며 `particleCount`, `pointSize`, `time`, `warmColor`, `coolColor`를 선택적으로 받습니다. 후처리 원본은 nearest-neighbor이고 Bloom 보조 텍스처만 linear filtering을 사용합니다.
 
 맵 투영처럼 축 정렬 사각형으로 표현할 수 없는 경우에는 `vertices` 옵션으로 `[좌상 x, 좌상 y, 우상 x, 우상 y, 우하 x, 우하 y, 좌하 x, 좌하 y]` 순서의 네 꼭짓점을 전달할 수 있습니다. 유효한 `vertices` 값은 `x`/`y`/`w`/`h` 기하보다 우선합니다.
 

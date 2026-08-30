@@ -355,6 +355,7 @@ export class TutorialSpriteAnimator {
             scaleTileRatio: clip?.scaleTileRatio || 0.92,
             visualTopInsetRatio: Number(clip?.visualTopInsetRatio) || 0,
             facing: track.facing,
+            flipX: clip?.flipX === true,
             fallbackUsed: clip?.fallbackUsed === true,
             fallbackEffect: clip?.fallbackEffect || null,
             progress: clip?.loop

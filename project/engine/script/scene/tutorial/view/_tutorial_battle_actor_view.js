@@ -554,12 +554,10 @@ export class TutorialBattleActorView {
                     const midpoint = (startUnit + endUnit) * 0.5;
                     const bandAlpha = farAlpha
                         + ((nearAlpha - farAlpha) * midpoint);
+                    const sourceHorizontalRange = animation.flipX === true
+                        ? [1 - range.end, 1 - range.start] : [range.start, range.end];
                     const slicedSourceRect = this.#sliceShadowSourceRegion(
-                        sourceRect,
-                        range.start,
-                        range.end,
-                        startY,
-                        endY
+                        sourceRect, ...sourceHorizontalRange, startY, endY
                     );
                     if (!slicedSourceRect) {
                         continue;

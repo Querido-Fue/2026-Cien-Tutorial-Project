@@ -4,7 +4,8 @@
 export const EFFECT_RENDER_CONSTANTS = Object.freeze({
     TYPES: Object.freeze({
         MAGNETIC_SHIELD: 'magneticShield',
-        FLAME_PARTICLES: 'flameParticles'
+        FLAME_PARTICLES: 'flameParticles',
+        AMBIENT_DUST: 'ambientDust'
     }),
     FLAME: Object.freeze({
         MAX_EMITTERS_PER_COMMAND: 32,
@@ -17,5 +18,12 @@ export const EFFECT_RENDER_CONSTANTS = Object.freeze({
     }),
     MAGNETIC_SHIELD: Object.freeze({
         PIXEL_GRID_SIZE: 2
+    }),
+    AMBIENT_DUST: Object.freeze({
+        MAX_PARTICLES_PER_COMMAND: 56,
+        DEFAULT_PARTICLE_COUNT: 38,
+        PIXEL_GRID_SIZE: 2,
+        MIN_POINT_SIZE: 1,
+        MAX_POINT_SIZE: 2
     })
 });

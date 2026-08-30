@@ -56,6 +56,7 @@ test('배우 뷰는 정수 좌표·nearest·발 앵커를 유지하며 다중 �
     });
     const animation = {
         assetId: 'sprite.player.melee',
+        flipX: true,
         layers: [
             { x: 128, y: 128, w: 64, h: 64 },
             { x: 128, y: 192, w: 64, h: 64 }
@@ -109,6 +110,7 @@ test('배우 뷰는 정수 좌표·nearest·발 앵커를 유지하며 다중 �
     assert.equal(images.length, 2);
     assert.deepEqual(images.map(({ sourceRect }) => sourceRect), animation.layers);
     assert.equal(images.every(({ smoothing }) => smoothing === false), true);
+    assert.equal(images.every(({ flipX }) => flipX === true), true);
     assert.equal(images.every(({ x, y, w, h }) => [x, y, w, h].every(Number.isInteger)), true);
     assert.deepEqual(
         images.map(({ x, y, w, h }) => ({ x, y, w, h })),
@@ -119,6 +121,7 @@ test('배우 뷰는 정수 좌표·nearest·발 앵커를 유지하며 다중 �
     assert.equal(
         projectedShadows.every((command) => (
             command.fill === '#000'
+            && command.flipX === true
             && command.smoothing === false
             && command.vertices.length === 8
             && command.vertices.every(Number.isInteger)

@@ -4,6 +4,24 @@ function normalizeFacing(value) {
 }
 
 /**
+ * 좌우 반전된 스프라이트의 양발 접점을 같은 화면 방향으로 변환합니다.
+ * @param {readonly (readonly {x:number,y:number}[])[]} frames - 원본 발 접점입니다.
+ * @param {boolean} flipX - 좌우 반전 여부입니다.
+ * @returns {readonly (readonly {x:number,y:number}[])[]} 화면 방향의 발 접점입니다.
+ */
+function orientShadowFootFrames(frames, flipX) {
+    if (!flipX) {
+        return frames;
+    }
+    return Object.freeze((frames || []).map((feet) => Object.freeze(
+        (feet || []).map((foot) => Object.freeze({
+            x: 1 - Number(foot.x),
+            y: Number(foot.y)
+        })).sort((left, right) => left.x - right.x)
+    )));
+}
+
+/**
  * @class TutorialSpriteClipResolver
  * @description 요청 동작·방향을 실제 제공 시트 또는 명시적 폴백 클립으로 해석합니다.
  */
@@ -45,15 +63,20 @@ export class TutorialSpriteClipResolver {
             return null;
         }
         const fallbackUsed = resolved.id !== requested.id;
+        const flipX = requested.flipX === true || resolved.flipX === true;
         return Object.freeze({
             requestedClipId: requested.id,
             resolvedClipId: resolved.id,
             actorType: requested.actorType,
             animationId: requested.animationId,
             facing: requested.facing || normalizeFacing(facing),
+            flipX,
             assetId,
             frames: Object.freeze(frames),
-            shadowFootFrames: Object.freeze(shadowFootFrames),
+            shadowFootFrames: orientShadowFootFrames(
+                Object.freeze(shadowFootFrames),
+                flipX
+            ),
             fps: requested.fps,
             loop: requested.loop,
             impactFrame: requested.impactFrame,

@@ -4,10 +4,14 @@ import {
     createTutorialSpriteFrames
 } from './_tutorial_sprite_clip_entry.js';
 
-const DIRECTIONS = Object.freeze({ right: 0, left: 1, up: 2, down: 3 });
+const DIRECTION_SOURCES = Object.freeze({
+    right: Object.freeze({ row: 0, flipX: false, footFacing: 'right' }),
+    left: Object.freeze({ row: 0, flipX: true, footFacing: 'right' }),
+    up: Object.freeze({ row: 2, flipX: false, footFacing: 'up' }),
+    down: Object.freeze({ row: 3, flipX: false, footFacing: 'down' })
+});
 const SHADOW_FOOT_PIXELS = Object.freeze({
     right: [[35, 60], [40, 61]],
-    left: [[34, 61], [39, 60]],
     up: [[35, 61], [40, 60]],
     down: [[33, 60], [38, 61]]
 });
@@ -21,22 +25,23 @@ function createLoraShadowFootFrame(facing) {
     }))];
 }
 
-for (const [facing, row] of Object.entries(DIRECTIONS)) {
+for (const [facing, source] of Object.entries(DIRECTION_SOURCES)) {
     const idleFrames = createTutorialSpriteFrames({
         cellWidth: 74,
         cellHeight: 74,
-        frameCells: [{ column: 0, row }]
+        frameCells: [{ column: 0, row: source.row }]
     });
     clips.push(createTutorialSpriteClip({
         id: `lora.idle.${facing}`,
         actorType: 'lora',
         animationId: 'idle',
         facing,
+        flipX: source.flipX,
         assetId: ASSETS.loraWalk,
         frames: idleFrames,
         fps: 1,
         loop: true,
-        shadowFootFrames: createLoraShadowFootFrame(facing),
+        shadowFootFrames: createLoraShadowFootFrame(source.footFacing),
         scaleTileRatio: 0.94
     }));
 
@@ -54,6 +59,7 @@ for (const [facing, row] of Object.entries(DIRECTIONS)) {
             actorType: 'lora',
             animationId,
             facing,
+            flipX: source.flipX,
             available: false,
             playbackFrameCount: count,
             fps,

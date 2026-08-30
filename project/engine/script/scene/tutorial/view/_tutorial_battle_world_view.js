@@ -55,6 +55,7 @@ export class TutorialBattleWorldView {
                 });
             }
             this.#drawMapArtwork(mapArtwork);
+            this.#drawAmbientDust();
             this.#drawAmbientFire(Boolean(mapArtwork));
             this.#drawQuarterViewBoard(Boolean(mapArtwork));
             this.#drawWorldObjects();
@@ -79,6 +80,30 @@ export class TutorialBattleWorldView {
                 smoothing: false
             });
         }
+    }
+
+    /** 보드 월드 위·UI 아래에 희박한 픽셀 먼지 WebGL 명령을 그립니다. @private */
+    #drawAmbientDust() {
+        const { colors, layout, world } = this.#frame;
+        const bounds = layout.mapImageRect || layout.boardRect;
+        if (!bounds || !(bounds.w > 0) || !(bounds.h > 0)) {
+            return;
+        }
+        const particleCount = Math.max(24, Math.min(
+            48,
+            Math.round((bounds.w * bounds.h) / 36000)
+        ));
+        this.#renderPort.renderGL('effect', {
+            effectType: EFFECT_TYPES.AMBIENT_DUST,
+            bounds,
+            particleCount,
+            time: Number(world.elapsedSeconds) || 0,
+            alpha: 0.72,
+            pixelSize: 2,
+            pointSize: 2,
+            warmColor: colors.Effects?.FlameEmber,
+            coolColor: colors.Effects?.Debris
+        });
     }
 
     /** 원본 맵 촛대 좌표에 맞춘 WebGL 난류 화염 명령을 그립니다. @param {boolean} hasMapArtwork @private */

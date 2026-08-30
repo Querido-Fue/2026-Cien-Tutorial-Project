@@ -125,6 +125,20 @@ test('원본이 없는 Range·Breathing·로라 액션은 순환 없는 명시�
     assert.equal(collapse.loop, true);
     assert.equal(collapse.fallbackEffect, 'breathing');
 
+    const loraEast = resolver.resolve({
+        actorType: 'lora', animationId: 'idle', facing: 'right'
+    });
+    const loraWest = resolver.resolve({
+        actorType: 'lora', animationId: 'idle', facing: 'left'
+    });
+    assert.deepEqual(loraWest.frames, loraEast.frames);
+    assert.equal(loraEast.flipX, false);
+    assert.equal(loraWest.flipX, true);
+    assert.deepEqual(
+        loraWest.shadowFootFrames[0].map(({ x, y }) => ({ x: 1 - x, y })).reverse(),
+        loraEast.shadowFootFrames[0]
+    );
+
     const slime = resolver.resolve({
         actorType: 'slime', animationId: 'idle', variant: 'blue'
     });

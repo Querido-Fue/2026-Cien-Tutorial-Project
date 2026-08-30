@@ -87,6 +87,7 @@ background(WebGL)
 - `TutorialBattleLayout`이 보드·HUD 기하와 타일 투영·히트테스트를 소유합니다. 에셋 맵에서는 매니페스트의 970×580 원본 격자 네 꼭짓점으로 두 타일 축을 구하고 aspect-fit된 맵 사각형에 투영합니다. 월드 렌더링과 입력 판정은 같은 layout frame을 사용합니다.
 - 카메라 줌은 장치별 휠을 정규화한 누적값의 차분만 한 번 소비하고, 최신 목표를 기본 배율의 1.2배와 맵 이미지 좌우 맞춤 배율 사이로 제한합니다. `TutorialBattleCamera`는 진행 중 줌을 현재 표시값에서 0.4초 `easeOutExpo`로 재지정하며, 레이아웃이 같은 줌으로 맵·격자·오브젝트·히트테스트 축을 함께 계산합니다.
 - 맵 프로필의 `ambientFire`는 원본 이미지의 촛불 심지 좌표와 크기만 소유합니다. `TutorialBattleLayout`이 이를 현재 `mapImageRect` 화면 좌표로 변환하고, 전투 월드 뷰는 `flameParticles` 명령 하나만 effect 레이어에 전달합니다. `FlameParticleEffectPass`는 촛불별 작은 scissor 영역에서 난류 화염과 상승 불씨를 GPU로 합성합니다.
+- 전투 월드 뷰는 현재 `mapImageRect`를 경계로 한 `ambientDust` 명령을 effect 레이어에 전달합니다. `AmbientDustEffectPass`는 고정 seed 버퍼의 소수 point sprite만 사용해 2픽셀 격자 먼지를 합성하며, 월드 후처리는 적용하되 이후 `texteffect`·UI 레이어에는 영향을 주지 않습니다.
 - `TutorialFeedbackQueue`는 cue 순번과 로그·일시 피드백·오디오 ID 대기열을, `TutorialAnimationTimeline`은 표시 보간·animation slot·잠금 토큰과 취소 세대를 소유합니다. 장면은 모델 결과 적용 시점과 연출 완료 시점을 분리해 조율합니다.
 - `TUTORIAL_ASSET_MANIFEST`는 원본·런타임 경로, PNG 크기, crop, layer/usage/required/fallback과 맵 격자 기준을 소유합니다. `TutorialAssetLoader`는 readiness·크기 검증·crop canvas·nearest·fallback과 callback 정리를, `TutorialAssetPort`는 도메인별 논리 조회와 분리 맵 우선 정책을 소유합니다. 뷰는 원본 이름이나 브라우저 로드 콜백을 알지 않습니다.
 - 플레이어와 로라 스프라이트 클립은 원본 셀에서 실측한 프레임별 좌·우 발 접점을 함께 소유합니다. 배우 뷰는 이 접점을 기준으로 실루엣을 두 메시로 나눠 격자 동남쪽 지면에 투영하며, 부유 높이는 그림자 이동 거리·농도·픽셀 반그림자 폭으로만 변환합니다. 접점이 없는 몹·폴백은 기존 단일 앵커 투영을 유지합니다.
