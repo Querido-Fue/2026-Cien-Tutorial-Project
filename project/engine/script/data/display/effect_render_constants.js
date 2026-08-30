@@ -7,6 +7,7 @@ export const EFFECT_RENDER_CONSTANTS = Object.freeze({
         FLAME_PARTICLES: 'flameParticles',
         AMBIENT_DUST: 'ambientDust',
         SCENE_LIGHTING: 'sceneLighting',
+        PAGE_TURN: 'pageTurn',
         SPATIAL_DISTORTION: 'spatialDistortion'
     }),
     FLAME: Object.freeze({
@@ -33,6 +34,14 @@ export const EFFECT_RENDER_CONSTANTS = Object.freeze({
         MIN_EXPOSURE: 0.35,
         MIN_RADIUS: 8,
         MAX_RADIUS: 360
+    }),
+    PAGE_TURN: Object.freeze({
+        MESH_COLUMNS: 32,
+        MESH_ROWS: 12,
+        MIN_PAGE_SIZE: 4,
+        MAX_CURL_STRENGTH: 1.2,
+        MIN_PERSPECTIVE_RATIO: 1.8,
+        MAX_PERSPECTIVE_RATIO: 8
     }),
     SPATIAL_DISTORTION: Object.freeze({
         MAX_COMMANDS_PER_FRAME: 4,

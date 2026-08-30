@@ -135,7 +135,9 @@ export class TutorialGalleryController {
             selected: index === this.#sectionIndex
         }));
         const selectedSection = this.#content.GALLERY.sections[this.#sectionIndex];
-        const entries = this.#createEntries(selectedSection, meta);
+        const diaryEntriesBySection = this.#createDiaryEntriesBySection(meta);
+        const entries = diaryEntriesBySection[selectedSection.id]
+            || this.#createEntries(selectedSection, meta);
         const selectedIndex = this.#getEntryIndex(selectedSection.id, entries.length);
         return Object.freeze({
             sections: Object.freeze(sections),
@@ -147,6 +149,7 @@ export class TutorialGalleryController {
             selectedSectionId: selectedSection.id,
             selectedSectionTitle: selectedSection.title,
             entries: Object.freeze(entries),
+            diaryEntriesBySection,
             selectedIndex,
             selectedEntry: entries[selectedIndex] || null
         });
@@ -247,6 +250,27 @@ export class TutorialGalleryController {
             });
         }
         return [];
+    }
+
+    /**
+     * 양쪽 일기 페이지가 실제 해금 상태를 함께 표시할 수 있는 항목 묶음을 만듭니다.
+     * @param {object} meta - 현재 메타 진행도입니다.
+     * @returns {Readonly<Record<string, readonly object[]>>} 섹션 ID별 일기 항목입니다.
+     * @private
+     */
+    #createDiaryEntriesBySection(meta) {
+        return Object.freeze({
+            'lora-diary': Object.freeze(this.#createDiaryEntries(
+                this.#content.RECORDS.LORA,
+                this.#content.DIARIES.LORA,
+                meta
+            )),
+            'developer-diary': Object.freeze(this.#createDiaryEntries(
+                this.#content.RECORDS.DEVELOPER,
+                this.#content.DIARIES.DEVELOPER,
+                meta
+            ))
+        });
     }
 
     /**

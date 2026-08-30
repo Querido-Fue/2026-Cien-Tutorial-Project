@@ -110,6 +110,11 @@
 | `script/scene/tutorial/_tutorial_achievement_banner.js` | 판정이 끝난 업적 알림의 중복 제거, 큐와 표시 수명만 소유하는 상태 클래스 |
 | `script/scene/tutorial/_tutorial_cutscene_trigger_router.js` | 첫 실행 메타와 실제 모델 사건을 기존 컷씬 ID로만 변환하는 런 단위 라우터 |
 | `script/scene/tutorial/_tutorial_gallery_controller.js` | 업적·일기·엔딩·컷씬 섹션 선택과 메타 기반 열람·재생 스냅샷을 소유하는 클래스 |
+| `script/scene/tutorial/_tutorial_gallery_navigation_controller.js` | 갤러리 선택 변경을 검증하고 이전 선택 스냅샷과 방향을 페이지 전환에 연결하는 조립 클래스 |
+| `script/scene/tutorial/_tutorial_gallery_page_turn_controller.js` | 0.48초 페이지 진행도, 이전 갤러리 상태와 WebGL 캡처/폴백 수명을 소유하는 클래스 |
+| `script/scene/tutorial/_tutorial_gallery_page_turn_surface.js` | 이전 `ui` canvas를 복제하고 동적 WebGL effect surface에 텍스처 명령을 제출·회수하는 클래스 |
+| `script/scene/tutorial/view/_tutorial_gallery_page_turn_view.js` | 페이지 중간 내용 교체, 방향별 출발 면, PNG 폴백과 WebGL curl 명령을 조립하는 뷰 |
+| `script/display/webgl/_page_turn_effect_pass.js` | 캡처한 실제 페이지 픽셀을 3D 곡면 메시·뒷면 재질·낙하 그림자로 넘기는 WebGL 패스 |
 | `script/scene/tutorial/_tutorial_record_spawn_planner.js` | 미해금 기록 풀과 층별 기존 후보 좌표를 독립 추첨해 페이즈당 최대 한 개를 배치하는 클래스 |
 | `script/scene/tutorial/_tutorial_record_popup_queue.js` | 한 경로에서 여러 기록을 획득해도 순서대로 갤러리 책을 열도록 활성·대기 기록과 중복 제거를 소유하는 클래스 |
 | `script/scene/tutorial/_tutorial_record_popup_controller.js` | 기록 대기열을 0.6초 `easeOutExpo` 진입·0.4초 `easeInExpo` 퇴장과 결합하고 입력 잠금·배경 표현 수명을 조율하는 클래스 |
@@ -141,6 +146,7 @@
 | `script/data/game/tutorial_game_data.js` | 가로 9×세로 8 두 층, 유닛, 공개 이벤트 타일·짝 포탈·기록 후보 좌표, `ITEMS[*].effects`·`EVENT_TILE_EFFECTS`, 활성 고정 컷씬, 규칙, 레이아웃과 문구를 제공하는 `TUTORIAL_GAME_DATA` |
 | `script/data/game/tutorial_content_data.js` | 확정 업적명·설명·사건 조건, 안정된 기록 ID와 본문, 엔딩 표시명, 갤러리 순서를 제공하는 `TUTORIAL_CONTENT_DATA` |
 | `script/data/game/tutorial_record_presentation_data.js` | 기록 책 진입·퇴장 시간, expo easing, 최소 배율과 backdrop 블러·감광 강도를 제공하는 정적 데이터 |
+| `script/data/game/tutorial_gallery_presentation_data.js` | 갤러리 페이지 전환의 0.48초 시간, 동적 surface, 곡률·원근·재질과 PNG 폴백 순서를 제공하는 정적 데이터 |
 | `script/data/game/tutorial_guidance_presentation_data.js` | 전투 안내 expo 시간, 8px 아웃포커스와 양피지 중앙 안전 영역을 제공하는 정적 데이터 |
 | `script/data/game/tutorial_changelog_data.js` | 실제 Git 커밋/제목과 사용자에게 표시할 한글 변경 요약을 연결하는 카탈로그 |
 | `script/data/game/tutorial_asset_manifest.js` | 맵·UI·아이템·스프라이트·전투 effect·레거시 에셋 선언과 실제 맵 격자 꼭짓점을 조합하는 단일 매니페스트 |

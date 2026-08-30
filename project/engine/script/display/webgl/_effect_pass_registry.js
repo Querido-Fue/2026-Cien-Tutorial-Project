@@ -2,6 +2,7 @@ import { MagneticShieldEffectPass } from './_magnetic_shield_effect_pass.js';
 import { FlameParticleEffectPass } from './_flame_particle_effect_pass.js';
 import { AmbientDustEffectPass } from './_ambient_dust_effect_pass.js';
 import { SceneLightingEffectPass } from './_scene_lighting_effect_pass.js';
+import { PageTurnEffectPass } from './_page_turn_effect_pass.js';
 import { getData } from 'data/data_handler.js';
 
 const EFFECT_TYPES = getData('EFFECT_RENDER_CONSTANTS').TYPES;
@@ -16,6 +17,7 @@ export function createEffectPassRegistry(gl) {
         [EFFECT_TYPES.MAGNETIC_SHIELD, new MagneticShieldEffectPass(gl)],
         [EFFECT_TYPES.FLAME_PARTICLES, new FlameParticleEffectPass(gl)],
         [EFFECT_TYPES.AMBIENT_DUST, new AmbientDustEffectPass(gl)],
-        [EFFECT_TYPES.SCENE_LIGHTING, new SceneLightingEffectPass(gl)]
+        [EFFECT_TYPES.SCENE_LIGHTING, new SceneLightingEffectPass(gl)],
+        [EFFECT_TYPES.PAGE_TURN, new PageTurnEffectPass(gl)]
     ]);
 }

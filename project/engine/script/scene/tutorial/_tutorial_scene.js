@@ -1,5 +1,6 @@
 import { BaseScene } from 'scene/_base_scene.js';
 import {
+    getDisplaySystem,
     getUIOffsetX,
     getUIWW,
     getWH,
@@ -34,7 +35,8 @@ import { TutorialBattleCameraController } from './_tutorial_battle_camera_contro
 import { TutorialCombatReadabilityPresenter } from './_tutorial_combat_readability_presenter.js';
 import { TutorialCutsceneSession } from './_tutorial_cutscene_session.js';
 import { TutorialCutsceneTriggerRouter } from './_tutorial_cutscene_trigger_router.js';
-import { TutorialGalleryController } from './_tutorial_gallery_controller.js';
+import { TutorialGalleryNavigationController } from './_tutorial_gallery_navigation_controller.js';
+import { TutorialGalleryPageTurnSurface } from './_tutorial_gallery_page_turn_surface.js';
 import { TutorialGuidanceController } from './_tutorial_guidance_controller.js';
 import {
     createDefaultTutorialMeta,
@@ -93,6 +95,7 @@ import { TutorialButtonHost } from './view/_tutorial_button_host.js';
 import { TutorialChangelogView } from './view/_tutorial_changelog_view.js';
 import { TutorialCutsceneView } from './view/_tutorial_cutscene_view.js';
 import { TutorialGalleryView } from './view/_tutorial_gallery_view.js';
+import { TutorialGalleryPageTurnView } from './view/_tutorial_gallery_page_turn_view.js';
 import { TutorialLoadingView } from './view/_tutorial_loading_view.js';
 import { TutorialMenuView } from './view/_tutorial_menu_view.js';
 import { TutorialPauseView } from './view/_tutorial_pause_view.js';
@@ -105,6 +108,7 @@ const TUTORIAL_CONTENT_DATA = getData('TUTORIAL_CONTENT_DATA');
 const TUTORIAL_ASSET_MANIFEST = getData('TUTORIAL_ASSET_MANIFEST');
 const TUTORIAL_GUIDANCE_PRESENTATION_DATA = getData('TUTORIAL_GUIDANCE_PRESENTATION_DATA');
 const TUTORIAL_RECORD_PRESENTATION_DATA = getData('TUTORIAL_RECORD_PRESENTATION_DATA');
+const TUTORIAL_GALLERY_PRESENTATION_DATA = getData('TUTORIAL_GALLERY_PRESENTATION_DATA');
 const TUTORIAL_SPRITE_CLIPS = getData('TUTORIAL_SPRITE_CLIPS');
 const TUTORIAL_BATTLE_EFFECT_DATA = getData('TUTORIAL_BATTLE_EFFECT_DATA');
 
@@ -159,9 +163,20 @@ export class TutorialScene extends BaseScene {
             triggerData: this.content.CUTSCENE_TRIGGERS,
             knownCutsceneIds
         });
-        this.galleryController = new TutorialGalleryController({
+        this.gallery = new TutorialGalleryNavigationController({
             content: this.content,
-            cutscenes: this.data.CUTSCENES
+            cutscenes: this.data.CUTSCENES,
+            animationPort: Object.freeze({ animate, remove }),
+            surfacePort: new TutorialGalleryPageTurnSurface({
+                displaySystem: getDisplaySystem(),
+                renderGL,
+                config: TUTORIAL_GALLERY_PRESENTATION_DATA
+            }),
+            config: TUTORIAL_GALLERY_PRESENTATION_DATA,
+            getMode: () => this.mode,
+            getMeta: () => this.meta,
+            isCutsceneOpen: () => this.cutscenes.isOpen(),
+            onChange: () => this.buttonHost?.invalidate()
         });
         this.recordPopups = new TutorialRecordPopupController({
             animationPort: Object.freeze({ animate, remove }),
@@ -226,7 +241,9 @@ export class TutorialScene extends BaseScene {
             tutorialRenderPort, this.assetPort
         );
         this.pauseView = new TutorialPauseView(tutorialRenderPort, this.assetPort);
-        this.galleryView = new TutorialGalleryView(tutorialRenderPort, this.assetPort);
+        this.galleryView = new TutorialGalleryView(tutorialRenderPort, this.assetPort, {
+            pageTurnView: new TutorialGalleryPageTurnView(this.gallery, TUTORIAL_GALLERY_PRESENTATION_DATA)
+        });
         this.resultView = new TutorialResultView(tutorialRenderPort, this.assetPort);
         this.cutsceneView = new TutorialCutsceneView(tutorialRenderPort, this.assetPort);
         this.battleTutorialView = new TutorialBattleTutorialView(
@@ -560,10 +577,10 @@ export class TutorialScene extends BaseScene {
                     this.#applyRestart();
                     break;
                 case COMMANDS.GALLERY_SECTION_SHIFT:
-                    this.#applyGallerySectionShift(command.payload);
+                    this.gallery.shiftSection(command.payload);
                     break;
                 case COMMANDS.GALLERY_SHIFT:
-                    this.#applyGalleryShift(command.payload);
+                    this.gallery.shiftEntry(command.payload);
                     break;
                 case COMMANDS.GALLERY_PLAY:
                     this.#applyGalleryPlay();
@@ -676,6 +693,7 @@ export class TutorialScene extends BaseScene {
         this.sceneSystem?.systemHandler?.uiSystem?.setCursorPresentation(null);
         this.timelineRevision += 1;
         this.presentationTimeline.destroy();
+        this.gallery.destroy();
         this.titleFlow.destroy();
         this.battleCamera.destroy();
         this.battleCameraController.destroy();
@@ -841,6 +859,7 @@ export class TutorialScene extends BaseScene {
         this.timelineRevision += 1;
         this.titleFlow.cancel();
         this.presentationTimeline.cancel();
+        this.gallery.cancelPageTurn();
         this.battleCamera.clear();
         this.battleCameraController.clear();
         this.battleAnimations.reset();
@@ -929,42 +948,17 @@ export class TutorialScene extends BaseScene {
         return openingCutsceneIds;
     }
 
-    /** 갤러리 섹션을 키보드 또는 섹션 ID로 전환합니다. @param {object} payload @private */
-    #applyGallerySectionShift(payload) {
-        if (!this.#isGalleryMode() || this.cutscenes.isOpen()) {
-            return;
-        }
-        if (typeof payload?.sectionId === 'string') {
-            this.galleryController.selectSection(payload.sectionId);
-        } else {
-            this.galleryController.shiftSection(Number(payload?.delta) || 0);
-        }
-        this.presentationTimeline.startSelection('menu-selection');
-    }
-
-    /**
-     * 갤러리 선택 항목을 이동합니다.
-     * @param {object} payload - 이동량입니다.
-     * @private
-     */
-    #applyGalleryShift(payload) {
-        if (!this.#isGalleryMode() || this.cutscenes.isOpen()) {
-            return;
-        }
-        const delta = Number(payload?.delta) || 0;
-        this.galleryController.shiftEntry(delta, this.meta);
-        this.presentationTimeline.startSelection('menu-selection');
-    }
-
     /**
      * 해금된 갤러리 컷씬을 재생합니다.
      * @private
      */
     #applyGalleryPlay() {
-        if (!this.#isGalleryMode() || this.cutscenes.isOpen()) {
+        if (!this.#isGalleryMode()
+            || this.cutscenes.isOpen()
+            || this.gallery.isTransitioning()) {
             return;
         }
-        const entry = this.galleryController.getSelectedEntry(this.meta);
+        const entry = this.gallery.getSelectedEntry(this.meta);
         if (!entry?.playable || typeof entry.replayCutsceneId !== 'string') {
             return;
         }
@@ -973,8 +967,10 @@ export class TutorialScene extends BaseScene {
 
     /** 메뉴 갤러리의 모든 항목을 영구 해금합니다. @private */
     #applyGalleryUnlockAll() {
-        if (this.mode === MODES.GALLERY && !this.cutscenes.isOpen()) {
-            this.metaSession.unlockGallery(this.galleryController.getUnlockCatalog());
+        if (this.mode === MODES.GALLERY
+            && !this.cutscenes.isOpen()
+            && !this.gallery.isTransitioning()) {
+            this.metaSession.unlockGallery(this.gallery.getUnlockCatalog());
         }
     }
 
@@ -988,6 +984,7 @@ export class TutorialScene extends BaseScene {
         if (this.mode !== MODES.RECORD || this.cutscenes.isOpen()) {
             return;
         }
+        this.gallery.cancelPageTurn();
         this.recordPopups.close(() => {
             if (this.destroyed) {
                 return;
@@ -1010,7 +1007,7 @@ export class TutorialScene extends BaseScene {
             return false;
         }
         const opened = this.recordPopups.openNext(
-            (recordId) => this.galleryController.selectEntry(recordId, this.meta)
+            (recordId) => this.gallery.selectEntry(recordId, this.meta)
         );
         if (!opened) {
             return false;
@@ -1221,6 +1218,7 @@ export class TutorialScene extends BaseScene {
         return this.presentationTimeline.isLocked()
             || this.titleFlow.isLocked()
             || this.recordPopups.isLocked()
+            || this.gallery.isTransitioning()
             || this.battleAnimations.isBusy();
     }
 
@@ -1405,9 +1403,10 @@ export class TutorialScene extends BaseScene {
         return this.nonbattleViewModels.createGallery(
             this.#createNonbattleViewFrame(),
             {
-                gallery: this.galleryController.getSnapshot(this.meta),
+                gallery: this.gallery.getSnapshot(this.meta),
                 mode: this.mode,
                 recordPresentation: this.recordPopups.getSnapshot(),
+                pageTurn: this.gallery.getPageTurnSnapshot(),
                 selectionProgress:
                     this.presentationTimeline.getState().menuSelectionProgress
             }
@@ -1506,7 +1505,7 @@ export class TutorialScene extends BaseScene {
     /** @returns {string} 버튼 구성에 영향을 주는 상태 서명입니다. @private */
     #getButtonSignature() {
         const cutsceneState = this.cutscenes.getState();
-        const galleryState = this.galleryController.getSnapshot(this.meta);
+        const galleryState = this.gallery.getSnapshot(this.meta);
         const pointerLock = getPointerLockSnapshot();
         const inventory = this.inventoryPresenter.getEntries(this.model)
             .map((entry) => entry.itemId + ':' + String(entry.count))

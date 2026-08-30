@@ -55,10 +55,16 @@ export class TutorialResultView {
             w: book.w * 0.39,
             h: book.h * 0.75
         };
-        const buttonGroup = projectTutorialDesignRect(
+        const projectedButtonGroup = projectTutorialDesignRect(
             space,
             TUTORIAL_UI_LAYOUT_TOKENS.RESULT.BUTTON_GROUP
         );
+        const buttonGroup = {
+            ...projectedButtonGroup,
+            x: Math.round(
+                rightPage.x + ((rightPage.w - projectedButtonGroup.w) * 0.5)
+            )
+        };
         const buttonGap = Math.max(5, space.h * 0.012);
         const buttonH = (buttonGroup.h - buttonGap) * 0.5;
         const buttons = [

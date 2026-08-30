@@ -606,14 +606,70 @@ test('갤러리 책갈피와 결과 버튼은 Figma 관찰 좌표와 책 내부 
     assert.equal(pageText.y, galleryLayout.pageIndicator.y + (galleryLayout.pageIndicator.h * 0.5));
 
     const result = new TutorialResultView(NOOP_RENDER_PORT);
-    const resultButtons = result.getButtonSpecs(createViewModel(VIEWPORTS[0], {
+    const resultModel = createViewModel(VIEWPORTS[0], {
         result: {},
         presentationLocked: false
-    }));
+    });
+    const resultLayout = result.getLayout(resultModel);
+    const resultButtons = result.getButtonSpecs(resultModel);
+    const rightPageCenterX = resultLayout.rightPage.x + (resultLayout.rightPage.w * 0.5);
     assert.equal(resultButtons[0].x, resultButtons[1].x);
     assert.equal(resultButtons[0].w, resultButtons[1].w);
     assert.ok(resultButtons[0].y + resultButtons[0].h < resultButtons[1].y);
     assert.equal(resultButtons.every((button) => button.fitHitToBackground), true);
+    assert.equal(resultButtons.every((button) => Math.abs(
+        button.x + (button.w * 0.5) - rightPageCenterX
+    ) <= 0.5), true);
+});
+
+test('일기 페이지는 실제 잠긴 기록만 물음표로 표시한다', () => {
+    const loraEntries = Array.from({ length: 7 }, (_, index) => ({
+        id: `lora-diary:${index + 1}`,
+        kind: 'diary',
+        title: `기록 ${index + 1}`,
+        body: `로라 기록 ${index + 1}`,
+        unlocked: true,
+        playable: false,
+        replayCutsceneId: null
+    }));
+    const developerEntries = Array.from({ length: 3 }, (_, index) => ({
+        id: `developer-diary:${index + 1}`,
+        kind: 'diary',
+        title: `기록 ${index + 1}`,
+        body: index === 1 ? '???' : `개발자 기록 ${index + 1}`,
+        unlocked: index !== 1,
+        playable: false,
+        replayCutsceneId: null
+    }));
+    const renderCommands = [];
+    const view = new TutorialGalleryView({
+        ...NOOP_RENDER_PORT,
+        render(layer, command) {
+            renderCommands.push({ layer, command });
+        }
+    });
+    view.draw(createViewModel(VIEWPORTS[0], {
+        sections: GALLERY_SECTIONS,
+        selectedSectionIndex: 1,
+        selectedSectionId: 'lora-diary',
+        selectedSectionTitle: '로라의 일기',
+        entries: loraEntries,
+        diaryEntriesBySection: {
+            'lora-diary': loraEntries,
+            'developer-diary': developerEntries
+        },
+        selectedIndex: 0,
+        selectedEntry: loraEntries[0],
+        selectionProgress: 1,
+        selectionMinScale: 0.72
+    }));
+
+    const texts = renderCommands
+        .filter(({ command }) => command.shape === 'text')
+        .map(({ command }) => command.text);
+    assert.ok(texts.includes('해금 7/7'));
+    assert.ok(texts.includes('해금 2/3'));
+    assert.equal(texts.filter((text) => text === '???').length, 1);
 });
 
 test('비전투 뷰는 장면·모델·저장·명령 큐를 직접 import하지 않는다', async () => {

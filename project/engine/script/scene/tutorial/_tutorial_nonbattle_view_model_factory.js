@@ -157,7 +157,8 @@ export class TutorialNonbattleViewModelFactory {
         gallery,
         mode,
         selectionProgress,
-        recordPresentation = null
+        recordPresentation = null,
+        pageTurn = null
     }) {
         const recordPopup = mode === MODES.RECORD;
         return Object.freeze({
@@ -169,6 +170,9 @@ export class TutorialNonbattleViewModelFactory {
             recordPopup,
             recordPresentation: recordPopup
                 ? createRecordPresentationSnapshot(recordPresentation)
+                : null,
+            pageTurn: pageTurn && typeof pageTurn === 'object'
+                ? Object.freeze({ ...pageTurn })
                 : null,
             selectionProgress: Number(selectionProgress) || 0,
             selectionMinScale: Number(this.data.ANIMATION.SELECTION_MIN_SCALE) || 0.72

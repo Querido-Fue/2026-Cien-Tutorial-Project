@@ -330,16 +330,20 @@ test('웹 발표는 15장 연속 장면과 미리 로드한 게임 프레임을 
     assert.match(prototypeAudioBoundary, /leavingPrototype/);
     assert.match(prototypeAudioBoundary, /nthplayer:presentation-pause-bgm/);
     assert.match(prototypeAudioBoundary, /contentWindow\?\.postMessage/);
-    assert.match(embedInputBridge, /embedPointerMode = 'virtual'/);
-    assert.match(embedInputBridge, /requestPointerLock/);
-    assert.match(embedInputBridge, /exitPointerLock/);
-    assert.match(embedInputBridge, /document\.hasFocus =/);
+    assert.match(embedInputBridge, /embedPointerMode = 'native'/);
+    assert.match(embedInputBridge, /document\.addEventListener\('pointerlockchange'/);
+    assert.match(embedInputBridge, /document\.addEventListener\('pointerlockerror'/);
+    assert.doesNotMatch(embedInputBridge, /Object\.defineProperty\([^\n]*requestPointerLock/);
+    assert.doesNotMatch(embedInputBridge, /document\.hasFocus\s*=/);
     assert.match(embedInputBridge, /event\.source !== window\.parent/);
     assert.match(embedInputBridge, /event\.origin !== window\.location\.origin/);
     assert.match(embedInputBridge, /getSoundSystemInstance\(\)\?\.pauseBgm/);
     assert.match(deckController, /class PresentationDeck/);
     assert.match(deckController, /SLIDE_TRANSITION_MS = 920/);
     assert.match(deckController, /event\.composedPath\(\)/);
+    assert.match(deckController, /addEventListener\('contextmenu'/);
+    assert.match(deckController, /event\.button !== 2/);
+    assert.match(deckController, /event\.preventDefault\(\);\s*this\.previous\(\);/s);
     assert.match(deckController, /nthplayer:slide-change/);
 });
 

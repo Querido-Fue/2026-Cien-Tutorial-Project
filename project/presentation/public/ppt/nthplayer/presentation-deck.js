@@ -3,7 +3,7 @@ const TRANSITION_GUARD_MS = 480;
 const SLIDE_TRANSITION_MS = 920;
 
 /**
- * 단일 클릭과 키보드 입력을 슬라이드·카메라 상태 전환으로 연결합니다.
+ * 좌클릭·우클릭과 키보드 입력을 슬라이드·카메라 상태 전환으로 연결합니다.
  */
 export class PresentationDeck {
     #announcer;
@@ -28,6 +28,7 @@ export class PresentationDeck {
     /** 발표 입력을 연결하고 첫 장면 상태를 적용합니다. */
     connect() {
         document.addEventListener('click', (event) => this.#handleClick(event));
+        document.addEventListener('contextmenu', (event) => this.#handleContextMenu(event));
         document.addEventListener('keydown', (event) => this.#handleKeydown(event));
         window.addEventListener('popstate', () => this.#readHash());
         this.#statusTotal.textContent = this.#formatNumber(this.#slides.length);
@@ -139,6 +140,20 @@ export class PresentationDeck {
             return;
         }
         this.next();
+    }
+
+    /** @param {MouseEvent} event - 이전 장으로 이동할 우클릭 이벤트입니다. */
+    #handleContextMenu(event) {
+        if (event.defaultPrevented || event.button !== 2) {
+            return;
+        }
+        if (event.composedPath().some((node) => (
+            node instanceof Element && node.matches('button, a, input, textarea, select, iframe, [data-no-advance]')
+        ))) {
+            return;
+        }
+        event.preventDefault();
+        this.previous();
     }
 
     /** @param {KeyboardEvent} event - 문서 키보드 이벤트입니다. */

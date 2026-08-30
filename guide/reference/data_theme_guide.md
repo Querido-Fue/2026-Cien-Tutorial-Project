@@ -55,6 +55,7 @@ const DATA_REGISTRY = Object.freeze({
 | `TUTORIAL_GAME_DATA` | `data/game/tutorial_game_data.js` |
 | `TUTORIAL_BATTLE_LIGHTING_DATA` | `data/game/tutorial_battle_lighting_data.js` |
 | `TUTORIAL_RECORD_PRESENTATION_DATA` | `data/game/tutorial_record_presentation_data.js` |
+| `TUTORIAL_GALLERY_PRESENTATION_DATA` | `data/game/tutorial_gallery_presentation_data.js` |
 
 ## 3. ColorSchemes
 

@@ -78,7 +78,9 @@ export function drawTutorialPixelAsset(renderPort, options) {
         image: options.image,
         ...target,
         alpha: options.alpha ?? 1,
-        smoothing: false
+        smoothing: false,
+        flipX: options.flipX === true,
+        flipY: options.flipY === true
     });
     return true;
 }

@@ -194,6 +194,15 @@ test('갤러리는 업적·일기·엔딩·컷씬을 분리하고 저장 메타�
     assert.equal(snapshot.entries[1].unlocked, false);
     assert.equal(snapshot.entries[0].body, TUTORIAL_CONTENT_DATA.DIARIES.LORA[0]);
     assert.equal(snapshot.entries[1].body, '???');
+    assert.deepEqual(
+        snapshot.diaryEntriesBySection['lora-diary'].map(({ unlocked }) => unlocked),
+        [true, false, false, false, false, false, false]
+    );
+    assert.deepEqual(
+        snapshot.diaryEntriesBySection['developer-diary'].map(({ unlocked }) => unlocked),
+        [false, true, false]
+    );
+    assert.equal(Object.isFrozen(snapshot.diaryEntriesBySection), true);
 
     gallery.shiftSection(1);
     snapshot = gallery.getSnapshot(meta);
@@ -419,7 +428,7 @@ test('장면은 콘텐츠 책임을 분리된 클래스에 위임하고 점수 U
     for (const dependency of [
         'TutorialAchievementEvaluator',
         'TutorialCutsceneTriggerRouter',
-        'TutorialGalleryController'
+        'TutorialGalleryNavigationController'
     ]) {
         assert.match(sceneSource, new RegExp(`import \\{ ${dependency} \\}`));
         assert.match(sceneSource, new RegExp(`new ${dependency}\\b`));

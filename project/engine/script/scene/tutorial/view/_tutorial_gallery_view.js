@@ -73,11 +73,13 @@ function getPublicTitle(entry) {
 export class TutorialGalleryView {
     #renderPort;
     #assetPort;
+    #pageTurnView;
 
-    /** @param {object} renderPort - 렌더 포트입니다. @param {object} assetPort - 에셋 읽기 포트입니다. */
-    constructor(renderPort, assetPort = {}) {
+    /** @param {object} renderPort - 렌더 포트입니다. @param {object} assetPort - 에셋 읽기 포트입니다. @param {object} options - 선택적 페이지 전환 뷰입니다. */
+    constructor(renderPort, assetPort = {}, { pageTurnView = null } = {}) {
         this.#renderPort = renderPort;
         this.#assetPort = assetPort;
+        this.#pageTurnView = pageTurnView;
     }
 
     /**
@@ -213,16 +215,24 @@ export class TutorialGalleryView {
             this.#renderPort
         );
         const layout = presentation.layout;
+        const pageTurnPresentation = this.#pageTurnView?.createPresentation(viewModel) || {
+            contentViewModel: viewModel,
+            frameKey: null,
+            flipBookFrame: false
+        };
+        const contentViewModel = pageTurnPresentation.contentViewModel;
         const frameKeys = ['endingBook4', 'endingBook3', 'endingBook2', 'endingBook1'];
         const progress = presentation.pageProgress;
-        const frameKey = frameKeys[Math.min(
+        const legacyFrameKey = frameKeys[Math.min(
             frameKeys.length - 1,
             Math.floor(progress * frameKeys.length)
         )];
+        const frameKey = pageTurnPresentation.frameKey || legacyFrameKey;
         const bookDrawn = drawTutorialPixelAsset(presentation.framePort, {
             image: this.#assetPort.getUiAsset?.(frameKey),
             rect: layout.book,
-            layer: presentation.targetLayer
+            layer: presentation.targetLayer,
+            flipX: pageTurnPresentation.flipBookFrame
         });
         if (!bookDrawn) {
             drawTutorialBackgroundPanel(
@@ -233,16 +243,17 @@ export class TutorialGalleryView {
             );
         }
 
-        if (viewModel.selectedSectionId === 'achievements') {
-            this.#drawAchievements(viewModel, layout, presentation.contentPort);
+        if (contentViewModel.selectedSectionId === 'achievements') {
+            this.#drawAchievements(contentViewModel, layout, presentation.contentPort);
         } else if (
-            viewModel.selectedSectionId === 'lora-diary'
-            || viewModel.selectedSectionId === 'developer-diary'
+            contentViewModel.selectedSectionId === 'lora-diary'
+            || contentViewModel.selectedSectionId === 'developer-diary'
         ) {
-            this.#drawDiaries(viewModel, layout, presentation.contentPort);
+            this.#drawDiaries(contentViewModel, layout, presentation.contentPort);
         } else {
-            this.#drawMedia(viewModel, layout, presentation.contentPort);
+            this.#drawMedia(contentViewModel, layout, presentation.contentPort);
         }
+        this.#pageTurnView?.draw(viewModel, layout);
     }
 
     /** @param {object} viewModel @param {object} layout @param {object} renderPort @private */
@@ -345,6 +356,24 @@ export class TutorialGalleryView {
             });
 
             const selectedPage = viewModel.selectedSectionId === page.id;
+            const catalogEntries = viewModel.diaryEntriesBySection?.[page.id];
+            const entries = Array.isArray(catalogEntries)
+                ? catalogEntries
+                : selectedPage && Array.isArray(viewModel.entries)
+                    ? viewModel.entries
+                    : null;
+            if (entries) {
+                const unlockedCount = entries.filter((entry) => entry?.unlocked === true).length;
+                const pageRect = pageIndex === 0 ? layout.leftPage : layout.rightPage;
+                drawTutorialText(renderPort, {
+                    text: `해금 ${unlockedCount}/${entries.length}`,
+                    x: pageRect.x + (pageRect.w * 0.5),
+                    y: pageRect.y + (pageRect.h * 0.15),
+                    font: viewModel.fonts.SMALL,
+                    fill: viewModel.colors.UI.Muted,
+                    align: 'center'
+                });
+            }
             let occupiedRows = 0;
             if (selectedPage && viewModel.selectedEntry) {
                 const pageRect = pageIndex === 0 ? layout.leftPage : layout.rightPage;
@@ -366,14 +395,25 @@ export class TutorialGalleryView {
                 }));
                 occupiedRows = Math.min(page.count, Math.max(1, Math.ceil(bodyLines.length * 0.82)));
             }
-            page.rows.slice(occupiedRows).forEach((row) => drawTutorialText(renderPort, {
-                text: '???',
-                x: row.x + (row.w * 0.5),
-                y: row.y + (row.h * 0.5),
-                font: viewModel.fonts.SMALL,
-                fill: viewModel.colors.UI.Muted,
-                align: 'center'
-            }));
+            const selectedEntryConsumesLockedSlot = selectedPage
+                && viewModel.selectedEntry?.unlocked !== true;
+            const lockedCount = entries
+                ? entries.filter((entry) => entry?.unlocked !== true).length
+                : 0;
+            const remainingLockedCount = Math.max(
+                0,
+                lockedCount - (selectedEntryConsumesLockedSlot ? 1 : 0)
+            );
+            page.rows
+                .slice(occupiedRows, occupiedRows + remainingLockedCount)
+                .forEach((row) => drawTutorialText(renderPort, {
+                    text: '???',
+                    x: row.x + (row.w * 0.5),
+                    y: row.y + (row.h * 0.5),
+                    font: viewModel.fonts.SMALL,
+                    fill: viewModel.colors.UI.Muted,
+                    align: 'center'
+                }));
         });
     }
 
@@ -465,6 +505,7 @@ export class TutorialGalleryView {
     getButtonSpecs(viewModel) {
         const layout = this.getLayout(viewModel);
         const layer = viewModel.recordPopup === true ? 'top' : 'ui';
+        const transitionLocked = viewModel.pageTurn?.active === true;
         const sectionButtons = viewModel.sections.map((section, index) => ({
             key: 'gallery-section-' + section.id,
             ...layout.tabs[index],
@@ -476,6 +517,7 @@ export class TutorialGalleryView {
             backgroundAssetKey: section.bookmarkAssetKey,
             backgroundImageAlpha: section.selected ? 1 : 0.72,
             fitHitToBackground: true,
+            enabled: !transitionLocked,
             command: {
                 type: TUTORIAL_COMMANDS.GALLERY_SECTION_SHIFT,
                 payload: { sectionId: section.id }
@@ -492,6 +534,7 @@ export class TutorialGalleryView {
                 backgroundAssetKey: 'galleryTurnButton',
                 backgroundImageAlpha: 1,
                 backgroundImageFlipX: true,
+                enabled: !transitionLocked,
                 command: {
                     type: TUTORIAL_COMMANDS.GALLERY_SHIFT,
                     payload: { delta: -1 }
@@ -504,6 +547,7 @@ export class TutorialGalleryView {
                 label: '',
                 backgroundAssetKey: 'galleryTurnButton',
                 backgroundImageAlpha: 1,
+                enabled: !transitionLocked,
                 command: {
                     type: TUTORIAL_COMMANDS.GALLERY_SHIFT,
                     payload: { delta: 1 }
@@ -537,6 +581,7 @@ export class TutorialGalleryView {
                 backgroundAssetKey: 'mainButton',
                 backgroundImageAlpha: 0.94,
                 fitHitToBackground: true,
+                enabled: !transitionLocked,
                 command: { type: TUTORIAL_COMMANDS.GALLERY_PLAY }
             });
         }

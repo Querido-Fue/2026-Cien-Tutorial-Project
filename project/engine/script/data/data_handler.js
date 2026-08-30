@@ -45,6 +45,9 @@ import {
     TUTORIAL_DIALOGUE_PRESENTATION_DATA
 } from 'data/game/tutorial_dialogue_presentation_data.js';
 import { TUTORIAL_RECORD_PRESENTATION_DATA } from 'data/game/tutorial_record_presentation_data.js';
+import {
+    TUTORIAL_GALLERY_PRESENTATION_DATA
+} from 'data/game/tutorial_gallery_presentation_data.js';
 import { TUTORIAL_SPRITE_CLIPS } from 'data/game/tutorial_sprite_clips.js';
 
 const DATA_REGISTRY = Object.freeze({
@@ -87,6 +90,7 @@ const DATA_REGISTRY = Object.freeze({
     TUTORIAL_GUIDANCE_PRESENTATION_DATA,
     TUTORIAL_DIALOGUE_PRESENTATION_DATA,
     TUTORIAL_RECORD_PRESENTATION_DATA,
+    TUTORIAL_GALLERY_PRESENTATION_DATA,
     TUTORIAL_SPRITE_CLIPS
 });
 

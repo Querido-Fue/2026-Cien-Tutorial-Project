@@ -40,7 +40,7 @@ export const LORA_STATUS_PANEL_LAYOUT = Object.freeze({
         Object.freeze({ X: 62, Y: 11, WIDTH: 158, HEIGHT: 14 }),
         Object.freeze({ X: 62, Y: 27, WIDTH: 158, HEIGHT: 14 })
     ]),
-    STATUS_FONT_SCALE: 0.58,
+    STATUS_FONT_SCALE: 0.812,
     STATUS_MIN_FONT_PX: 8,
     HP_VALUE: Object.freeze({ X: 123, Y: 47, WIDTH: 20, HEIGHT: 8 }),
     HP_BAR: Object.freeze({ X: 62, Y: 56, WIDTH: 149, HEIGHT: 4 }),
