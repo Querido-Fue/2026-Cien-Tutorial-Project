@@ -6,6 +6,7 @@ import {
 } from './_tutorial_battle_view_helpers.js';
 import { TutorialBattleActorView } from './_tutorial_battle_actor_view.js';
 import { TutorialFloatingPickupView } from './_tutorial_floating_pickup_view.js';
+import { TutorialPathPreviewView } from './_tutorial_path_preview_view.js';
 
 const WALL_FOOTPRINT_SCALE = 1;
 const WALL_HEIGHT_TILE_RATIO = 0.34;
@@ -20,6 +21,7 @@ export class TutorialBattleWorldView {
     #assetPort;
     #actorView;
     #pickupView;
+    #pathPreviewView;
     #frame;
 
     /**
@@ -31,6 +33,7 @@ export class TutorialBattleWorldView {
         this.#assetPort = assetPort;
         this.#actorView = new TutorialBattleActorView(renderPort, assetPort);
         this.#pickupView = new TutorialFloatingPickupView(renderPort);
+        this.#pathPreviewView = new TutorialPathPreviewView(renderPort);
         this.#frame = null;
     }
 
@@ -229,7 +232,10 @@ export class TutorialBattleWorldView {
                 );
             });
         }
-        if (world.hoveredTile) {
+        const hoveredPathTile = world.hoveredTile && world.plannedPath.some((tile) => (
+            tile.x === world.hoveredTile.x && tile.y === world.hoveredTile.y
+        ));
+        if (world.hoveredTile && !hoveredPathTile) {
             const minScale = Number(world.config.selectionMinScale) || 0.72;
             const scale = minScale
                 + ((0.88 - minScale) * world.presentation.hoverProgress);
@@ -241,35 +247,11 @@ export class TutorialBattleWorldView {
                 0.24 + (0.34 * world.presentation.hoverProgress)
             );
         }
-        let plannedStep = 0;
-        world.plannedPath.slice(1).forEach((tile, index) => {
-            const previous = world.plannedPath[index];
-            const costsMove = Math.abs(tile.x - previous.x)
-                + Math.abs(tile.y - previous.y) === 1;
-            if (costsMove) {
-                plannedStep += 1;
-            }
-            const point = this.#projectTile(tile.x, tile.y);
-            const markerSize = layout.tileSide
-                * world.config.pathMarkerRatio
-                * (0.72 + (0.28 * world.presentation.pathProgress));
-            this.#renderPort.renderGL('object', {
-                shape: 'circle',
-                x: point.x,
-                y: point.y,
-                w: markerSize,
-                h: markerSize,
-                fill: colors.Tile.Path
-            });
-            this.#drawText(
-                'texteffect',
-                costsMove ? String(plannedStep) : '↔',
-                point.x,
-                point.y,
-                this.#frame.fonts.SMALL,
-                colors.UI.Text,
-                'center'
-            );
+        this.#pathPreviewView.draw({
+            layout,
+            world,
+            colors,
+            fonts: this.#frame.fonts
         });
     }
 

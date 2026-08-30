@@ -362,6 +362,140 @@ test('이동 미리보기는 맵 타일의 두 투영 축으로 계산한 네 �
     assert.notEqual(preview.vertices[0], preview.vertices[4]);
 });
 
+test('선택 이동 경로는 푸른 타일 테두리·투영 경계 화살표·3배 순번으로 그린다', () => {
+    const layoutController = createLayout();
+    layoutController.resize(VIEWPORTS[0]);
+    const floor = {
+        ...TUTORIAL_GAME_DATA.FLOORS[0],
+        walls: [], items: [], records: [], eventTiles: [], teleports: [], mobs: []
+    };
+    const layout = layoutController.createFrame({
+        floor,
+        elapsedSeconds: 0,
+        screenShakeSeconds: 0
+    });
+    const commands = [];
+    const view = new TutorialBattleWorldView({
+        render(layer, command) {
+            commands.push({ layer, ...command });
+        },
+        renderGL(layer, command) {
+            commands.push({ layer, ...command });
+        },
+        measureText(text) {
+            return String(text).length * 8;
+        }
+    }, {
+        getMapArtwork() {
+            return { layers: [] };
+        }
+    });
+    const plannedPath = [
+        { x: 4, y: 4 },
+        { x: 5, y: 4 },
+        { x: 5, y: 5 }
+    ];
+    view.draw({
+        snapshot: { phase: 'move', floorIndex: 0, player: null, lora: null },
+        floor,
+        layout,
+        fonts: { SMALL: '12px sans-serif', HEADING: '18px sans-serif' },
+        colors: {
+            BoardFrame: '#frame',
+            Tile: { Path: '#path', Hover: '#hover' },
+            UI: { Text: '#text', PanelStrong: '#shadow' },
+            Effects: {}
+        },
+        world: {
+            presentation: { floorIndex: 0, pathProgress: 1 },
+            attackSelected: false,
+            cleanseSelected: false,
+            pathExtensions: [],
+            plannedPath,
+            hoveredTile: plannedPath[1],
+            readability: { loraIntent: { ok: false } },
+            floorActors: {},
+            itemMetadata: {},
+            elapsedSeconds: 0,
+            config: { pathPreview: TUTORIAL_GAME_DATA.LAYOUT.BOARD.PATH_PREVIEW }
+        }
+    });
+
+    const borders = commands.filter((command) => (
+        command.role === 'path-tile-border'
+    ));
+    const arrows = commands.filter((command) => (
+        command.role === 'path-boundary-arrow'
+    ));
+    const numbers = commands.filter((command) => (
+        command.fill === '#text' && ['1', '2'].includes(command.text)
+    ));
+    assert.equal(borders.length, 8);
+    assert.equal(borders.every((command) => (
+        command.layer === 'object'
+        && command.shape === 'rect'
+        && command.fill === '#path'
+        && command.vertices.length === 8
+    )), true);
+    const outer = TutorialBattleLayout.projectTileQuad(layout, 5, 4, 0.96);
+    const inner = TutorialBattleLayout.projectTileQuad(layout, 5, 4, 0.88);
+    assert.deepEqual(borders[0].vertices, [
+        outer[0], outer[1], outer[2], outer[3],
+        inner[2], inner[3], inner[0], inner[1]
+    ]);
+    assert.equal(commands.some((command) => (
+        command.shape === 'circle' && command.fill === '#path'
+    )), false);
+    assert.equal(commands.some((command) => command.fill === '#hover'), false);
+
+    assert.equal(arrows.length, 2);
+    arrows.forEach((arrow, index) => {
+        const from = TutorialBattleLayout.projectTile(
+            layout,
+            plannedPath[index].x,
+            plannedPath[index].y
+        );
+        const to = TutorialBattleLayout.projectTile(
+            layout,
+            plannedPath[index + 1].x,
+            plannedPath[index + 1].y
+        );
+        const centerX = (arrow.vertices[0] + arrow.vertices[2]
+            + arrow.vertices[4] + arrow.vertices[6]) * 0.25;
+        const centerY = (arrow.vertices[1] + arrow.vertices[3]
+            + arrow.vertices[5] + arrow.vertices[7]) * 0.25;
+        assert.equal(arrow.shape, 'arrow');
+        assert.ok(Math.abs(centerX - ((from.x + to.x) * 0.5)) < 0.000001);
+        assert.ok(Math.abs(centerY - ((from.y + to.y) * 0.5)) < 0.000001);
+        assert.notEqual(arrow.vertices[1], arrow.vertices[3]);
+    });
+
+    assert.equal(numbers.length, 2);
+    numbers.forEach((number, index) => {
+        const point = TutorialBattleLayout.projectTile(
+            layout,
+            plannedPath[index + 1].x,
+            plannedPath[index + 1].y
+        );
+        assert.deepEqual({
+            text: number.text,
+            x: number.x,
+            y: number.y,
+            font: number.font,
+            align: number.align,
+            baseline: number.baseline
+        }, {
+            text: String(index + 1),
+            x: point.x,
+            y: point.y,
+            font: '36px sans-serif',
+            align: 'center',
+            baseline: 'middle'
+        });
+    });
+    assert.equal(commands.some((command) => command.text === '↔'), false);
+});
+
 test('1층 양 끝 텔레포트는 장식 테두리가 아닌 실제 타일 중심에 놓인다', () => {
     const layoutController = createLayout();
     layoutController.resize(VIEWPORTS[0]);
@@ -1568,6 +1702,7 @@ test('전투 뷰는 장면·모델·저장·명령 큐를 직접 import하지 �
     const names = [
         '_tutorial_battle_layout.js',
         '_tutorial_battle_world_view.js',
+        '_tutorial_path_preview_view.js',
         '_tutorial_battle_hud_view.js',
         '_tutorial_item_description_view.js',
         '_tutorial_battle_command_menu_view.js',

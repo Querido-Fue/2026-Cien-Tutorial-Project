@@ -705,7 +705,17 @@ export const TUTORIAL_GAME_DATA = deepFreeze({
                 FLOAT_PENUMBRA_LENGTH_RATIO: 0.08,
                 FLOAT_PENUMBRA_ALPHA: 0.2
             },
-            PATH_MARKER_RATIO: 0.16
+            PATH_PREVIEW: {
+                BORDER_OUTER_SCALE: 0.96,
+                BORDER_INNER_SCALE: 0.88,
+                BORDER_ALPHA: 0.96,
+                ARROW_LENGTH_TILE_RATIO: 0.62,
+                ARROW_WIDTH_TILE_RATIO: 0.34,
+                ARROW_ALPHA: 1,
+                NUMBER_FONT_SCALE: 3,
+                NUMBER_SHADOW_OFFSET_PX: 2,
+                REVEAL_MIN_SCALE: 0.72
+            }
         },
         HEADER: { X_UIWW: 4, Y_WH: 3.4 },
         ACTIONS: {

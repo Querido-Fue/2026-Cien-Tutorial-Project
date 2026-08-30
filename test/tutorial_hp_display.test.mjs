@@ -36,8 +36,8 @@ test('HP 표시값은 작은 장식 슬롯 중앙에 반올림한 실제 수치�
         layer: 'ui',
         shape: 'text',
         text: '75',
-        x: 112,
-        y: 45,
+        x: 111,
+        y: 46,
         font: '500 9px LanaPixel, monospace',
         fill: '#2b2025',
         align: 'center',
@@ -46,6 +46,36 @@ test('HP 표시값은 작은 장식 슬롯 중앙에 반올림한 실제 수치�
     }]);
     assert.equal(DarkTheme.Tactics.UI.GaugeValue, '#2b2025');
     assert.equal(LightTheme.Tactics.UI.GaugeValue, '#2b2025');
+});
+
+test('HP 3자리·2자리·1자리 수치는 동일한 시각 중심 좌표를 사용한다', () => {
+    const commands = [];
+    const port = {
+        render(layer, command) {
+            commands.push({ layer, ...command });
+        }
+    };
+
+    for (const value of [100, 70, 7]) {
+        drawBattleHpValue(port, {
+            rect: { x: 100, y: 40, w: 24, h: 10 },
+            value,
+            font: '500 14px LanaPixel, monospace',
+            fill: '#2b2025'
+        });
+    }
+
+    assert.deepEqual(commands.map(({ text, x, y, align, baseline }) => ({
+        text,
+        x,
+        y,
+        align,
+        baseline
+    })), [
+        { text: '100', x: 111, y: 46, align: 'center', baseline: 'middle' },
+        { text: '70', x: 111, y: 46, align: 'center', baseline: 'middle' },
+        { text: '7', x: 111, y: 46, align: 'center', baseline: 'middle' }
+    ]);
 });
 
 test('플레이어와 로라 HP 값은 원본 패널의 실측 노치 중심에 놓인다', () => {

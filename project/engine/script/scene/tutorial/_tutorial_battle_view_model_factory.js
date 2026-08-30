@@ -195,7 +195,7 @@ export class TutorialBattleViewModelFactory {
             }),
             config: Object.freeze({
                 attackRange: this.data.ACTORS.PLAYER.ATTACK_RANGE,
-                pathMarkerRatio: this.data.LAYOUT.BOARD.PATH_MARKER_RATIO,
+                pathPreview: this.data.LAYOUT.BOARD.PATH_PREVIEW,
                 shadowProjection: this.data.LAYOUT.BOARD.SHADOW_PROJECTION,
                 selectionMinScale: this.data.ANIMATION.SELECTION_MIN_SCALE,
                 actionPlayerScale: this.data.ANIMATION.ACTION_PLAYER_SCALE,
