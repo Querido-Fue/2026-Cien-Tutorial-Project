@@ -20,7 +20,7 @@
 - 이동 판정은 현재 층의 벽, 로라와 몹을 통과시키지 않습니다. 아이템 자동 획득, 반복 발동 이벤트 타일, 양방향 짝 포탈, 몹 공격과 다른 월드 변화는 모델이 반환하는 event를 씬이 연출합니다. 타일 정화제만 이동 단계에서 이동/행동 자원과 별개로 사용합니다.
 - 종료 조건은 로라 HP 0, 플레이어 HP 0, 로라 행동 12회 완료이며 게이트 탈출 단계는 없습니다. 고정 카드 컷씬은 `FEATURES.CUTSCENES: true`이며 첫 실행 오프닝, 실제 아이템 사용, 6회 뒤 층 전환과 엔딩 사건에만 연결합니다.
 - 재시작은 같은 스타터로 즉시 새 전투를 만들지 않고 현재 런을 정리한 뒤 스타터 선택으로 돌아갑니다. 플레이어용 되돌리기 명령과 UI는 없으며, 모델 체크포인트는 테스트·저장·디버그 용도로만 사용합니다.
-- `TutorialCutsceneController`는 카드 진행만, `TutorialCutsceneTriggerRouter`는 첫 실행 메타와 `item-used`·`floor-transition`·`battle-finished` 사건의 감사된 ID 변환만 맡습니다. 완료와 스킵은 같은 갤러리 해금 정책을 사용하며 AI 기반 채팅이나 생성형 대화 시스템은 사용하지 않습니다.
+- `TutorialCutsceneController`는 카드 진행만, `TutorialCutsceneSession`은 런 중복 방지·대기열·닫힘 뒤 복귀 모드만, `TutorialCutsceneTriggerRouter`는 첫 실행 메타와 `item-used`·`floor-transition`·`battle-finished` 사건의 감사된 ID 변환만 맡습니다. 장면은 세션의 완료 ID와 복귀 결정을 메타·화면 흐름에 연결할 뿐 같은 상태를 중복 보관하지 않습니다. 완료와 스킵은 같은 갤러리 해금 정책을 사용하며 AI 기반 채팅이나 생성형 대화 시스템은 사용하지 않습니다.
 - 반복 플레이 메타 진행도는 v5 `tutorialMeta` 단일 런타임 상태 키를 사용합니다. `_tutorial_meta_schema.js`가 현재 shape, `TutorialMetaMigrator`가 v1→v5 순차 이관, `TutorialMetaVersionError`가 미래 버전 쓰기 차단, `_tutorial_meta_progress.js`가 저장과 진행 연산만 맡습니다. 이벤트 타일 공개 키는 `revealedEventTileIds`, 획득한 일기·개발자 기록 키는 `unlockedRecordIds`이며 구 `discoveredTrapIds`는 이관할 때만 읽습니다. 완료 횟수는 결과가 생긴 런에서만 증가하고 v2 점수 값은 읽기 호환만 유지합니다.
 - 튜토리얼의 모드·명령 상수, 키 바인딩, 값 유틸, 모드별 UI 정책은 각각 별도 순수 모듈에 둡니다. 이 seam 모듈은 `TutorialScene`을 역으로 import하지 않으며, 씬만 이 모듈들을 조합합니다.
 - `TutorialKeyboardEdgeTracker`는 현재 눌림과 프레임 사이 빠른 탭을 상승 에지로 정규화하고, `TutorialMetaSession`은 런 단위 staging·진행 연산·순차 저장·미래 버전 저장 차단을 소유합니다. `TutorialScene`은 이 상태를 중복 보관하거나 직접 저장 큐를 만들지 않습니다.

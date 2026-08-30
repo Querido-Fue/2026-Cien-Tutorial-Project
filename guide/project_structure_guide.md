@@ -114,6 +114,7 @@
 | `script/scene/tutorial/_tutorial_guidance_controller.js` | 첫 플레이 자동 안내와 재플레이 다시 보기의 단일 단계·메시지 페이드·포커스 이동·닫기 전환을 관리하는 클래스 |
 | `script/scene/tutorial/_tutorial_battle_model.js` | 강제 이동→행동 단계, 행동 충전, 층별 `floorStates`, 인벤토리와 아이템·기록, 벽·이벤트 타일·짝 포탈·몹, 6회 층 전환과 12회 종료를 소유하고 전투 계산 클래스를 조합하는 순수 전투 모델 |
 | `script/scene/tutorial/_tutorial_cutscene_controller.js` | 고정 스크립트 컷씬의 카드 진행과 완료 ID를 관리하는 순수 컨트롤러 |
+| `script/scene/tutorial/_tutorial_cutscene_session.js` | 카드 컨트롤러를 감싸 한 런의 컷씬 중복 방지·대기열·닫힘 뒤 복귀 모드를 관리하는 세션 클래스 |
 | `script/scene/tutorial/_tutorial_meta_progress.js` | v5 `tutorialMeta`의 컷씬·업적·엔딩·기록 해금과 완료 횟수를 정규화하고 불변 갱신 함수·SaveSystem I/O를 제공하는 메타 진행도 모듈 |
 | `script/scene/tutorial/_tutorial_meta_session.js` | 장면 한 개의 메타 staging·진행 연산·순차 저장과 미래 버전 저장 차단 상태를 소유하는 클래스 |
 | `script/scene/tutorial/_tutorial_keyboard_edge_tracker.js` | 현재 키 상태와 프레임 사이 빠른 탭을 상승 에지로 정규화하는 입력 상태 클래스 |

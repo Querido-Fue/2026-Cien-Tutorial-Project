@@ -31,6 +31,18 @@ Turn 14에서는 장면의 지속 BGM·호흡 loop·UI/cue 변환을 `TutorialAu
 전역 사운드 구현을 resolver와 음악/SFX/UI 버스로 분리했다. 다음 불변
 조건은 모든 분리 단계에서 유지한다.
 
+### 현재 SRP 체크포인트 (2026-08-30)
+
+| 항목 | 장기 SRP 시작 | 현재 결과 |
+| --- | ---: | ---: |
+| `_tutorial_scene.js` 줄 수 | 3,206 | 1,889 |
+| 컷씬 런 대기열·복귀·중복 상태 | 장면 직접 소유 | `TutorialCutsceneSession` 소유 |
+| 장면의 컷씬 책임 | 검증·열기·큐·복귀·메타 연결 | 완료 ID 기록과 복귀 모드 적용만 |
+
+인계 시점 뒤 추가된 로딩·타이틀 전환·기록 팝업 흐름을 다시 감사한 뒤 컷씬 세션을 분리했다.
+세션은 `TutorialCutsceneController`를 감싸되 장면을 역참조하지 않고, 장면에는 화면 모드 적용과
+메타 해금 연결만 남긴다. 집중 계약은 `test/tutorial_cutscene_session.test.mjs`가 고정한다.
+
 - 전투 판정은 `TutorialBattleModel`과 `TUTORIAL_GAME_DATA`만 결정한다.
 - `update()`는 입력 의도를 명령 큐에 넣고, 상태 변경은 `applySimulationCommands()`에서 한다.
 - 뷰는 읽기 전용 view model과 렌더 의존성만 받고 모델·저장·명령 큐를 직접 호출하지 않는다.
@@ -70,6 +82,7 @@ import하지 않고, 모드 정책만 모드 상수를 참조한다.
 | 로라 턴 | 로라 턴 stage와 예약 시간 | 대기·행동·완료 명령의 세대별 1회 예약 | `TutorialLoraTurnController` |
 | 결과 상태 | 정규화 결과와 엔딩 컷씬 대기 | 종료 판정·표시 데이터·결과 1회 기록 | `TutorialResultController` |
 | 결과 배포 | 이전 표현 snapshot | cue·업적·메타·기록·컷씬 트리거 순차 배포 | `TutorialBattleOutcomeCoordinator` |
+| 컷씬 세션 | 카드 controller 상태, 런 재생 요청 | 중복 ID, 대기열, 마지막 복귀 모드 | `TutorialCutsceneSession` |
 | 저장·메타 | `meta`, 모델 snapshot, 결과 | `meta`, `committedMeta`, `metaStaging`, `saveSequence` | `_tutorial_meta_progress.js` |
 | 프레젠테이션 | 모델 결과·전후 snapshot, cue, floor view | 장면은 floor snapshot 교체만 조율 | presenter, feedback queue, animation timeline |
 | 배우 스프라이트 | 표시 층 배우·actor-animation cue·clip 데이터 | 장면은 roster 동기화와 snapshot 전달만 조율 | clip resolver, sprite animator, cue router, actor view |
@@ -85,12 +98,11 @@ import하지 않고, 모드 정책만 모드 상수를 참조한다.
 - 모드 흐름: `#applyMetaReady`, `#applyStart`, `#applyOpenGallery`,
   `#applyReturnMenu`, `#applyStarterShift`, `#applyChooseStarter`, `#applyRestart`,
   `#leaveRun`, `#beginRun`, `#applyGalleryShift`, `#applyGalleryPlay`
-- 컷씬 흐름: `#applyCutsceneNext`, `#applyCutsceneClose`, `#resumeAfterCutscene`,
-  `#openCutscene`, `#isCutsceneUnlocked`
+- 컷씬 연결: `#applyCutsceneNext`, `#applyCutsceneClose`, `#recordCutsceneSeen`,
+  `#applyCutsceneResume`; 열기·대기열·중복 방지는 `TutorialCutsceneSession` 공개 API에 위임
 
-주요 읽기 상태는 `mode`, `data.FEATURES`, `starterIndex`, `galleryIndex`, `cutscenes`다.
-주요 쓰기 상태는 `mode`, `timelineRevision`, `model`, `resultData`, `resultRecorded`,
-`starterItemId`, `pendingCutscenes`, `runCutsceneIds`와 런 초기화 상태다.
+주요 읽기 상태는 `mode`, `timelineRevision`, `model`, `cutscenes`와 화면별 컨트롤러 snapshot이다.
+장면은 `pendingCutscenes`, `cutsceneReturnMode`, `runCutsceneIds`를 더 이상 소유하지 않는다.
 
 ### 3.2 입력 메서드
 
@@ -205,6 +217,7 @@ import하지 않고, 모드 정책만 모드 상수를 참조한다.
 | SRP 후속 | `TutorialLoraTurnController` | 로라 행동 전 대기·표시·완료 예약 수명주기 | model/revision/mode callback, selection 포트 |
 | SRP 후속 | `TutorialResultController` | 종료 판정·엔딩 표시·컷씬 대기와 결과 1회 기록 | endings 데이터, meta record callback |
 | SRP 후속 | `TutorialBattleOutcomeCoordinator` | 모델 결과 구독자 순서와 이전 표현 snapshot | 명시적 presenter/progress/record/cutscene 포트 |
+| SRP 후속 | `TutorialCutsceneSession` | 런 중복 방지·대기열·닫힘 뒤 복귀 결정 | 컷씬 registry, 카드 controller |
 | Turn 05 | `TutorialBattleWorldView` | 타일·경로·오브젝트·액터 렌더 | battle view model, layout, render/asset port |
 | Turn 05 | `TutorialBattleHudView` | 턴·게이지·행동·인벤토리 렌더 | battle view model, render port |
 | Turn 05 | `TutorialBattleFeedbackView` | cue의 화면 표시 | feedback snapshot, render port |

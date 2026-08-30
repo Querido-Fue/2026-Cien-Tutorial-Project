@@ -19,7 +19,7 @@ export const SOURCE_RESPONSIBILITY_POLICY = Object.freeze({
     }),
     legacyBudgets: Object.freeze({
         'project/engine/script/scene/tutorial/_tutorial_scene.js': Object.freeze({
-            maximumFileLines: 1929
+            maximumFileLines: 1889
         }),
         'project/engine/script/scene/tutorial/_tutorial_battle_model.js': Object.freeze({
             maximumFileLines: 2185
@@ -28,10 +28,10 @@ export const SOURCE_RESPONSIBILITY_POLICY = Object.freeze({
             maximumFileLines: 1180
         }),
         'project/engine/script/scene/tutorial/view/_tutorial_battle_actor_view.js': Object.freeze({
-            maximumFileLines: 1158
+            maximumFileLines: 1156
         }),
         'project/engine/script/scene/tutorial/view/_tutorial_battle_hud_view.js': Object.freeze({
-            maximumFileLines: 800
+            maximumFileLines: 653
         }),
         'project/engine/script/overlay/_diagnostic_test_overlay.js': Object.freeze({
             maximumFileLines: 944

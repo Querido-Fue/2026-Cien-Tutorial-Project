@@ -3,18 +3,19 @@
 작성 기준: 2026-08-30 KST  
 브랜치: `main`  
 원격: `origin/main`  
-마지막 기능 체크포인트: `fb9e572 refactor: extract tutorial battle outcome flow`
+마지막 기능 체크포인트: `44d312a feat: polish pickups and tutorial guidance`
+현재 SRP 체크포인트: `refactor: extract tutorial cutscene session` 작업 블록
 
 ## 1. 작업 목표와 현재 상태
 
 게임 코드 전체를 단일 책임 원칙(SRP)에 맞게 점진적으로 분리하고, 각 블록마다 회귀 검증,
 커밋과 GitHub 푸시를 수행하는 장기 작업이다. 사용자의 명시적 요청으로 현재 블록까지만
-완료하고 인계한다. 전체 목표 기준 진행률은 보수적으로 약 27%다.
+완료하고 인계한다. 전체 목표 기준 진행률은 보수적으로 약 30%다.
 
 - 자동 SRP 정책, 가이드와 회귀 기반은 완료했다.
-- 가장 큰 `TutorialScene`의 입력·메타·표시 데이터·전투 선택·플레이어 명령·로라 턴·결과
-  상태를 분리했다.
-- `TutorialScene`은 3,206줄에서 1,929줄로 1,277줄(약 40%) 줄었다.
+- 가장 큰 `TutorialScene`의 입력·메타·표시 데이터·전투 선택·플레이어 명령·로라 턴·결과와
+  컷씬 런 세션 상태를 분리했다.
+- `TutorialScene`은 3,206줄에서 1,889줄로 1,317줄(약 41%) 줄었다.
 - 전투 모델, Actor/HUD/Layout 뷰와 엔진의 장문 WebGL·오버레이 파일은 아직 분리하지 않았다.
 - 기능/밸런스/저장 schema/픽셀 좌표는 의도적으로 변경하지 않았다.
 - 작업 트리는 이 문서 커밋 뒤 깨끗해야 하며 모든 기능 체크포인트는 `origin/main`에 있다.
@@ -52,6 +53,7 @@ God context 대신 작은 포트/읽기 전용 snapshot 주입이다. 기존 부
 | `e329b6f` | 로라 턴 대기·행동·완료 예약 수명주기 분리 |
 | `460676e` | 종료 판정·엔딩 표시·엔딩 컷씬 대기 상태 분리 |
 | `fb9e572` | 모델 결과의 cue·진행도·기록·컷씬 배포 흐름 분리 |
+| 현재 블록 | 컷씬 런 중복 방지·대기열·복귀 모드 세션 분리 |
 
 새 모듈은 모두 파일당 클래스 하나이며 현재 권장 500줄 아래다.
 
@@ -68,8 +70,10 @@ God context 대신 작은 포트/읽기 전용 snapshot 주입이다. 기존 부
 | `_tutorial_lora_turn_controller.js` | 127 | 로라 턴 2단계 예약 수명주기 |
 | `_tutorial_result_controller.js` | 108 | 종료·엔딩 데이터·결과 기록·컷씬 대기 |
 | `_tutorial_battle_outcome_coordinator.js` | 87 | 결과 구독자 고정 순서 배포·이전 표현 snapshot |
+| `_tutorial_cutscene_session.js` | 207 | 컷씬 런 중복 방지·대기열·닫힘 뒤 복귀 결정 |
 
-집중 회귀는 `test/tutorial_scene_collaborators.test.mjs`에 추가했다. 소스 seam과 단방향 의존은
+집중 회귀는 `test/tutorial_scene_collaborators.test.mjs`와
+`test/tutorial_cutscene_session.test.mjs`에 추가했다. 소스 seam과 단방향 의존은
 `test/tutorial_scene_seams.test.mjs`가 계속 검사한다.
 
 ## 4. 현재 장문 부채
@@ -79,11 +83,11 @@ God context 대신 작은 포트/읽기 전용 snapshot 주입이다. 기존 부
 
 | 우선순위 | 파일 | 현재 줄 수 |
 | ---: | --- | ---: |
-| 1 | `project/engine/script/scene/tutorial/_tutorial_scene.js` | 1,929 |
+| 1 | `project/engine/script/scene/tutorial/_tutorial_scene.js` | 1,889 |
 | 2 | `project/engine/script/scene/tutorial/_tutorial_battle_model.js` | 2,185 |
 | 3 | `project/engine/script/ui/layout/_layout_handler.js` | 1,180 |
-| 4 | `project/engine/script/scene/tutorial/view/_tutorial_battle_actor_view.js` | 1,158 |
-| 5 | `project/engine/script/scene/tutorial/view/_tutorial_battle_hud_view.js` | 1,072 |
+| 4 | `project/engine/script/scene/tutorial/view/_tutorial_battle_actor_view.js` | 1,156 |
+| 5 | `project/engine/script/scene/tutorial/view/_tutorial_battle_hud_view.js` | 653 |
 | 6 | `project/engine/script/overlay/_diagnostic_test_overlay.js` | 944 |
 | 7 | `project/engine/script/display/webgl/_overlay_effect_renderer.js` | 914 |
 | 8 | `project/engine/script/scene/tutorial/_tutorial_combat_rules.js` | 753 |
@@ -99,10 +103,9 @@ God context 대신 작은 포트/읽기 전용 snapshot 주입이다. 기존 부
 
 먼저 장면을 조립·수명주기 파사드로 줄인다. 다음 경계가 비교적 안전하다.
 
-1. 컷씬 대기열·복귀·런 중복 방지 상태를 별도 세션으로 분리한다.
-   - `pendingCutscenes`, `cutsceneReturnMode`, `runCutsceneIds`, `#openCutscene()`,
-     `#resumeAfterCutscene()`가 한 변경 이유다.
-2. 비전투 화면 전환·스타터·갤러리·Pause 명령을 화면 흐름 컨트롤러로 묶는다.
+1. 컷씬 대기열·복귀·런 중복 방지 상태 분리는 `TutorialCutsceneSession`으로 완료했다.
+2. 다음 블록은 비전투 화면 전환·갤러리·Pause 명령을 화면 흐름 컨트롤러로 묶는다.
+   - 타이틀 스타터 전환은 신설된 `TutorialTitleFlowController`와 중복되지 않게 경계를 다시 잡는다.
 3. 버튼 signature/spec/style 조립을 별도 프레젠터로 옮긴다.
 4. 포인터 히트테스트/카메라 업데이트/스프라이트 roster 동기화는 각각 기존 전용 객체의
    어댑터로 축소한다.
@@ -151,6 +154,14 @@ God context 대신 작은 포트/읽기 전용 snapshot 주입이다. 기존 부
 
 ## 7. 마지막 검증 기준선
 
+현재 컷씬 세션 분리 블록 검증 결과:
+
+- Node 테스트: 228/228 통과
+- `check:assets`: PNG 84개, MP3 26개, 경고 0
+- `check:repo`: 오류 0, 경고 0
+- `check:responsibilities`: 소스 283개, 기존 부채 11개
+- `check:release`: 구조 검사 성공
+
 `fb9e572` 기준 전체 검증 결과:
 
 - Node 테스트: 196/196 통과
@@ -173,7 +184,7 @@ God context 대신 작은 포트/읽기 전용 snapshot 주입이다. 기존 부
 - 메타 미래 버전 쓰기 차단과 런 staging/즉시 기록 저장 정책을 합치지 않는다.
 - 기존 dirty 변경이 생기면 사용자 작업으로 간주하고 덮어쓰거나 reset하지 않는다.
 
-## 9. 현재 중단 사유
+## 9. 현재 작업 상태
 
-기술적 차단은 없다. 사용자가 현재 결과 분리 블록까지만 마치고 인계 문서를 남긴 뒤 다른
-작업으로 전환하라고 요청해 의도적으로 여기서 멈춘다.
+기술적 차단은 없다. 컷씬 세션 분리와 전체 Node 회귀는 완료됐고, 같은 goal의 브라우저 기능
+검증과 루트 `bug_report.md` 작성이 이어진다. 다음 SRP 블록은 비전투 화면 흐름 경계다.

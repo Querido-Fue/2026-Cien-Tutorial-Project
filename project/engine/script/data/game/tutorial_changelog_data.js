@@ -5,6 +5,10 @@
  */
 export const TUTORIAL_CHANGELOG_CATALOG = Object.freeze([
     Object.freeze({
+        subject: 'refactor: extract tutorial cutscene session',
+        summary: '컷씬의 런 중복 방지·대기열·복귀 상태를 장면에서 전용 세션으로 분리했습니다.'
+    }),
+    Object.freeze({
         subject: 'feat: polish pickups and tutorial guidance',
         summary: '아이템 도트·부유 그림자와 단계형 아웃포커스 안내를 개선하고 ESC 안내 조건을 단순화했습니다.'
     }),

@@ -32,7 +32,7 @@ import { TutorialBattleFocusController } from './_tutorial_battle_focus_controll
 import { TutorialBattleCamera } from './_tutorial_battle_camera.js';
 import { TutorialBattleCameraController } from './_tutorial_battle_camera_controller.js';
 import { TutorialCombatReadabilityPresenter } from './_tutorial_combat_readability_presenter.js';
-import { TutorialCutsceneController } from './_tutorial_cutscene_controller.js';
+import { TutorialCutsceneSession } from './_tutorial_cutscene_session.js';
 import { TutorialCutsceneTriggerRouter } from './_tutorial_cutscene_trigger_router.js';
 import { TutorialGalleryController } from './_tutorial_gallery_controller.js';
 import { TutorialGuidanceController } from './_tutorial_guidance_controller.js';
@@ -149,7 +149,11 @@ export class TutorialScene extends BaseScene {
         });
         this.keyboardCommandMapper = new TutorialKeyboardCommandMapper();
         this.nonbattleViewModels = new TutorialNonbattleViewModelFactory(this.data);
-        this.cutscenes = new TutorialCutsceneController(this.data.CUTSCENES);
+        this.cutscenes = new TutorialCutsceneSession({
+            registry: this.data.CUTSCENES,
+            enabled: this.data.FEATURES?.CUTSCENES === true,
+            initialReturnMode: MODES.MENU
+        });
         const knownCutsceneIds = Object.values(this.data.CUTSCENES).map(
             (entry) => entry.id
         );
@@ -168,9 +172,6 @@ export class TutorialScene extends BaseScene {
         this.achievementEvaluator = new TutorialAchievementEvaluator(
             this.content.ACHIEVEMENTS
         );
-        this.cutsceneReturnMode = MODES.MENU;
-        this.pendingCutscenes = [];
-        this.runCutsceneIds = new Set();
         this.battleFocus = new TutorialBattleFocusController();
         this.battleSelection = new TutorialBattleSelectionController();
         this.guidance = new TutorialGuidanceController({
@@ -687,11 +688,9 @@ export class TutorialScene extends BaseScene {
         this.audioDirector.destroy();
         clearSimulationCommands();
         this.buttonHost.destroy();
-        this.cutscenes.close();
+        this.cutscenes.reset({ returnMode: this.mode });
         this.cutsceneTriggers.reset();
-        this.pendingCutscenes = [];
         this.results.reset();
-        this.runCutsceneIds.clear();
         this.recordPopups.destroy();
         this.battleFocus.reset();
         this.guidance.reset();
@@ -790,7 +789,7 @@ export class TutorialScene extends BaseScene {
             onBattleReady: (itemId) => this.#beginRun(itemId),
             onRevealComplete: (cutsceneIds) => {
                 for (const id of cutsceneIds || []) {
-                    this.#openCutscene(id, MODES.BATTLE, false);
+                    this.cutscenes.open(id, MODES.BATTLE);
                 }
             }
         });
@@ -856,13 +855,10 @@ export class TutorialScene extends BaseScene {
         this.battleCameraController.clear();
         this.spriteCueRouter.reset();
         this.audioDirector.resetTransient();
-        this.cutscenes.close();
+        this.cutscenes.reset({ returnMode: nextMode });
         this.cutsceneTriggers.reset();
-        this.pendingCutscenes = [];
         this.results.reset();
-        this.runCutsceneIds.clear();
         this.recordPopups.clear();
-        this.cutsceneReturnMode = nextMode;
         this.model = null;
         this.floorView = null;
         this.floorActorView = null;
@@ -899,9 +895,8 @@ export class TutorialScene extends BaseScene {
         this.model.reset({ starterItemId });
         const initialSnapshot = this.#getSnapshot();
         this.mode = MODES.BATTLE;
-        this.pendingCutscenes = [];
+        this.cutscenes.reset({ returnMode: MODES.BATTLE });
         this.results.reset();
-        this.runCutsceneIds = new Set();
         this.recordPopups.clear();
         const openingCutsceneIds = this.cutsceneTriggers.beginRun(this.meta);
         this.battleSelection.reset(this.model);
@@ -983,7 +978,7 @@ export class TutorialScene extends BaseScene {
         if (!entry?.playable || typeof entry.replayCutsceneId !== 'string') {
             return;
         }
-        this.#openCutscene(entry.replayCutsceneId, this.mode, true);
+        this.cutscenes.open(entry.replayCutsceneId, this.mode, { repeat: true });
     }
 
     /** 현재 화면이 메뉴 갤러리 또는 전투 중 수집물 팝업인지 확인합니다. @private */
@@ -1037,13 +1032,13 @@ export class TutorialScene extends BaseScene {
         if (!this.cutscenes.isOpen()) {
             return;
         }
-        const transition = this.cutscenes.next();
+        const transition = this.cutscenes.advance();
         if (!transition.ok || !transition.closed) {
             return;
         }
         const completedId = transition.completedCutsceneId;
         this.#recordCutsceneSeen(completedId);
-        this.#resumeAfterCutscene();
+        this.#applyCutsceneResume(transition.resumeMode);
     }
 
     /**
@@ -1054,10 +1049,12 @@ export class TutorialScene extends BaseScene {
         if (!this.cutscenes.isOpen()) {
             return;
         }
-        const skippedId = this.cutscenes.getState().cutsceneId;
-        this.cutscenes.close();
-        this.#recordCutsceneSeen(skippedId);
-        this.#resumeAfterCutscene();
+        const transition = this.cutscenes.skip();
+        if (!transition.ok) {
+            return;
+        }
+        this.#recordCutsceneSeen(transition.completedCutsceneId);
+        this.#applyCutsceneResume(transition.resumeMode);
     }
 
     /** 완료 또는 스킵한 컷씬을 갤러리 해금과 오프닝 정책에 반영합니다. @param {string|null} id @private */
@@ -1069,18 +1066,15 @@ export class TutorialScene extends BaseScene {
     }
 
     /**
-     * 대기 중인 컷씬을 열거나 원래 모드로 복귀합니다.
+     * 모든 컷씬이 닫힌 뒤 세션이 결정한 원래 모드로 복귀합니다.
+     * @param {string|null} resumeMode - 복귀할 모드 또는 대기 컷씬이 열린 null입니다.
      * @private
      */
-    #resumeAfterCutscene() {
-        const next = this.pendingCutscenes.shift();
-        if (next) {
-            this.cutsceneReturnMode = next.returnMode;
-            this.cutscenes.open(next.id);
+    #applyCutsceneResume(resumeMode) {
+        if (typeof resumeMode !== 'string') {
             return;
         }
-        this.mode = this.cutsceneReturnMode;
-        this.cutsceneReturnMode = this.mode;
+        this.mode = resumeMode;
         if (this.mode === MODES.BATTLE) {
             this.#refreshBattleCache();
             this.#openNextRecordPopup();
@@ -1102,7 +1096,7 @@ export class TutorialScene extends BaseScene {
             unlockedAchievementIds: this.meta.unlockedAchievementIds
         });
         for (const cutsceneId of outcome.cutsceneIds) {
-            this.#openCutscene(cutsceneId, MODES.BATTLE, false);
+            this.cutscenes.open(cutsceneId, MODES.BATTLE);
         }
         this.#refreshBattleCache();
         this.#enterResultIfNeeded();
@@ -1124,7 +1118,7 @@ export class TutorialScene extends BaseScene {
             snapshot,
             hasRecordWork: this.recordPopups.hasWork(),
             blocked: this.cutscenes.isOpen()
-            || this.pendingCutscenes.length > 0
+            || this.cutscenes.hasPending()
             || this.spriteCueRouter.isBusy()
         });
         if (!transition.entered) {
@@ -1132,44 +1126,10 @@ export class TutorialScene extends BaseScene {
         }
         this.mode = MODES.RESULT;
         if (transition.endingCutsceneId) {
-            this.#openCutscene(
+            this.cutscenes.open(
                 transition.endingCutsceneId,
-                MODES.RESULT,
-                false
+                MODES.RESULT
             );
-        }
-    }
-
-    /**
-     * 컷씬 ID를 검증해 즉시 열거나 대기열에 넣습니다.
-     * @param {string} id - 컷씬 ID입니다.
-     * @param {string} returnMode - 닫힌 뒤 복귀할 모드입니다.
-     * @param {boolean} repeat - 같은 플레이 중 재생을 허용할지 여부입니다.
-     * @private
-     */
-    #openCutscene(id, returnMode, repeat) {
-        if (typeof id !== 'string' || this.data.FEATURES?.CUTSCENES !== true) {
-            return;
-        }
-        const exists = Object.values(this.data.CUTSCENES).some(
-            (entry) => entry.id === id
-        );
-        if (!exists || (!repeat && this.runCutsceneIds.has(id))) {
-            return;
-        }
-        this.runCutsceneIds.add(id);
-        if (this.cutscenes.isOpen()) {
-            if (this.cutscenes.getState().cutsceneId === id) {
-                return;
-            }
-            if (!this.pendingCutscenes.some((entry) => entry.id === id)) {
-                this.pendingCutscenes.push({ id, returnMode });
-            }
-            return;
-        }
-        const transition = this.cutscenes.open(id);
-        if (transition.ok) {
-            this.cutsceneReturnMode = returnMode;
         }
     }
 
