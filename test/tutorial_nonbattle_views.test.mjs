@@ -291,6 +291,7 @@ test('스타터 카드와 Pause 메뉴는 보이는 영역 자체를 클릭 계�
     );
     assert.equal(starterButtons.every((button) => button.drawBackground === false), true);
     assert.equal(starterButtons.every((button) => button.label === ''), true);
+    assert.equal(starterButtons.every((button) => button.tooltip === false), true);
     assert.equal(
         starterButtons.every((button) => (
             button.hoverScale === TUTORIAL_UI_LAYOUT_TOKENS.STARTER.CARD_HOVER_SCALE
@@ -371,6 +372,8 @@ test('스타터 카드는 별도 버튼 패널 없이 불투명 프레임과 흰
     const descriptionToken = TUTORIAL_UI_LAYOUT_TOKENS.STARTER.CARD_DESCRIPTION;
     const descriptionTop = firstFrame.y + (firstFrame.h * descriptionToken.y);
     const descriptionBottom = descriptionTop + (firstFrame.h * descriptionToken.h);
+    assert.ok(descriptionToken.x >= 0.15);
+    assert.ok(1 - descriptionToken.x - descriptionToken.w >= 0.15);
     const firstDescriptionLines = renderCommands
         .filter(({ command }) => ['첫째 줄', '둘째 줄', '셋째 줄'].includes(command.text))
         .slice(0, 3)
@@ -382,6 +385,7 @@ test('스타터 카드는 별도 버튼 패널 없이 불투명 프레임과 흰
     renderCommands.length = 0;
     view.draw({
         ...viewModel,
+        selectionProgress: 0,
         cardHoverScales: Object.freeze({
             bow: TUTORIAL_UI_LAYOUT_TOKENS.STARTER.CARD_HOVER_SCALE,
             'mascot-costume': 1

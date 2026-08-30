@@ -249,7 +249,7 @@ export class TutorialStarterView {
             key: 'starter-' + choice.id,
             ...layout.buttons[index],
             label: '',
-            tooltip: `${choice.label}: ${choice.description}`,
+            tooltip: false,
             drawBackground: false,
             hoverScale: TUTORIAL_UI_LAYOUT_TOKENS.STARTER.CARD_HOVER_SCALE,
             active: index === viewModel.selectedIndex,
@@ -267,15 +267,6 @@ export class TutorialStarterView {
         const progress = Math.max(0, Math.min(1, Number(transition.progress) || 0));
         const entryProgress = transition.phase === 'starter-enter' ? progress : 1;
         const morphProgress = transition.phase === 'starter-morph' ? progress : 0;
-        const selected = index === viewModel.selectedIndex;
-        const selectionProgress = Math.max(
-            0,
-            Math.min(1, Number(viewModel.selectionProgress) || 0)
-        );
-        const selectionScale = selected
-            ? viewModel.selectionMinScale
-                + ((1 - viewModel.selectionMinScale) * selectionProgress)
-            : 1;
         const entryScale = TUTORIAL_UI_LAYOUT_TOKENS.STARTER.ENTRY_MIN_SCALE
             + ((1 - TUTORIAL_UI_LAYOUT_TOKENS.STARTER.ENTRY_MIN_SCALE) * entryProgress);
         const choiceId = viewModel.choices[index]?.id;
@@ -283,7 +274,7 @@ export class TutorialStarterView {
         const hoverScale = Number.isFinite(requestedHoverScale)
             ? Math.max(1, Math.min(2, requestedHoverScale))
             : 1;
-        const scale = selectionScale * entryScale * hoverScale;
+        const scale = entryScale * hoverScale;
         const card = layout.cards[index];
         const offsetY = layout.space.h
             * TUTORIAL_UI_LAYOUT_TOKENS.STARTER.ENTRY_OFFSET_Y
